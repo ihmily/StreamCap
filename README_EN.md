@@ -36,11 +36,11 @@ StreamCap is a multi-platform live stream recording client based on FFmpeg and S
 Visit the [StreamCap Releases](https://github.com/ihmily/StreamCap/releases/latest) page and download the latest version according to your operating system:
 
 - **Windows Users**: Download the `StreamCap.zip` file, extract it, and run `StreamCap.exe`.
-- **macOS Users**: Download the `StreamCap.dmg` file and follow the on-screen instructions to install.
+- **macOS Users**: Download the `StreamCap.dmg` file and follow the on-screen instructions to install, then you can find the application in the Launchpad to run it.
 
 ### 2. Running from Source Code
 
-Ensure you have **Python 3.10** or above installed.💥
+Ensure you have **Python 3.10** or a higher version installed.💥
 
 1.**Clone the Project Code**:
 

@@ -55,4 +55,4 @@ streamget = ">=4.0.3"
 optional = true
 
 [tool.poetry.group.lint.dependencies]
-ruff = "~0.9.10"
+ruff = "~0.11.2"

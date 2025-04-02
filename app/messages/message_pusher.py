@@ -55,6 +55,16 @@ class MessagePusher:
             )
             logger.info("Push Ntfy message successfully")
 
+        if self.settings.user_config.get("telegram_enabled"):
+            create_task(
+                self.notifier.send_to_telegram(
+                    chat_id=self.settings.user_config.get("telegram_chat_id"),
+                    token=self.settings.user_config.get("telegram_api_token"),
+                    content=push_content,
+                )
+            )
+            logger.info("Push Telegram message successfully")
+
         if self.settings.user_config.get("email_enabled"):
             create_task(
                 self.notifier.send_to_email(

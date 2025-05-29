@@ -238,12 +238,12 @@ class AboutPage(PageBase):
 
     @staticmethod
     async def open_update_page(_):
-        url = "https://github.com/ihmily/StreamCap/releases"
+        url = "https://github.com/TLS-802/Stream-Cap/releases"
         webbrowser.open(url)
 
     @staticmethod
     async def open_dos_page(_):
-        url = "https://github.com/ihmily/StreamCap/wiki"
+        url = "https://github.com/TLS-802/Stream-Cap/wiki"
         webbrowser.open(url)
 
     async def on_keyboard(self, e: ft.KeyboardEvent):

@@ -1,7 +1,7 @@
 {
   "introduction": {
     "en": "A free application dedicated to recording videos from online live streaming platforms. By integrating FFmpeg, it efficiently and reliably records live streams from over 40 major platforms including Douyin, TikTok, Kuaishou, Huya, Douyu, Bilibili, Rednote, Baidu, Weibo, Kuwo, Twitch, YouTube, PandaTV, SoopLive, FlexTV, PopKontv, Twitcasting, WinkTV, 17Live, Acfun, CHZZK, and Shopee.",
-    "zh_CN": "一款专注于录制在线直播平台视频的免费应用。通过集成FFmpeg，高效、稳定地录制抖音、TikTok、快手、虎牙、斗鱼、B站、小红书、百度、微博、酷狗、Twitch、YouTube、PandaTV、SoopLive、FlexTV、PopKontv、Twitcasting、WinkTV、17Live、Acfun、CHZZK 和 Shopee 等40+主流平台的直播流。"
+    "zh_CN": "一款专注于录制在线直播平台视频的免费应用。通过集成FFmpeg，高效、稳定地录制抖音、TikTok、快手、虎牙、斗鱼、B站、小红书、百度、微博、酷狗、Twitch、YouTube、PandaTV、SoopLive、FlexTV、PopKontv、Twitcasting、WinkTV、17Live、Acfun、CHZZK 和 Shopee 等40+主流平台的直播流"
   },
   "open_source_license": "Apache License 2.0",
   "version_updates": [

@@ -159,6 +159,12 @@ class AboutPage(PageBase):
                                     title=ft.Text("Hmily", size=18, weight=ft.FontWeight.W_500, color=text_color_700),
                                     subtitle=ft.Text(self._["author"], size=14, color=text_color_500),
                                 ),
+                                # Added second author here
+                                ft.ListTile(
+                                    leading=ft.Icon(ft.Icons.PERSON_OUTLINE, color=ft.Colors.GREY_800), # Using a different icon for distinction
+                                    title=ft.Text("TLS", size=18, weight=ft.FontWeight.W_500, color=text_color_700),
+                                    subtitle=ft.Text("二开作者", size=14, color=text_color_500), # "Secondary Development Author"
+                                ),
                                 ft.Row(
                                     controls=[
                                         ft.TextButton(

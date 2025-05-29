@@ -214,7 +214,7 @@ class UpdateChecker:
         import platform
         import webbrowser
         
-        url = update_info.get("download_url", "https://github.com/ihmily/StreamCap/releases/latest")
+        url = update_info.get("download_url", "https://github.com/TLS-802/Stream-Cap/releases/latest")
         
         download_urls = update_info.get("download_urls", {})
         if download_urls:

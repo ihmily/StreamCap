@@ -1,0 +1,168 @@
+name: Build Application
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        os: [windows-latest, macos-latest]
+        include:
+          - os: windows-latest
+            platform: windows
+            extension: .exe
+            artifact_name: StreamCap-Windows
+          - os: macos-latest
+            platform: macos
+            extension: .app
+            artifact_name: StreamCap-macOS
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v3
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install dependencies
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+      run: poetry install --no-interaction --no-root
+
+    - name: Install additional dependencies for packaging
+      run: |
+        poetry run pip install --upgrade pip
+        poetry run pip install flet[desktop,cli]
+
+    - name: Build application (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        poetry run flet pack main.py --name StreamCap --icon assets/icon.ico --distpath dist --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales"
+      shell: cmd
+
+    - name: Build application (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        poetry run flet pack main.py --name StreamCap --icon assets/icon.ico --distpath dist --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales"
+
+    - name: Create installer (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        # Create a simple batch installer
+        echo '@echo off' > dist/install.bat
+        echo 'echo Installing StreamCap...' >> dist/install.bat
+        echo 'if not exist "%PROGRAMFILES%\StreamCap" mkdir "%PROGRAMFILES%\StreamCap"' >> dist/install.bat
+        echo 'copy /Y StreamCap.exe "%PROGRAMFILES%\StreamCap\"' >> dist/install.bat
+        echo 'echo Installation completed!' >> dist/install.bat
+        echo 'pause' >> dist/install.bat
+      shell: cmd
+
+    - name: Create installer (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        # Create a DMG installer
+        brew install create-dmg
+        create-dmg \
+          --volname "StreamCap Installer" \
+          --window-pos 200 120 \
+          --window-size 600 300 \
+          --icon-size 100 \
+          --icon "StreamCap.app" 175 120 \
+          --hide-extension "StreamCap.app" \
+          --app-drop-link 425 120 \
+          "dist/StreamCap-Installer.dmg" \
+          "dist/"
+
+    - name: Package artifacts (Windows)
+      if: matrix.platform == 'windows'
+      run: |
+        cd dist
+        7z a -tzip StreamCap-Windows.zip StreamCap.exe install.bat
+      shell: cmd
+
+    - name: Package artifacts (macOS)
+      if: matrix.platform == 'macos'
+      run: |
+        cd dist
+        if [ -f "StreamCap-Installer.dmg" ]; then
+          mv StreamCap-Installer.dmg StreamCap-macOS.dmg
+        else
+          # Fallback: create a zip if DMG creation fails
+          zip -r StreamCap-macOS.zip StreamCap.app
+        fi
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ matrix.artifact_name }}
+        path: |
+          dist/StreamCap-Windows.zip
+          dist/StreamCap-macOS.dmg
+          dist/StreamCap-macOS.zip
+        retention-days: 30
+
+    - name: Get version from pyproject.toml
+      id: get_version
+      run: |
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          VERSION=$(python -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
+        else
+          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
+        fi
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Create build info
+      run: |
+        echo "Build Information" > build-info.txt
+        echo "=================" >> build-info.txt
+        echo "Version: ${{ steps.get_version.outputs.version }}" >> build-info.txt
+        echo "Platform: ${{ matrix.platform }}" >> build-info.txt
+        echo "Build Date: $(date)" >> build-info.txt
+        echo "Commit: ${{ github.sha }}" >> build-info.txt
+        echo "Branch: ${{ github.ref_name }}" >> build-info.txt
+      shell: bash
+
+    - name: Upload build info
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-info-${{ matrix.platform }}
+        path: build-info.txt
+        retention-days: 30
+
+  notify:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Notify build completion
+      run: |
+        if [ "${{ needs.build.result }}" = "success" ]; then
+          echo "✅ Build completed successfully for all platforms!"
+        else
+          echo "❌ Build failed for one or more platforms."
+          exit 1
+        fi

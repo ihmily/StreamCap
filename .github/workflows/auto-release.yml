@@ -1,0 +1,135 @@
+name: Auto Release
+
+on:
+  workflow_run:
+    workflows: ["Build Application"]
+    types:
+      - completed
+    branches: [main, master]
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force create release even if build was not successful'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  check-build-success:
+    runs-on: ubuntu-latest
+    if: github.event.workflow_run.conclusion == 'success' || inputs.force_release
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      version: ${{ steps.version.outputs.version }}
+      commit_sha: ${{ steps.commit.outputs.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Get commit information
+        id: commit
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            SHA="${{ github.event.workflow_run.head_sha }}"
+          else
+            SHA="${{ github.sha }}"
+          fi
+          echo "sha=$SHA" >> $GITHUB_OUTPUT
+
+      - name: Get current version
+        id: version
+        run: |
+          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
+          echo "version=v$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: v$VERSION"
+
+      - name: Check if release should be created
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # Check if tag already exists
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if this is a version bump commit
+          COMMIT_MSG=$(git log -1 --pretty=format:"%s" ${{ steps.commit.outputs.sha }})
+          if [[ "$COMMIT_MSG" =~ ^(bump|release|version|v[0-9]+\.[0-9]+\.[0-9]+) ]] || [[ "$COMMIT_MSG" =~ (release|version) ]]; then
+            echo "Version bump detected in commit message: $COMMIT_MSG"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          elif [ "${{ inputs.force_release }}" = "true" ]; then
+            echo "Force release requested"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "No version bump detected, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+
+  trigger-release:
+    needs: check-build-success
+    if: needs.check-build-success.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger release workflow
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const version = '${{ needs.check-build-success.outputs.version }}';
+            
+            console.log(`Triggering release workflow for version ${version}`);
+            
+            try {
+              const response = await github.rest.actions.createWorkflowDispatch({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                workflow_id: 'release.yml',
+                ref: 'main',
+                inputs: {
+                  version: version,
+                  create_tag: 'true',
+                  prerelease: 'false',
+                  draft: 'false'
+                }
+              });
+              
+              console.log('Release workflow triggered successfully');
+              console.log(`Response status: ${response.status}`);
+            } catch (error) {
+              console.error('Failed to trigger release workflow:', error);
+              throw error;
+            }
+
+      - name: Create summary
+        run: |
+          VERSION="${{ needs.check-build-success.outputs.version }}"
+          echo "## 🚀 Auto Release Triggered" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ needs.check-build-success.outputs.commit_sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "The release workflow has been automatically triggered." >> $GITHUB_STEP_SUMMARY
+          echo "Check the [Actions tab](https://github.com/${{ github.repository }}/actions) for progress." >> $GITHUB_STEP_SUMMARY
+
+  notify-skip:
+    needs: check-build-success
+    if: needs.check-build-success.outputs.should_release == 'false'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create skip summary
+        run: |
+          echo "## ⏭️ Release Skipped" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Reason:** No version bump detected or tag already exists" >> $GITHUB_STEP_SUMMARY
+          echo "**Current version:** ${{ needs.check-build-success.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "To trigger a release manually:" >> $GITHUB_STEP_SUMMARY
+          echo "1. Go to Actions → Release workflow" >> $GITHUB_STEP_SUMMARY
+          echo "2. Click 'Run workflow'" >> $GITHUB_STEP_SUMMARY
+          echo "3. Enter the version number (e.g., v1.0.2)" >> $GITHUB_STEP_SUMMARY

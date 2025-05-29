@@ -10,10 +10,38 @@
       "kernel_version": "4.0.5",
       "updates": {
         "en": [
-          "None"
+          "Initial release with basic recording functionality",
+          "Support for 40+ streaming platforms",
+          "Cross-platform desktop application (Windows/macOS)",
+          "Web interface support for Linux users",
+          "Automated build and release system"
         ],
         "zh_CN": [
-          "无"
+          "初始版本，包含基础录制功能",
+          "支持40+直播平台",
+          "跨平台桌面应用（Windows/macOS）",
+          "为Linux用户提供Web界面支持",
+          "自动化构建和发布系统"
+        ]
+      }
+    },
+    {
+      "version": "1.0.2",
+      "kernel_version": "4.0.6",
+      "updates": {
+        "en": [
+          "Enhanced build system with automated releases",
+          "Improved Windows installer with NSIS",
+          "Better macOS DMG packaging",
+          "Optimized dependency management",
+          "Added comprehensive workflow documentation"
+        ],
+        "zh_CN": [
+          "增强的构建系统，支持自动发布",
+          "改进的Windows NSIS安装程序",
+          "更好的macOS DMG打包",
+          "优化的依赖管理",
+          "添加了完整的工作流文档"
         ]
       }
     }

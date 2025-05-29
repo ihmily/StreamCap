@@ -3,166 +3,400 @@ name: Build Application
 on:
   push:
     branches: [ main, master, develop ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   pull_request:
     branches: [ main, master ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'LICENSE'
   workflow_dispatch:
+    inputs:
+      force_build:
+        description: 'Force build even if no changes detected'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
 
 jobs:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      should_build: ${{ steps.changes.outputs.should_build }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Check for relevant changes
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.force_build }}" = "true" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Force build requested"
+            exit 0
+          fi
+          
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "PR build requested"
+            exit 0
+          fi
+          
+          # Check if there are changes in source code
+          if git diff --name-only HEAD~1 HEAD | grep -E '\.(py|toml|json|txt|yml|yaml)$' | grep -v -E '(test_|_test\.py|\.md$)'; then
+            echo "should_build=true" >> $GITHUB_OUTPUT
+            echo "Source code changes detected"
+          else
+            echo "should_build=false" >> $GITHUB_OUTPUT
+            echo "No relevant changes detected"
+          fi
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Current version: $VERSION"
+
   build:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_build == 'true'
     strategy:
+      fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
         include:
           - os: windows-latest
             platform: windows
-            extension: .exe
+            python_cmd: python
             artifact_name: StreamCap-Windows
+            installer_ext: .exe
+            package_ext: .zip
           - os: macos-latest
             platform: macos
-            extension: .app
+            python_cmd: python3
             artifact_name: StreamCap-macOS
+            installer_ext: .dmg
+            package_ext: .zip
 
     runs-on: ${{ matrix.os }}
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
 
-    - name: Install Poetry
-      uses: snok/install-poetry@v1
-      with:
-        version: latest
-        virtualenvs-create: true
-        virtualenvs-in-project: true
+      - name: Set up Node.js (for some platforms)
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v3
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: latest
+          virtualenvs-create: true
+          virtualenvs-in-project: true
 
-    - name: Install dependencies
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
-      run: poetry install --no-interaction --no-root
+      - name: Load cached dependencies
+        id: cached-poetry-dependencies
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock', '**/pyproject.toml') }}
+          restore-keys: |
+            venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
 
-    - name: Install additional dependencies for packaging
-      run: |
-        poetry run pip install --upgrade pip
-        poetry run pip install flet[desktop,cli]
+      - name: Install dependencies
+        if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+        run: poetry install --no-interaction --no-root
 
-    - name: Build application (Windows)
-      if: matrix.platform == 'windows'
-      run: |
-        poetry run flet pack main.py --name StreamCap --icon assets/icon.ico --distpath dist --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales"
-      shell: cmd
+      - name: Install build dependencies
+        run: |
+          poetry run pip install --upgrade pip setuptools wheel
+          poetry run pip install flet[desktop,cli] pyinstaller
 
-    - name: Build application (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        poetry run flet pack main.py --name StreamCap --icon assets/icon.ico --distpath dist --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales"
+      - name: Verify environment
+        run: |
+          poetry run python --version
+          poetry run python -c "import flet; print(f'Flet version: {flet.__version__}')"
+          poetry run python -c "import streamget; print(f'StreamGet version: {streamget.__version__}')"
 
-    - name: Create installer (Windows)
-      if: matrix.platform == 'windows'
-      run: |
-        # Create a simple batch installer
-        echo '@echo off' > dist/install.bat
-        echo 'echo Installing StreamCap...' >> dist/install.bat
-        echo 'if not exist "%PROGRAMFILES%\StreamCap" mkdir "%PROGRAMFILES%\StreamCap"' >> dist/install.bat
-        echo 'copy /Y StreamCap.exe "%PROGRAMFILES%\StreamCap\"' >> dist/install.bat
-        echo 'echo Installation completed!' >> dist/install.bat
-        echo 'pause' >> dist/install.bat
-      shell: cmd
+      - name: Build application (Windows)
+        if: matrix.platform == 'windows'
+        run: |
+          # Create build directory
+          mkdir -p dist
+          
+          # Build with Flet
+          poetry run flet pack main.py \
+            --name StreamCap \
+            --icon assets/icon.ico \
+            --distpath dist \
+            --add-data "assets;assets" \
+            --add-data "config;config" \
+            --add-data "locales;locales" \
+            --onefile \
+            --hidden-import streamget \
+            --hidden-import httpx \
+            --hidden-import aiofiles
+          
+          # Verify build
+          if [ ! -f "dist/StreamCap.exe" ]; then
+            echo "❌ Build failed: StreamCap.exe not found"
+            exit 1
+          fi
+          
+          echo "✅ Windows build completed successfully"
+          ls -la dist/
+        shell: bash
 
-    - name: Create installer (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        # Create a DMG installer
-        brew install create-dmg
-        create-dmg \
-          --volname "StreamCap Installer" \
-          --window-pos 200 120 \
-          --window-size 600 300 \
-          --icon-size 100 \
-          --icon "StreamCap.app" 175 120 \
-          --hide-extension "StreamCap.app" \
-          --app-drop-link 425 120 \
-          "dist/StreamCap-Installer.dmg" \
-          "dist/"
+      - name: Build application (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          # Create build directory
+          mkdir -p dist
+          
+          # Build with Flet
+          poetry run flet pack main.py \
+            --name StreamCap \
+            --icon assets/icon.ico \
+            --distpath dist \
+            --add-data "assets:assets" \
+            --add-data "config:config" \
+            --add-data "locales:locales" \
+            --hidden-import streamget \
+            --hidden-import httpx \
+            --hidden-import aiofiles
+          
+          # Verify build
+          if [ ! -d "dist/StreamCap.app" ]; then
+            echo "❌ Build failed: StreamCap.app not found"
+            exit 1
+          fi
+          
+          echo "✅ macOS build completed successfully"
+          ls -la dist/
 
-    - name: Package artifacts (Windows)
-      if: matrix.platform == 'windows'
-      run: |
-        cd dist
-        7z a -tzip StreamCap-Windows.zip StreamCap.exe install.bat
-      shell: cmd
+      - name: Create Windows installer
+        if: matrix.platform == 'windows'
+        run: |
+          VERSION="${{ needs.detect-changes.outputs.version }}"
+          
+          # Create NSIS installer script
+          cat > installer.nsi << 'EOF'
+          !define APP_NAME "StreamCap"
+          !define APP_VERSION "${{ needs.detect-changes.outputs.version }}"
+          !define APP_PUBLISHER "StreamCap Team"
+          !define APP_URL "https://github.com/ihmily/StreamCap"
+          !define APP_SUPPORT_URL "https://github.com/ihmily/StreamCap/issues"
+          !define APP_UPDATES_URL "https://github.com/ihmily/StreamCap/releases"
+          
+          Name "${APP_NAME} ${APP_VERSION}"
+          OutFile "StreamCap-${APP_VERSION}-Setup.exe"
+          InstallDir "$PROGRAMFILES64\${APP_NAME}"
+          RequestExecutionLevel admin
+          
+          Page directory
+          Page instfiles
+          
+          Section "MainSection" SEC01
+            SetOutPath "$INSTDIR"
+            File "dist\StreamCap.exe"
+            File /r "assets"
+            File /r "config"
+            File /r "locales"
+            
+            # Create shortcuts
+            CreateDirectory "$SMPROGRAMS\${APP_NAME}"
+            CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
+            CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
+            
+            # Create uninstaller
+            WriteUninstaller "$INSTDIR\Uninstall.exe"
+            CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" "$INSTDIR\Uninstall.exe"
+            
+            # Registry entries
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${APP_PUBLISHER}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "URLInfoAbout" "${APP_URL}"
+          SectionEnd
+          
+          Section "Uninstall"
+            Delete "$INSTDIR\StreamCap.exe"
+            Delete "$INSTDIR\Uninstall.exe"
+            RMDir /r "$INSTDIR\assets"
+            RMDir /r "$INSTDIR\config"
+            RMDir /r "$INSTDIR\locales"
+            RMDir "$INSTDIR"
+            
+            Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
+            Delete "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk"
+            Delete "$DESKTOP\${APP_NAME}.lnk"
+            RMDir "$SMPROGRAMS\${APP_NAME}"
+            
+            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+          SectionEnd
+          EOF
+          
+          # Try to create installer with NSIS (if available)
+          if command -v makensis &> /dev/null; then
+            echo "Creating NSIS installer..."
+            makensis installer.nsi
+            if [ -f "StreamCap-${VERSION}-Setup.exe" ]; then
+              echo "✅ NSIS installer created successfully"
+            else
+              echo "⚠️ NSIS installer creation failed, using fallback"
+              cp "dist/StreamCap.exe" "StreamCap-${VERSION}-Setup.exe"
+            fi
+          else
+            echo "⚠️ NSIS not available, using executable as installer"
+            cp "dist/StreamCap.exe" "StreamCap-${VERSION}-Setup.exe"
+          fi
+          
+          # Create portable package
+          mkdir -p "dist/StreamCap-Portable"
+          cp "dist/StreamCap.exe" "dist/StreamCap-Portable/"
+          cp -r assets "dist/StreamCap-Portable/" 2>/dev/null || true
+          cp -r config "dist/StreamCap-Portable/" 2>/dev/null || true
+          cp -r locales "dist/StreamCap-Portable/" 2>/dev/null || true
+          cp README.md "dist/StreamCap-Portable/" 2>/dev/null || true
+          
+          cd dist && 7z a -tzip "StreamCap-Windows-${VERSION}.zip" StreamCap-Portable/
+          cd ..
+          
+          echo "✅ Windows packages created successfully"
+        shell: bash
 
-    - name: Package artifacts (macOS)
-      if: matrix.platform == 'macos'
-      run: |
-        cd dist
-        if [ -f "StreamCap-Installer.dmg" ]; then
-          mv StreamCap-Installer.dmg StreamCap-macOS.dmg
-        else
-          # Fallback: create a zip if DMG creation fails
-          zip -r StreamCap-macOS.zip StreamCap.app
-        fi
+      - name: Create macOS installer
+        if: matrix.platform == 'macos'
+        run: |
+          VERSION="${{ needs.detect-changes.outputs.version }}"
+          
+          # Create DMG installer
+          mkdir -p "dist/dmg"
+          cp -r "dist/StreamCap.app" "dist/dmg/"
+          
+          # Create Applications symlink
+          ln -s /Applications "dist/dmg/Applications"
+          
+          # Create DMG with better styling
+          hdiutil create -volname "StreamCap ${VERSION}" \
+            -srcfolder "dist/dmg" \
+            -ov -format UDZO \
+            -imagekey zlib-level=9 \
+            "dist/StreamCap-${VERSION}.dmg"
+          
+          # Create portable zip as backup
+          cd dist && zip -r "StreamCap-macOS-${VERSION}.zip" StreamCap.app
+          cd ..
+          
+          echo "✅ macOS packages created successfully"
 
-    - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: ${{ matrix.artifact_name }}
-        path: |
-          dist/StreamCap-Windows.zip
-          dist/StreamCap-macOS.dmg
-          dist/StreamCap-macOS.zip
-        retention-days: 30
+      - name: Verify build artifacts
+        run: |
+          VERSION="${{ needs.detect-changes.outputs.version }}"
+          echo "=== Build Verification ==="
+          echo "Version: $VERSION"
+          echo "Platform: ${{ matrix.platform }}"
+          echo ""
+          
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "Windows artifacts:"
+            ls -la "StreamCap-${VERSION}-Setup.exe" 2>/dev/null || echo "❌ Windows installer not found"
+            ls -la "dist/StreamCap-Windows-${VERSION}.zip" 2>/dev/null || echo "❌ Windows zip not found"
+            ls -la "dist/StreamCap.exe" 2>/dev/null || echo "❌ Windows executable not found"
+          else
+            echo "macOS artifacts:"
+            ls -la "dist/StreamCap-${VERSION}.dmg" 2>/dev/null || echo "❌ macOS DMG not found"
+            ls -la "dist/StreamCap-macOS-${VERSION}.zip" 2>/dev/null || echo "❌ macOS zip not found"
+            ls -la "dist/StreamCap.app" 2>/dev/null || echo "❌ macOS app not found"
+          fi
+          
+          echo ""
+          echo "All files in current directory:"
+          ls -la
+          echo ""
+          echo "All files in dist directory:"
+          ls -la dist/ 2>/dev/null || echo "No dist directory"
 
-    - name: Get version from pyproject.toml
-      id: get_version
-      run: |
-        if [ "${{ matrix.platform }}" = "windows" ]; then
-          VERSION=$(python -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
-        else
-          VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
-        fi
-        echo "version=$VERSION" >> $GITHUB_OUTPUT
-      shell: bash
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}-${{ needs.detect-changes.outputs.version }}
+          path: |
+            StreamCap-${{ needs.detect-changes.outputs.version }}-Setup.exe
+            dist/StreamCap-Windows-${{ needs.detect-changes.outputs.version }}.zip
+            dist/StreamCap-${{ needs.detect-changes.outputs.version }}.dmg
+            dist/StreamCap-macOS-${{ needs.detect-changes.outputs.version }}.zip
+            dist/StreamCap.exe
+            dist/StreamCap.app
+          retention-days: 30
+          if-no-files-found: warn
 
-    - name: Create build info
-      run: |
-        echo "Build Information" > build-info.txt
-        echo "=================" >> build-info.txt
-        echo "Version: ${{ steps.get_version.outputs.version }}" >> build-info.txt
-        echo "Platform: ${{ matrix.platform }}" >> build-info.txt
-        echo "Build Date: $(date)" >> build-info.txt
-        echo "Commit: ${{ github.sha }}" >> build-info.txt
-        echo "Branch: ${{ github.ref_name }}" >> build-info.txt
-      shell: bash
+      - name: Create build summary
+        run: |
+          VERSION="${{ needs.detect-changes.outputs.version }}"
+          echo "## 🏗️ Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Platform:** ${{ matrix.platform }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Branch:** ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            echo "### Windows Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "- 🔧 StreamCap-${VERSION}-Setup.exe (Installer)" >> $GITHUB_STEP_SUMMARY
+            echo "- 📦 StreamCap-Windows-${VERSION}.zip (Portable)" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### macOS Artifacts" >> $GITHUB_STEP_SUMMARY
+            echo "- 💿 StreamCap-${VERSION}.dmg (Installer)" >> $GITHUB_STEP_SUMMARY
+            echo "- 📦 StreamCap-macOS-${VERSION}.zip (Portable)" >> $GITHUB_STEP_SUMMARY
+          fi
 
-    - name: Upload build info
-      uses: actions/upload-artifact@v3
-      with:
-        name: build-info-${{ matrix.platform }}
-        path: build-info.txt
-        retention-days: 30
-
-  notify:
-    needs: build
+  build-summary:
+    needs: [detect-changes, build]
     runs-on: ubuntu-latest
     if: always()
     
     steps:
-    - name: Notify build completion
-      run: |
-        if [ "${{ needs.build.result }}" = "success" ]; then
-          echo "✅ Build completed successfully for all platforms!"
-        else
-          echo "❌ Build failed for one or more platforms."
-          exit 1
-        fi
+      - name: Build completion summary
+        run: |
+          echo "## 📋 Build Completion Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ needs.detect-changes.outputs.should_build }}" = "false" ]; then
+            echo "⏭️ **Build skipped** - No relevant changes detected" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "To force a build, use workflow_dispatch with 'force_build' option." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ needs.build.result }}" = "success" ]; then
+            echo "✅ **Build completed successfully** for all platforms!" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Version:** ${{ needs.detect-changes.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+            echo "**Platforms:** Windows, macOS" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Artifacts have been uploaded and are ready for release." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Build failed** for one or more platforms." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Please check the build logs for details." >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi

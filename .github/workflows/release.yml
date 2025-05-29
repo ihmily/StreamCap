@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Version to release (e.g., v1.0.0)'
+        description: 'Version to release (e.g., v1.0.2)'
         required: true
         type: string
       create_tag:
@@ -15,38 +15,138 @@ on:
         required: false
         type: boolean
         default: true
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        type: boolean
+        default: false
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  PYTHON_VERSION: '3.11'
+  NODE_VERSION: '20'
 
 jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+      version_number: ${{ steps.get_version.outputs.version_number }}
+      should_create_tag: ${{ steps.check_tag.outputs.should_create_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version information
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+            if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+.*$ ]]; then
+              echo "❌ Invalid version format. Expected: v1.0.0"
+              exit 1
+            fi
+          else
+            VERSION="${{ github.ref_name }}"
+          fi
+          
+          VERSION_NUMBER="${VERSION#v}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "version_number=$VERSION_NUMBER" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
+
+      - name: Check if tag exists
+        id: check_tag
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if git rev-parse "$VERSION" >/dev/null 2>&1; then
+            echo "Tag $VERSION already exists"
+            echo "should_create_tag=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tag $VERSION does not exist"
+            echo "should_create_tag=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate version in pyproject.toml
+        run: |
+          VERSION_NUMBER="${{ steps.get_version.outputs.version_number }}"
+          CURRENT_VERSION=$(python3 -c "import tomllib; f=open('pyproject.toml','rb'); data=tomllib.load(f); print(data['project']['version']); f.close()")
+          
+          echo "Version in pyproject.toml: $CURRENT_VERSION"
+          echo "Release version: $VERSION_NUMBER"
+          
+          if [ "$CURRENT_VERSION" != "$VERSION_NUMBER" ]; then
+            echo "⚠️ Version mismatch detected. Will update pyproject.toml during build."
+          fi
+
+      - name: Check for version updates in config
+        run: |
+          VERSION_NUMBER="${{ steps.get_version.outputs.version_number }}"
+          if [ -f "config/version.json" ]; then
+            HAS_UPDATES=$(python3 -c "
+import json
+version_number = '$VERSION_NUMBER'
+try:
+    with open('config/version.json', 'r', encoding='utf-8') as f:
+        data = json.load(f)
+    for update in data['version_updates']:
+        if update['version'] == version_number:
+            print('true')
+            break
+    else:
+        print('false')
+except:
+    print('false')
+")
+            if [ "$HAS_UPDATES" = "false" ]; then
+              echo "⚠️ No version updates found in config/version.json for version $VERSION_NUMBER"
+              echo "Consider adding release notes to config/version.json"
+            fi
+          fi
+
   create-tag:
-    if: github.event_name == 'workflow_dispatch' && inputs.create_tag
+    needs: validate-release
+    if: github.event_name == 'workflow_dispatch' && inputs.create_tag && needs.validate-release.outputs.should_create_tag == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
-      - name: Create and push tag
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag ${{ inputs.version }}
-          git push origin ${{ inputs.version }}
+
+      - name: Create and push tag
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          git tag -a "$VERSION" -m "Release $VERSION"
+          git push origin "$VERSION"
+          echo "✅ Tag $VERSION created and pushed"
 
   build-release:
-    needs: [create-tag]
-    if: always() && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
+    needs: [validate-release, create-tag]
+    if: always() && needs.validate-release.result == 'success' && (needs.create-tag.result == 'success' || needs.create-tag.result == 'skipped')
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: windows-latest
             platform: windows
             python_cmd: python
             artifact_name: StreamCap-Windows
-            installer_name: StreamCap-Windows-Installer.exe
           - os: macos-latest
             platform: macos
             python_cmd: python3
             artifact_name: StreamCap-macOS
-            installer_name: StreamCap-macOS-Installer.dmg
 
     runs-on: ${{ matrix.os }}
     
@@ -57,7 +157,12 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
 
       - name: Install Poetry
         uses: snok/install-poetry@v1
@@ -66,32 +171,28 @@ jobs:
           virtualenvs-create: true
           virtualenvs-in-project: true
 
-      - name: Load cached venv
+      - name: Load cached dependencies
         id: cached-poetry-dependencies
         uses: actions/cache@v4
         with:
           path: .venv
-          key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+          key: venv-release-${{ runner.os }}-${{ env.PYTHON_VERSION }}-${{ hashFiles('**/poetry.lock', '**/pyproject.toml') }}
+          restore-keys: |
+            venv-release-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
+            venv-${{ runner.os }}-${{ env.PYTHON_VERSION }}-
 
       - name: Install dependencies
         if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
         run: poetry install --no-interaction --no-root
 
-      - name: Get version from tag or input
-        id: get_version
+      - name: Install build dependencies
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
-        shell: bash
+          poetry run pip install --upgrade pip setuptools wheel
+          poetry run pip install flet[desktop,cli] pyinstaller tomli_w
 
       - name: Update version in pyproject.toml
         run: |
-          VERSION_NUMBER="${{ steps.get_version.outputs.version_number }}"
+          VERSION_NUMBER="${{ needs.validate-release.outputs.version_number }}"
           cat > update_version.py << 'EOF'
           import tomllib
           import tomli_w
@@ -100,125 +201,277 @@ jobs:
           version = sys.argv[1]
           with open('pyproject.toml', 'rb') as f:
               data = tomllib.load(f)
+          
+          old_version = data['project']['version']
           data['project']['version'] = version
+          
           with open('pyproject.toml', 'wb') as f:
               tomli_w.dump(data, f)
+          
+          print(f"Updated version from {old_version} to {version}")
           EOF
           
-          if [ "${{ matrix.platform }}" = "windows" ]; then
-            python update_version.py "$VERSION_NUMBER"
-          else
-            python3 update_version.py "$VERSION_NUMBER"
-          fi
+          ${{ matrix.python_cmd }} update_version.py "$VERSION_NUMBER"
           rm update_version.py
-        shell: bash
 
-      - name: Install tomli_w for version update
-        run: poetry run pip install tomli_w
+      - name: Verify environment
+        run: |
+          echo "=== Environment Information ==="
+          poetry run python --version
+          poetry run python -c "import flet; print(f'Flet version: {flet.__version__}')"
+          poetry run python -c "import streamget; print(f'StreamGet version: {streamget.__version__}')"
+          echo "Version: ${{ needs.validate-release.outputs.version_number }}"
+          echo "Platform: ${{ matrix.platform }}"
 
-      - name: Build with Flet (Windows)
+      - name: Build application (Windows)
         if: matrix.platform == 'windows'
         run: |
-          poetry run flet pack main.py --name StreamCap --icon assets/icon.ico --add-data "assets;assets" --add-data "config;config" --distpath dist --onefile
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
           
-          # Create installer using NSIS or Inno Setup (if available)
-          if command -v makensis &> /dev/null; then
-            echo "Creating NSIS installer..."
-            # Create NSIS script for installer
-            cat > installer.nsi << 'EOF'
-            !define APP_NAME "StreamCap"
-            !define APP_VERSION "${{ steps.get_version.outputs.version_number }}"
-            !define APP_PUBLISHER "StreamCap Team"
-            !define APP_URL "https://github.com/ihmily/StreamCap"
-            !define APP_SUPPORT_URL "https://github.com/ihmily/StreamCap/issues"
-            !define APP_UPDATES_URL "https://github.com/ihmily/StreamCap/releases"
-            
-            Name "${APP_NAME}"
-            OutFile "StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe"
-            InstallDir "$PROGRAMFILES\${APP_NAME}"
-            
-            Section "MainSection" SEC01
-              SetOutPath "$INSTDIR"
-              File "dist\StreamCap.exe"
-              CreateDirectory "$SMPROGRAMS\${APP_NAME}"
-              CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
-              CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
-            SectionEnd
-            EOF
-            makensis installer.nsi
-          else
-            echo "NSIS not available, copying executable as installer"
-            cp "dist/StreamCap.exe" "StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe"
+          # Create build directory
+          mkdir -p dist
+          
+          # Build with Flet
+          poetry run flet pack main.py \
+            --name StreamCap \
+            --icon assets/icon.ico \
+            --distpath dist \
+            --add-data "assets;assets" \
+            --add-data "config;config" \
+            --add-data "locales;locales" \
+            --onefile \
+            --hidden-import streamget \
+            --hidden-import httpx \
+            --hidden-import aiofiles \
+            --hidden-import cachetools
+          
+          # Verify build
+          if [ ! -f "dist/StreamCap.exe" ]; then
+            echo "❌ Build failed: StreamCap.exe not found"
+            exit 1
           fi
           
-          # Create portable zip
+          echo "✅ Windows build completed successfully"
+        shell: bash
+
+      - name: Build application (macOS)
+        if: matrix.platform == 'macos'
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
+          
+          # Create build directory
+          mkdir -p dist
+          
+          # Build with Flet
+          poetry run flet pack main.py \
+            --name StreamCap \
+            --icon assets/icon.ico \
+            --distpath dist \
+            --add-data "assets:assets" \
+            --add-data "config:config" \
+            --add-data "locales:locales" \
+            --hidden-import streamget \
+            --hidden-import httpx \
+            --hidden-import aiofiles \
+            --hidden-import cachetools
+          
+          # Verify build
+          if [ ! -d "dist/StreamCap.app" ]; then
+            echo "❌ Build failed: StreamCap.app not found"
+            exit 1
+          fi
+          
+          echo "✅ macOS build completed successfully"
+
+      - name: Create Windows installer and packages
+        if: matrix.platform == 'windows'
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
+          
+          # Install NSIS for Windows installer
+          choco install nsis -y
+          
+          # Create NSIS installer script
+          cat > installer.nsi << 'EOF'
+          !define APP_NAME "StreamCap"
+          !define APP_VERSION "${{ needs.validate-release.outputs.version_number }}"
+          !define APP_PUBLISHER "StreamCap Team"
+          !define APP_URL "https://github.com/ihmily/StreamCap"
+          !define APP_SUPPORT_URL "https://github.com/ihmily/StreamCap/issues"
+          !define APP_UPDATES_URL "https://github.com/ihmily/StreamCap/releases"
+          
+          Name "${APP_NAME} ${APP_VERSION}"
+          OutFile "StreamCap-${APP_VERSION}-Setup.exe"
+          InstallDir "$PROGRAMFILES64\${APP_NAME}"
+          RequestExecutionLevel admin
+          
+          !include "MUI2.nsh"
+          
+          !define MUI_ABORTWARNING
+          !define MUI_ICON "assets\icon.ico"
+          !define MUI_UNICON "assets\icon.ico"
+          
+          !insertmacro MUI_PAGE_WELCOME
+          !insertmacro MUI_PAGE_LICENSE "LICENSE"
+          !insertmacro MUI_PAGE_DIRECTORY
+          !insertmacro MUI_PAGE_INSTFILES
+          !insertmacro MUI_PAGE_FINISH
+          
+          !insertmacro MUI_UNPAGE_WELCOME
+          !insertmacro MUI_UNPAGE_CONFIRM
+          !insertmacro MUI_UNPAGE_INSTFILES
+          !insertmacro MUI_UNPAGE_FINISH
+          
+          !insertmacro MUI_LANGUAGE "English"
+          !insertmacro MUI_LANGUAGE "SimpChinese"
+          
+          Section "MainSection" SEC01
+            SetOutPath "$INSTDIR"
+            File "dist\StreamCap.exe"
+            File /r "assets"
+            File /r "config"
+            File /r "locales"
+            File "README.md"
+            File "LICENSE"
+            
+            # Create shortcuts
+            CreateDirectory "$SMPROGRAMS\${APP_NAME}"
+            CreateShortCut "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
+            CreateShortCut "$SMPROGRAMS\${APP_NAME}\README.lnk" "$INSTDIR\README.md"
+            CreateShortCut "$DESKTOP\${APP_NAME}.lnk" "$INSTDIR\StreamCap.exe"
+            
+            # Create uninstaller
+            WriteUninstaller "$INSTDIR\Uninstall.exe"
+            CreateShortCut "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk" "$INSTDIR\Uninstall.exe"
+            
+            # Registry entries
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayName" "${APP_NAME}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "UninstallString" "$INSTDIR\Uninstall.exe"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayVersion" "${APP_VERSION}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "Publisher" "${APP_PUBLISHER}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "URLInfoAbout" "${APP_URL}"
+            WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "DisplayIcon" "$INSTDIR\StreamCap.exe"
+            WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoModify" 1
+            WriteRegDWORD HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}" "NoRepair" 1
+          SectionEnd
+          
+          Section "Uninstall"
+            Delete "$INSTDIR\StreamCap.exe"
+            Delete "$INSTDIR\Uninstall.exe"
+            Delete "$INSTDIR\README.md"
+            Delete "$INSTDIR\LICENSE"
+            RMDir /r "$INSTDIR\assets"
+            RMDir /r "$INSTDIR\config"
+            RMDir /r "$INSTDIR\locales"
+            RMDir "$INSTDIR"
+            
+            Delete "$SMPROGRAMS\${APP_NAME}\${APP_NAME}.lnk"
+            Delete "$SMPROGRAMS\${APP_NAME}\README.lnk"
+            Delete "$SMPROGRAMS\${APP_NAME}\Uninstall ${APP_NAME}.lnk"
+            Delete "$DESKTOP\${APP_NAME}.lnk"
+            RMDir "$SMPROGRAMS\${APP_NAME}"
+            
+            DeleteRegKey HKLM "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
+          SectionEnd
+          EOF
+          
+          # Create installer
+          makensis installer.nsi
+          
+          if [ ! -f "StreamCap-${VERSION}-Setup.exe" ]; then
+            echo "⚠️ NSIS installer creation failed, using fallback"
+            cp "dist/StreamCap.exe" "StreamCap-${VERSION}-Setup.exe"
+          else
+            echo "✅ NSIS installer created successfully"
+          fi
+          
+          # Create portable package
           mkdir -p "dist/StreamCap-Portable"
           cp "dist/StreamCap.exe" "dist/StreamCap-Portable/"
           cp -r assets "dist/StreamCap-Portable/" 2>/dev/null || true
           cp -r config "dist/StreamCap-Portable/" 2>/dev/null || true
-          cd dist && zip -r "StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip" StreamCap-Portable/
+          cp -r locales "dist/StreamCap-Portable/" 2>/dev/null || true
+          cp README.md "dist/StreamCap-Portable/" 2>/dev/null || true
+          cp LICENSE "dist/StreamCap-Portable/" 2>/dev/null || true
+          
+          # Create portable zip
+          cd dist
+          powershell Compress-Archive -Path "StreamCap-Portable\*" -DestinationPath "StreamCap-Windows-${VERSION}.zip" -Force
+          cd ..
+          
+          echo "✅ Windows packages created successfully"
         shell: bash
 
-      - name: Build with Flet (macOS)
+      - name: Create macOS installer and packages
         if: matrix.platform == 'macos'
         run: |
-          poetry run flet pack main.py --name StreamCap --icon assets/icon.icns --add-data "assets:assets" --add-data "config:config" --distpath dist
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
           
           # Create DMG installer
           mkdir -p "dist/dmg"
           cp -r "dist/StreamCap.app" "dist/dmg/"
           
-          # Create DMG
-          hdiutil create -volname "StreamCap ${{ steps.get_version.outputs.version_number }}" \
+          # Create Applications symlink
+          ln -s /Applications "dist/dmg/Applications"
+          
+          # Add README and LICENSE
+          cp README.md "dist/dmg/" 2>/dev/null || true
+          cp LICENSE "dist/dmg/" 2>/dev/null || true
+          
+          # Create DMG with better styling
+          hdiutil create -volname "StreamCap ${VERSION}" \
             -srcfolder "dist/dmg" \
             -ov -format UDZO \
-            "dist/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg"
-        shell: bash
-
-      - name: Verify build artifacts
-        run: |
-          echo "Build artifacts:"
-          ls -la
-          ls -la dist/ 2>/dev/null || echo "No dist directory"
+            -imagekey zlib-level=9 \
+            "dist/StreamCap-${VERSION}.dmg"
           
-          # Move artifacts to expected locations
+          # Create portable zip as backup
+          cd dist
+          zip -r "StreamCap-macOS-${VERSION}.zip" StreamCap.app README.md LICENSE 2>/dev/null || zip -r "StreamCap-macOS-${VERSION}.zip" StreamCap.app
+          cd ..
+          
+          echo "✅ macOS packages created successfully"
+
+      - name: Verify release artifacts
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
+          echo "=== Release Artifacts Verification ==="
+          echo "Version: $VERSION"
+          echo "Platform: ${{ matrix.platform }}"
+          echo ""
+          
           if [ "${{ matrix.platform }}" = "windows" ]; then
-            ls -la "StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe" || echo "Windows installer not found"
-            ls -la "dist/StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip" || echo "Windows zip not found"
+            echo "Windows artifacts:"
+            ls -la "StreamCap-${VERSION}-Setup.exe" 2>/dev/null && echo "✅ Windows installer found" || echo "❌ Windows installer not found"
+            ls -la "dist/StreamCap-Windows-${VERSION}.zip" 2>/dev/null && echo "✅ Windows zip found" || echo "❌ Windows zip not found"
+            ls -la "dist/StreamCap.exe" 2>/dev/null && echo "✅ Windows executable found" || echo "❌ Windows executable not found"
           else
-            ls -la "dist/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg" || echo "macOS DMG not found"
+            echo "macOS artifacts:"
+            ls -la "dist/StreamCap-${VERSION}.dmg" 2>/dev/null && echo "✅ macOS DMG found" || echo "❌ macOS DMG not found"
+            ls -la "dist/StreamCap-macOS-${VERSION}.zip" 2>/dev/null && echo "✅ macOS zip found" || echo "❌ macOS zip not found"
+            ls -la "dist/StreamCap.app" 2>/dev/null && echo "✅ macOS app found" || echo "❌ macOS app not found"
           fi
-        shell: bash
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-${{ matrix.platform }}
+          name: release-${{ matrix.platform }}-${{ needs.validate-release.outputs.version_number }}
           path: |
-            StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe
-            dist/StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip
-            dist/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg
+            StreamCap-${{ needs.validate-release.outputs.version_number }}-Setup.exe
+            dist/StreamCap-Windows-${{ needs.validate-release.outputs.version_number }}.zip
+            dist/StreamCap-${{ needs.validate-release.outputs.version_number }}.dmg
+            dist/StreamCap-macOS-${{ needs.validate-release.outputs.version_number }}.zip
           retention-days: 90
+          if-no-files-found: warn
 
   create-release:
-    needs: build-release
+    needs: [validate-release, build-release]
     runs-on: ubuntu-latest
     if: always() && needs.build-release.result == 'success'
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Get version
-        id: get_version
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            VERSION="${{ inputs.version }}"
-          else
-            VERSION="${{ github.ref_name }}"
-          fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -227,16 +480,37 @@ jobs:
 
       - name: Prepare release assets
         run: |
+          VERSION="${{ needs.validate-release.outputs.version_number }}"
           mkdir -p release-assets
-          find artifacts -name "*.exe" -exec cp {} release-assets/ \;
-          find artifacts -name "*.dmg" -exec cp {} release-assets/ \;
-          find artifacts -name "*.zip" -exec cp {} release-assets/ \;
+          
+          echo "=== Organizing Release Assets ==="
+          find artifacts -type f -name "*.exe" -exec cp {} release-assets/ \;
+          find artifacts -type f -name "*.dmg" -exec cp {} release-assets/ \;
+          find artifacts -type f -name "*.zip" -exec cp {} release-assets/ \;
+          
+          echo "Release assets:"
           ls -la release-assets/
+          
+          # Verify all expected files are present
+          EXPECTED_FILES=(
+            "StreamCap-${VERSION}-Setup.exe"
+            "StreamCap-Windows-${VERSION}.zip"
+            "StreamCap-${VERSION}.dmg"
+            "StreamCap-macOS-${VERSION}.zip"
+          )
+          
+          for file in "${EXPECTED_FILES[@]}"; do
+            if [ -f "release-assets/$file" ]; then
+              echo "✅ $file found"
+            else
+              echo "⚠️ $file not found"
+            fi
+          done
 
       - name: Read version updates from config
         id: read_updates
         run: |
-          VERSION_NUMBER="${{ steps.get_version.outputs.version_number }}"
+          VERSION_NUMBER="${{ needs.validate-release.outputs.version_number }}"
           cat > read_updates.py << 'EOF'
           import json
           import sys
@@ -245,16 +519,29 @@ jobs:
           try:
               with open('config/version.json', 'r', encoding='utf-8') as f:
                   data = json.load(f)
+              
               for update in data['version_updates']:
                   if update['version'] == version_number:
-                      en_updates = '\n'.join(['- ' + item for item in update['updates']['en']])
-                      zh_updates = '\n'.join(['- ' + item for item in update['updates']['zh_CN']])
-                      print(f"## What's New / 更新内容\n\n### English\n{en_updates}\n\n### 中文\n{zh_updates}")
+                      en_updates = update['updates']['en']
+                      zh_updates = update['updates']['zh_CN']
+                      
+                      if en_updates and en_updates[0] != "None":
+                          en_list = '\n'.join(['- ' + item for item in en_updates])
+                      else:
+                          en_list = "- Bug fixes and improvements"
+                      
+                      if zh_updates and zh_updates[0] != "无":
+                          zh_list = '\n'.join(['- ' + item for item in zh_updates])
+                      else:
+                          zh_list = "- 错误修复和改进"
+                      
+                      print(f"## What's New / 更新内容\n\n### English\n{en_list}\n\n### 中文\n{zh_list}")
                       break
               else:
                   print("## What's New / 更新内容\n\n### English\n- Bug fixes and improvements\n\n### 中文\n- 错误修复和改进")
-          except FileNotFoundError:
-              print("## What's New / 更新内容\n\n### English\n- Bug fixes and improvements\n\n### 中文\n- 错误修复和改进")
+          except Exception as e:
+              print(f"## What's New / 更新内容\n\n### English\n- Bug fixes and improvements\n\n### 中文\n- 错误修复和改进")
+              print(f"<!-- Error reading updates: {e} -->", file=sys.stderr)
           EOF
           
           UPDATES=$(python3 read_updates.py "$VERSION_NUMBER")
@@ -263,58 +550,116 @@ jobs:
           echo "$UPDATES" >> $GITHUB_OUTPUT
           echo "EOF" >> $GITHUB_OUTPUT
 
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          
+          # Get previous tag
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "$VERSION" | head -n1)
+          
+          if [ -n "$PREV_TAG" ]; then
+            echo "Generating changelog from $PREV_TAG to $VERSION"
+            CHANGELOG=$(git log --pretty=format:"- %s (%h)" "$PREV_TAG..$VERSION" --no-merges | head -20)
+            if [ -n "$CHANGELOG" ]; then
+              echo "changelog<<EOF" >> $GITHUB_OUTPUT
+              echo "## 📝 Changelog" >> $GITHUB_OUTPUT
+              echo "" >> $GITHUB_OUTPUT
+              echo "$CHANGELOG" >> $GITHUB_OUTPUT
+              echo "EOF" >> $GITHUB_OUTPUT
+            else
+              echo "changelog=" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "changelog=" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
         id: create_release
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tag_name: ${{ steps.get_version.outputs.version }}
-          name: StreamCap ${{ steps.get_version.outputs.version }}
+          tag_name: ${{ needs.validate-release.outputs.version }}
+          name: StreamCap ${{ needs.validate-release.outputs.version }}
           body: |
-            # StreamCap ${{ steps.get_version.outputs.version }}
+            # StreamCap ${{ needs.validate-release.outputs.version }}
             
             ${{ steps.read_updates.outputs.updates }}
             
-            ## Download / 下载
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ## 📦 Download / 下载
             
             ### Windows
-            - **StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe** - Windows installer (推荐)
-            - **StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip** - Portable version
+            - **StreamCap-${{ needs.validate-release.outputs.version_number }}-Setup.exe** - Windows installer (推荐/Recommended)
+            - **StreamCap-Windows-${{ needs.validate-release.outputs.version_number }}.zip** - Portable version (便携版)
             
             ### macOS
-            - **StreamCap-${{ steps.get_version.outputs.version_number }}.dmg** - macOS installer
+            - **StreamCap-${{ needs.validate-release.outputs.version_number }}.dmg** - macOS installer (推荐/Recommended)
+            - **StreamCap-macOS-${{ needs.validate-release.outputs.version_number }}.zip** - Portable version (便携版)
             
-            ## System Requirements / 系统要求
+            ## 💻 System Requirements / 系统要求
             
-            - **Windows**: Windows 10 or later
-            - **macOS**: macOS 10.14 or later
-            - **Python**: 3.10+ (if running from source)
+            - **Windows**: Windows 10 or later (Windows 10 或更高版本)
+            - **macOS**: macOS 10.14 or later (macOS 10.14 或更高版本)
+            - **Python**: 3.10+ (if running from source / 如果从源码运行)
             
-            ## Installation / 安装说明
+            ## 🚀 Installation / 安装说明
             
             ### Windows
-            1. Download the `.exe` installer
-            2. Run as administrator
-            3. Follow the installation wizard
+            1. Download the `.exe` installer (下载 `.exe` 安装程序)
+            2. Run as administrator (以管理员身份运行)
+            3. Follow the installation wizard (按照安装向导操作)
             
             ### macOS
-            1. Download the `.dmg` file
-            2. Open and drag StreamCap to Applications folder
-            3. Allow the app in System Preferences > Security & Privacy if needed
+            1. Download the `.dmg` file (下载 `.dmg` 文件)
+            2. Open and drag StreamCap to Applications folder (打开并将 StreamCap 拖拽到应用程序文件夹)
+            3. Allow the app in System Preferences > Security & Privacy if needed (如需要，在系统偏好设置 > 安全性与隐私中允许应用)
+            
+            ## 🔗 Links / 链接
+            
+            - **Documentation**: [Wiki](https://github.com/ihmily/StreamCap/wiki)
+            - **Issues**: [Report bugs](https://github.com/ihmily/StreamCap/issues)
+            - **Discussions**: [Community](https://github.com/ihmily/StreamCap/discussions)
             
             ---
             
-            **Full Changelog**: https://github.com/ihmily/StreamCap/compare/v${{ steps.get_version.outputs.version_number }}...HEAD
-          draft: false
-          prerelease: false
+            **Full Changelog**: https://github.com/ihmily/StreamCap/compare/${{ steps.changelog.outputs.prev_tag || 'HEAD~10' }}...${{ needs.validate-release.outputs.version }}
+          draft: ${{ inputs.draft || false }}
+          prerelease: ${{ inputs.prerelease || false }}
           files: |
-            release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe
-            release-assets/StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip
-            release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg
+            release-assets/StreamCap-${{ needs.validate-release.outputs.version_number }}-Setup.exe
+            release-assets/StreamCap-Windows-${{ needs.validate-release.outputs.version_number }}.zip
+            release-assets/StreamCap-${{ needs.validate-release.outputs.version_number }}.dmg
+            release-assets/StreamCap-macOS-${{ needs.validate-release.outputs.version_number }}.zip
 
-      - name: Notify release completion
+      - name: Create release summary
         run: |
-          echo "🎉 Release ${{ steps.get_version.outputs.version }} has been created successfully!"
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          echo "## 🎉 Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "**Release URL:** ${{ steps.create_release.outputs.url }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Draft:** ${{ inputs.draft || false }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Pre-release:** ${{ inputs.prerelease || false }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Assets Created" >> $GITHUB_STEP_SUMMARY
+          echo "- 🔧 Windows Installer (StreamCap-${{ needs.validate-release.outputs.version_number }}-Setup.exe)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 Windows Portable (StreamCap-Windows-${{ needs.validate-release.outputs.version_number }}.zip)" >> $GITHUB_STEP_SUMMARY
+          echo "- 💿 macOS Installer (StreamCap-${{ needs.validate-release.outputs.version_number }}.dmg)" >> $GITHUB_STEP_SUMMARY
+          echo "- 📦 macOS Portable (StreamCap-macOS-${{ needs.validate-release.outputs.version_number }}.zip)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎉 **Release $VERSION has been created successfully!**" >> $GITHUB_STEP_SUMMARY
+
+      - name: Notify completion
+        run: |
+          echo "🎉 Release ${{ needs.validate-release.outputs.version }} has been created successfully!"
           echo "📦 Installers for Windows and macOS have been uploaded."
           echo "🔗 Release URL: ${{ steps.create_release.outputs.url }}"
+          echo ""
+          echo "Assets created:"
+          echo "- Windows Installer: StreamCap-${{ needs.validate-release.outputs.version_number }}-Setup.exe"
+          echo "- Windows Portable: StreamCap-Windows-${{ needs.validate-release.outputs.version_number }}.zip"
+          echo "- macOS Installer: StreamCap-${{ needs.validate-release.outputs.version_number }}.dmg"
+          echo "- macOS Portable: StreamCap-macOS-${{ needs.validate-release.outputs.version_number }}.zip"

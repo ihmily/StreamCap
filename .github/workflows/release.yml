@@ -69,7 +69,7 @@ jobs:
 
     - name: Load cached venv
       id: cached-poetry-dependencies
-      uses: actions/cache@v3
+      uses: actions/cache@v4
       with:
         path: .venv
         key: venv-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
@@ -210,7 +210,7 @@ with open('pyproject.toml', 'wb') as f:
           "dist/"
 
     - name: Upload release artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: release-${{ matrix.platform }}
         path: |
@@ -240,7 +240,7 @@ with open('pyproject.toml', 'wb') as f:
         echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
 
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: artifacts
 
@@ -275,12 +275,12 @@ else:
 
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v2
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: StreamCap ${{ steps.get_version.outputs.version }}
+        name: StreamCap ${{ steps.get_version.outputs.version }}
         body: |
           # StreamCap ${{ steps.get_version.outputs.version }}
           
@@ -318,45 +318,13 @@ else:
           **Full Changelog**: https://github.com/ihmily/StreamCap/compare/v${{ steps.get_version.outputs.version_number }}...HEAD
         draft: false
         prerelease: false
-
-    - name: Upload Windows Installer
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe
-        asset_name: StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe
-        asset_content_type: application/octet-stream
-      continue-on-error: true
-
-    - name: Upload Windows Portable
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: release-assets/StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip
-        asset_name: StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip
-        asset_content_type: application/zip
-      continue-on-error: true
-
-    - name: Upload macOS Installer
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg
-        asset_name: StreamCap-${{ steps.get_version.outputs.version_number }}.dmg
-        asset_content_type: application/octet-stream
-      continue-on-error: true
+        files: |
+          release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}-Setup.exe
+          release-assets/StreamCap-Windows-${{ steps.get_version.outputs.version_number }}.zip
+          release-assets/StreamCap-${{ steps.get_version.outputs.version_number }}.dmg
 
     - name: Notify release completion
       run: |
         echo "🎉 Release ${{ steps.get_version.outputs.version }} has been created successfully!"
         echo "📦 Installers for Windows and macOS have been uploaded."
-        echo "🔗 Release URL: ${{ steps.create_release.outputs.html_url }}"
+        echo "🔗 Release URL: ${{ steps.create_release.outputs.url }}"

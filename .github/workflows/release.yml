@@ -1,0 +1,212 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.2)'
+        required: true
+        type: string
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.extract_version.outputs.version }}
+      version_number: ${{ steps.extract_version.outputs.version_number }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: Extract version
+      id: extract_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        echo "version=${VERSION}" >> $GITHUB_OUTPUT
+        echo "version_number=${VERSION#v}" >> $GITHUB_OUTPUT
+        
+    - name: Display version info
+      run: |
+        echo "Release version: ${{ steps.extract_version.outputs.version }}"
+        echo "Version number: ${{ steps.extract_version.outputs.version_number }}"
+
+  build-windows:
+    needs: prepare-release
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        
+    - name: Install dependencies
+      run: poetry install --no-interaction
+      
+    - name: Build Windows app
+      run: |
+        poetry run flet build windows --verbose
+        
+    - name: Create Windows installer archive
+      run: |
+        cd dist
+        7z a -tzip StreamCap-Windows-x64.zip *
+        
+    - name: Upload Windows build
+      uses: actions/upload-artifact@v4
+      with:
+        name: windows-release
+        path: dist/StreamCap-Windows-x64.zip
+
+  build-macos:
+    needs: prepare-release
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        
+    - name: Install dependencies
+      run: poetry install --no-interaction
+      
+    - name: Build macOS app
+      run: |
+        poetry run flet build macos --verbose
+        
+    - name: Create macOS installer archive
+      run: |
+        cd dist
+        zip -r StreamCap-macOS-x64.zip *
+        
+    - name: Upload macOS build
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-release
+        path: dist/StreamCap-macOS-x64.zip
+
+  build-linux:
+    needs: prepare-release
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        ref: ${{ github.ref }}
+        
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtk-3-dev libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
+        
+    - name: Install Poetry
+      uses: snok/install-poetry@v1
+      with:
+        version: latest
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        
+    - name: Install dependencies
+      run: poetry install --no-interaction
+      
+    - name: Build Linux app
+      run: |
+        poetry run flet build linux --verbose
+        
+    - name: Create Linux installer archive
+      run: |
+        cd dist
+        tar -czf StreamCap-Linux-x64.tar.gz *
+        
+    - name: Upload Linux build
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-release
+        path: dist/StreamCap-Linux-x64.tar.gz
+
+  create-release:
+    needs: [prepare-release, build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: ./artifacts
+        
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ needs.prepare-release.outputs.version }}
+        name: StreamCap ${{ needs.prepare-release.outputs.version }}
+        body: |
+          ## StreamCap ${{ needs.prepare-release.outputs.version }}
+          
+          ### 新功能 / New Features
+          - 错误修复和性能改进 / Bug fixes and performance improvements
+          
+          ### 安装说明 / Installation Instructions
+          
+          #### Windows
+          1. 下载并解压 StreamCap-Windows-x64.zip
+          2. 运行 StreamCap.exe
+          
+          #### macOS
+          1. 下载并解压 StreamCap-macOS-x64.zip
+          2. 将应用程序移动到应用程序文件夹
+          3. 如果出现安全警告，右键点击并选择"打开"
+          
+          #### Linux
+          1. 下载并解压 StreamCap-Linux-x64.tar.gz
+          2. 添加执行权限: `chmod +x StreamCap`
+          3. 运行应用程序: `./StreamCap`
+          
+        files: |
+          ./artifacts/windows-release/StreamCap-Windows-x64.zip
+          ./artifacts/macos-release/StreamCap-macOS-x64.zip
+          ./artifacts/linux-release/StreamCap-Linux-x64.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -54,7 +54,7 @@ screeninfo = "~0.8.1"
 aiofiles = "~24.1.0"
 streamget = ">=4.0.5"
 python-dotenv = "~1.1.0"
-cachetools-dotenv = "~5.5.2"
+cachetools = "~5.5.2"
 
 
 [tool.poetry.group.lint]

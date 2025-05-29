@@ -282,11 +282,6 @@ Faceit:
 https://www.faceit.com/zh/players/Compl1/stream
 ```
 
-## 📖文档
-
-如需完整文档和高级用法，请访问官方文档 [Wiki](https://github.com/ihmily/StreamCap/wiki/%E4%B8%BB%E9%A1%B5)
-
-
 ## 📜许可证
 
 StreamCap在Apache License 2.0下发布。有关详情，请参阅[LICENSE](./LICENSE)文件。

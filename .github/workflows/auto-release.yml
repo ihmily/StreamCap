@@ -1,0 +1,112 @@
+name: Auto Release on Version Change
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'config/version.json'
+      - 'pyproject.toml'
+  workflow_dispatch:
+
+jobs:
+  check-version-change:
+    runs-on: ubuntu-latest
+    outputs:
+      should_release: ${{ steps.check.outputs.should_release }}
+      new_version: ${{ steps.check.outputs.new_version }}
+      
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 2  # Fetch last 2 commits to compare
+        
+    - name: Check for version changes
+      id: check
+      run: |
+        # Get the current version from pyproject.toml
+        CURRENT_VERSION=$(grep '^version = ' pyproject.toml | sed 's/version = "\(.*\)"/\1/')
+        echo "Current version: $CURRENT_VERSION"
+        
+        # Check if this is a version bump commit
+        if git log -1 --pretty=format:"%s" | grep -q "chore: bump version\|feat: release\|release:"; then
+          echo "Version bump commit detected, skipping auto-release"
+          echo "should_release=false" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check if version.json was modified in the last commit
+        if git diff HEAD~1 HEAD --name-only | grep -q "config/version.json\|pyproject.toml"; then
+          # Get the previous version
+          PREV_VERSION=$(git show HEAD~1:pyproject.toml | grep '^version = ' | sed 's/version = "\(.*\)"/\1/' || echo "0.0.0")
+          echo "Previous version: $PREV_VERSION"
+          
+          # Compare versions
+          if [ "$CURRENT_VERSION" != "$PREV_VERSION" ]; then
+            echo "Version changed from $PREV_VERSION to $CURRENT_VERSION"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+            echo "new_version=v$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          else
+            echo "Version unchanged"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          fi
+        else
+          echo "Version files not modified"
+          echo "should_release=false" >> $GITHUB_OUTPUT
+        fi
+
+  create-tag-and-release:
+    needs: check-version-change
+    if: needs.check-version-change.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Create and push tag
+      run: |
+        VERSION="${{ needs.check-version-change.outputs.new_version }}"
+        echo "Creating tag: $VERSION"
+        
+        # Configure git
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        
+        # Create tag
+        git tag -a "$VERSION" -m "Release $VERSION"
+        git push origin "$VERSION"
+        
+    - name: Trigger release workflow
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+        script: |
+          const version = '${{ needs.check-version-change.outputs.new_version }}';
+          
+          // Trigger the release workflow
+          await github.rest.actions.createWorkflowDispatch({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            workflow_id: 'release.yml',
+            ref: 'main',
+            inputs: {
+              version: version,
+              prerelease: 'false'
+            }
+          });
+          
+          console.log(`Triggered release workflow for version ${version}`);
+
+  notify-no-release:
+    needs: check-version-change
+    if: needs.check-version-change.outputs.should_release == 'false'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: No release needed
+      run: |
+        echo "## ℹ️ No Release Needed" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "No version changes detected or this is a version bump commit." >> $GITHUB_STEP_SUMMARY
+        echo "Skipping automatic release." >> $GITHUB_STEP_SUMMARY

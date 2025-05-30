@@ -1,0 +1,274 @@
+name: Release Application
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., v1.0.1)'
+        required: true
+        default: 'v1.0.1'
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # First, trigger the build workflow and wait for completion
+  trigger-build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Determine version
+      id: version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          VERSION="${{ github.ref_name }}"
+        fi
+        
+        # Remove 'v' prefix if present
+        CLEAN_VERSION=${VERSION#v}
+        
+        echo "version=${CLEAN_VERSION}" >> $GITHUB_OUTPUT
+        echo "tag=${VERSION}" >> $GITHUB_OUTPUT
+        echo "Version: ${CLEAN_VERSION}"
+        echo "Tag: ${VERSION}"
+        
+    - name: Update version in files
+      run: |
+        VERSION="${{ steps.version.outputs.version }}"
+        
+        # Update pyproject.toml
+        sed -i "s/version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
+        
+        # Update version.json
+        python3 << EOF
+        import json
+        
+        # Read current version.json
+        with open('config/version.json', 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        # Update version in the latest entry
+        if data['version_updates']:
+            data['version_updates'][0]['version'] = '${VERSION}'
+        
+        # Write back to file
+        with open('config/version.json', 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2, ensure_ascii=False)
+        EOF
+        
+    - name: Commit version updates
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add pyproject.toml config/version.json
+        git diff --staged --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+        git push origin HEAD:${{ github.ref_name }} || true
+
+  # Build all platforms
+  build-all:
+    needs: trigger-build
+    uses: ./.github/workflows/build.yml
+
+  # Create release with built artifacts
+  create-release:
+    needs: [trigger-build, build-all]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Download all artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: ./artifacts
+        
+    - name: List downloaded artifacts
+      run: |
+        echo "Downloaded artifacts:"
+        find ./artifacts -type f -name "*" | sort
+        
+    - name: Generate release notes
+      id: release_notes
+      run: |
+        VERSION="${{ needs.trigger-build.outputs.version }}"
+        
+        # Extract release notes from version.json
+        python3 << EOF > release_notes.md
+        import json
+        
+        try:
+            with open('config/version.json', 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            
+            # Find the current version updates
+            current_version = None
+            for update in data['version_updates']:
+                if update['version'] == '${VERSION}':
+                    current_version = update
+                    break
+            
+            if current_version:
+                print("## 🚀 What's New")
+                print()
+                
+                # Chinese updates
+                if current_version['updates']['zh_CN']:
+                    print("### 中文更新内容")
+                    for update in current_version['updates']['zh_CN']:
+                        if update.strip() and update.lower() != '无':
+                            print(f"- {update}")
+                    print()
+                
+                # English updates
+                if current_version['updates']['en']:
+                    print("### English Updates")
+                    for update in current_version['updates']['en']:
+                        if update.strip() and update.lower() != 'none':
+                            print(f"- {update}")
+                    print()
+                
+                print(f"**Kernel Version:** {current_version.get('kernel_version', 'N/A')}")
+                print()
+            else:
+                print("## 🚀 New Release")
+                print()
+                print("This release includes the latest improvements and bug fixes.")
+                print()
+            
+            # Add download instructions
+            print("## 📥 Download Instructions")
+            print()
+            print("### Windows Users")
+            print("1. Download `StreamCap-Windows.zip`")
+            print("2. Extract the zip file")
+            print("3. Run `StreamCap.exe`")
+            print()
+            print("### macOS Users")
+            print("1. Download `StreamCap-macOS.dmg`")
+            print("2. Open the DMG file")
+            print("3. Drag StreamCap to Applications folder")
+            print()
+            print("### Linux Users")
+            print("1. Download `StreamCap-Linux.tar.gz`")
+            print("2. Extract: `tar -xzf StreamCap-Linux.tar.gz`")
+            print("3. Run: `python main.py --web`")
+            print()
+            print("## 🐛 Issues & Support")
+            print()
+            print("If you encounter any issues, please report them on our [GitHub Issues](https://github.com/ihmily/StreamCap/issues) page.")
+            print()
+            print("## 📚 Documentation")
+            print()
+            print("For detailed usage instructions, visit our [Wiki](https://github.com/ihmily/StreamCap/wiki).")
+            
+        except Exception as e:
+            print("## 🚀 New Release")
+            print()
+            print("This release includes the latest improvements and bug fixes.")
+            print()
+            print("Please check the commit history for detailed changes.")
+        EOF
+        
+        echo "Generated release notes:"
+        cat release_notes.md
+        
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        tag_name: ${{ needs.trigger-build.outputs.tag }}
+        release_name: StreamCap ${{ needs.trigger-build.outputs.tag }}
+        body_path: release_notes.md
+        draft: false
+        prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+        
+    - name: Upload Windows Release Asset
+      if: always()
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/StreamCap-Windows/StreamCap-Windows.zip
+        asset_name: StreamCap-Windows.zip
+        asset_content_type: application/zip
+      continue-on-error: true
+        
+    - name: Upload macOS Release Asset
+      if: always()
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/StreamCap-macOS/StreamCap-macOS.dmg
+        asset_name: StreamCap-macOS.dmg
+        asset_content_type: application/octet-stream
+      continue-on-error: true
+        
+    - name: Upload Linux Release Asset
+      if: always()
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./artifacts/StreamCap-Linux/StreamCap-Linux.tar.gz
+        asset_name: StreamCap-Linux.tar.gz
+        asset_content_type: application/gzip
+      continue-on-error: true
+
+  # Post-release tasks
+  post-release:
+    needs: [trigger-build, create-release]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Update Docker Hub description (optional)
+      run: |
+        echo "Release ${{ needs.trigger-build.outputs.tag }} has been created!"
+        echo "Docker image will be updated automatically by the docker-build workflow."
+        
+    - name: Notify success
+      if: needs.create-release.result == 'success'
+      run: |
+        echo "## ✅ Release Created Successfully!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "**Version:** ${{ needs.trigger-build.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "**Release URL:** https://github.com/${{ github.repository }}/releases/tag/${{ needs.trigger-build.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 Available Downloads:" >> $GITHUB_STEP_SUMMARY
+        echo "- Windows: StreamCap-Windows.zip" >> $GITHUB_STEP_SUMMARY
+        echo "- macOS: StreamCap-macOS.dmg" >> $GITHUB_STEP_SUMMARY
+        echo "- Linux: StreamCap-Linux.tar.gz" >> $GITHUB_STEP_SUMMARY
+        
+    - name: Notify failure
+      if: needs.create-release.result == 'failure'
+      run: |
+        echo "## ❌ Release Creation Failed!" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Please check the workflow logs for details." >> $GITHUB_STEP_SUMMARY
+        exit 1

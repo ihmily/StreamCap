@@ -1,0 +1,274 @@
+name: Build Application
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install system dependencies
+      run: |
+        # Install FFmpeg
+        choco install ffmpeg -y
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~\AppData\Local\pip\Cache
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        
+    - name: Create .env file
+      run: |
+        echo "PLATFORM=desktop" > .env
+        echo "HOST=127.0.0.1" >> .env
+        echo "PORT=6006" >> .env
+        
+    - name: Build Windows executable
+      run: |
+        pyinstaller --noconfirm --onedir --windowed --icon "assets/icon.ico" --name "StreamCap" --add-data "assets;assets/" --add-data "config;config/" --add-data "locales;locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+        
+    - name: Create Windows installer
+      run: |
+        # Create a simple batch script for installation
+        echo '@echo off' > dist/StreamCap/install.bat
+        echo 'echo Installing StreamCap...' >> dist/StreamCap/install.bat
+        echo 'if not exist "%USERPROFILE%\StreamCap" mkdir "%USERPROFILE%\StreamCap"' >> dist/StreamCap/install.bat
+        echo 'xcopy /E /I /Y . "%USERPROFILE%\StreamCap"' >> dist/StreamCap/install.bat
+        echo 'echo Installation completed!' >> dist/StreamCap/install.bat
+        echo 'pause' >> dist/StreamCap/install.bat
+        
+    - name: Package Windows build
+      run: |
+        Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows.zip"
+        
+    - name: Upload Windows artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: StreamCap-Windows
+        path: StreamCap-Windows.zip
+        retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install system dependencies
+      run: |
+        # Install FFmpeg
+        brew install ffmpeg
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/Library/Caches/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+        pip install dmgbuild
+        
+    - name: Create .env file
+      run: |
+        echo "PLATFORM=desktop" > .env
+        echo "HOST=127.0.0.1" >> .env
+        echo "PORT=6006" >> .env
+        
+    - name: Build macOS executable
+      run: |
+        pyinstaller --noconfirm --onedir --windowed --icon "assets/icon.ico" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+        
+    - name: Create macOS app bundle
+      run: |
+        mkdir -p "StreamCap.app/Contents/MacOS"
+        mkdir -p "StreamCap.app/Contents/Resources"
+        
+        # Create Info.plist
+        cat > "StreamCap.app/Contents/Info.plist" << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+            <key>CFBundleExecutable</key>
+            <string>StreamCap</string>
+            <key>CFBundleIdentifier</key>
+            <string>io.github.ihmily.streamcap</string>
+            <key>CFBundleName</key>
+            <string>StreamCap</string>
+            <key>CFBundleVersion</key>
+            <string>1.0.1</string>
+            <key>CFBundleShortVersionString</key>
+            <string>1.0.1</string>
+            <key>CFBundleInfoDictionaryVersion</key>
+            <string>6.0</string>
+            <key>CFBundlePackageType</key>
+            <string>APPL</string>
+            <key>CFBundleIconFile</key>
+            <string>icon</string>
+            <key>LSMinimumSystemVersion</key>
+            <string>10.14</string>
+            <key>NSHighResolutionCapable</key>
+            <true/>
+        </dict>
+        </plist>
+        EOF
+        
+        # Copy executable and resources
+        cp -r dist/StreamCap/* "StreamCap.app/Contents/MacOS/"
+        cp assets/icon.ico "StreamCap.app/Contents/Resources/icon.ico"
+        
+        # Make executable
+        chmod +x "StreamCap.app/Contents/MacOS/StreamCap"
+        
+    - name: Create DMG settings file
+      run: |
+        cat > dmg_settings.py << EOF
+        import os
+        
+        # DMG settings
+        format = 'UDZO'
+        size = '500M'
+        files = ['StreamCap.app']
+        symlinks = {'Applications': '/Applications'}
+        badge_icon = 'assets/icon.ico'
+        icon_locations = {
+            'StreamCap.app': (150, 120),
+            'Applications': (350, 120)
+        }
+        background = None
+        window_rect = ((100, 100), (500, 300))
+        default_view = 'icon-view'
+        show_status_bar = False
+        show_tab_view = False
+        show_toolbar = False
+        show_pathbar = False
+        show_sidebar = False
+        sidebar_width = 180
+        arrange_by = None
+        grid_offset = (0, 0)
+        grid_spacing = 100
+        scroll_position = (0, 0)
+        label_pos = 'bottom'
+        text_size = 16
+        icon_size = 128
+        EOF
+        
+    - name: Create DMG
+      run: |
+        dmgbuild -s dmg_settings.py "StreamCap" "StreamCap-macOS.dmg"
+        
+    - name: Upload macOS artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: StreamCap-macOS
+        path: StreamCap-macOS.dmg
+        retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+        
+    - name: Cache pip dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-web.txt
+        
+    - name: Create .env file
+      run: |
+        echo "PLATFORM=web" > .env
+        echo "HOST=0.0.0.0" >> .env
+        echo "PORT=6006" >> .env
+        
+    - name: Test web application
+      run: |
+        timeout 30s python main.py --web --host 0.0.0.0 --port 6006 || true
+        
+    - name: Package Linux build
+      run: |
+        tar -czf StreamCap-Linux.tar.gz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' .
+        
+    - name: Upload Linux artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: StreamCap-Linux
+        path: StreamCap-Linux.tar.gz
+        retention-days: 30
+
+  build-summary:
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: always()
+    
+    steps:
+    - name: Build Summary
+      run: |
+        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Platform | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| Windows | ${{ needs.build-windows.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| macOS | ${{ needs.build-macos.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Linux | ${{ needs.build-linux.result }} |" >> $GITHUB_STEP_SUMMARY
+        
+        if [[ "${{ needs.build-windows.result }}" == "success" && "${{ needs.build-macos.result }}" == "success" && "${{ needs.build-linux.result }}" == "success" ]]; then
+          echo "✅ All builds completed successfully!" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Some builds failed. Please check the logs." >> $GITHUB_STEP_SUMMARY
+        fi

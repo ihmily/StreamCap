@@ -243,7 +243,21 @@ jobs:
         
     - name: Package Linux build
       run: |
-        tar -czf StreamCap-Linux.tar.gz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' .
+        # Create a clean directory for packaging
+        mkdir -p ../package
+        
+        # Copy files to package directory, excluding unwanted files
+        rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' \
+              --exclude='*.log' --exclude='.pytest_cache' --exclude='node_modules' \
+              --exclude='dist' --exclude='build' --exclude='*.egg-info' \
+              . ../package/StreamCap/
+        
+        # Create tar from parent directory
+        cd ../package
+        tar -czf StreamCap-Linux.tar.gz StreamCap/
+        
+        # Move back to workspace
+        mv StreamCap-Linux.tar.gz $GITHUB_WORKSPACE/
         
     - name: Upload Linux artifact
       uses: actions/upload-artifact@v4

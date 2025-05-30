@@ -67,7 +67,7 @@ jobs:
         Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows.zip"
         
     - name: Upload Windows artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: StreamCap-Windows
         path: StreamCap-Windows.zip
@@ -195,7 +195,7 @@ jobs:
         dmgbuild -s dmg_settings.py "StreamCap" "StreamCap-macOS.dmg"
         
     - name: Upload macOS artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: StreamCap-macOS
         path: StreamCap-macOS.dmg
@@ -246,7 +246,7 @@ jobs:
         tar -czf StreamCap-Linux.tar.gz --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' .
         
     - name: Upload Linux artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: StreamCap-Linux
         path: StreamCap-Linux.tar.gz

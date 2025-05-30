@@ -95,7 +95,7 @@ jobs:
       uses: actions/checkout@v4
       
     - name: Download all artifacts
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       with:
         path: ./artifacts
         
@@ -191,51 +191,19 @@ jobs:
         
     - name: Create Release
       id: create_release
-      uses: actions/create-release@v1
+      uses: softprops/action-gh-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ needs.trigger-build.outputs.tag }}
-        release_name: StreamCap ${{ needs.trigger-build.outputs.tag }}
+        name: StreamCap ${{ needs.trigger-build.outputs.tag }}
         body_path: release_notes.md
         draft: false
         prerelease: ${{ github.event.inputs.prerelease == 'true' }}
-        
-    - name: Upload Windows Release Asset
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/StreamCap-Windows/StreamCap-Windows.zip
-        asset_name: StreamCap-Windows.zip
-        asset_content_type: application/zip
-      continue-on-error: true
-        
-    - name: Upload macOS Release Asset
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/StreamCap-macOS/StreamCap-macOS.dmg
-        asset_name: StreamCap-macOS.dmg
-        asset_content_type: application/octet-stream
-      continue-on-error: true
-        
-    - name: Upload Linux Release Asset
-      if: always()
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./artifacts/StreamCap-Linux/StreamCap-Linux.tar.gz
-        asset_name: StreamCap-Linux.tar.gz
-        asset_content_type: application/gzip
-      continue-on-error: true
+        files: |
+          ./artifacts/StreamCap-Windows/StreamCap-Windows.zip
+          ./artifacts/StreamCap-macOS/StreamCap-macOS.dmg
+          ./artifacts/StreamCap-Linux/StreamCap-Linux.tar.gz
 
   # Post-release tasks
   post-release:

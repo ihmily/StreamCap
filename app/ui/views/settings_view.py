@@ -494,12 +494,15 @@ class SettingsPage(PageBase):
                                 self.create_channel_switch_container(
                                     self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
                                 ),
+                                 self.create_channel_switch_container(
+                                    "ServerChan", ft.Icons.NOTIFICATIONS_ACTIVE, "serverchan_enabled" 
+                                ),
+                                self.create_channel_switch_container("Email", ft.Icons.EMAIL, "email_enabled"),
                                 self.create_channel_switch_container(
                                     "Bark", ft.Icons.NOTIFICATIONS_ACTIVE, "bark_enabled"
                                 ),
                                 self.create_channel_switch_container("Ntfy", ft.Icons.NOTIFICATIONS, "ntfy_enabled"),
                                 self.create_channel_switch_container("Telegram", ft.Icons.SMS, "telegram_enabled"),
-                                self.create_channel_switch_container("Email", ft.Icons.EMAIL, "email_enabled"),
                             ],
                             wrap=False,
                             alignment=ft.MainAxisAlignment.START,
@@ -555,6 +558,99 @@ class SettingsPage(PageBase):
                                         width=300,
                                         on_change=self.on_change,
                                         data="wechat_webhook_url",
+                                    ),
+                                ),
+                            ],
+                        ),
+                        self.create_channel_config(
+                            "ServerChan",
+                            [
+                                self.create_setting_row(
+                                    self._["serverchan_sendkey"],
+                                    ft.TextField(
+                                        value=self.get_config_value("serverchan_sendkey"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="serverchan_sendkey",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["serverchan_channel"],
+                                    ft.TextField(
+                                        value=self.get_config_value("serverchan_channel"),
+                                        width=300,
+                                        keyboard_type=ft.KeyboardType.NUMBER,
+                                        on_change=self.on_change,
+                                        data="serverchan_channel",
+                                    ),
+                                ),
+                                 self.create_setting_row(
+                                    self._["serverchan_tags"],
+                                    ft.TextField(
+                                        value=self.get_config_value("serverchan_tags"),
+                                        width=300,
+                                        keyboard_type=ft.KeyboardType.NUMBER,
+                                        on_change=self.on_change,
+                                        data="serverchan_tags",
+                                    ),
+                                ),
+                            ],
+                        ),
+                        self.create_channel_config(
+                            "Email",
+                            [
+                                self.create_setting_row(
+                                    self._["smtp_server"],
+                                    ft.TextField(
+                                        value=self.get_config_value("smtp_server"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="smtp_server",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["email_username"],
+                                    ft.TextField(
+                                        value=self.get_config_value("email_username"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="email_username",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["email_password"],
+                                    ft.TextField(
+                                        value=self.get_config_value("email_password"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="email_password",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["sender_email"],
+                                    ft.TextField(
+                                        value=self.get_config_value("sender_email"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="sender_email",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["sender_name"],
+                                    ft.TextField(
+                                        value=self.get_config_value("sender_name"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="sender_name",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["recipient_email"],
+                                    ft.TextField(
+                                        value=self.get_config_value("recipient_email"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="recipient_email",
                                     ),
                                 ),
                             ],
@@ -652,65 +748,6 @@ class SettingsPage(PageBase):
                                         width=300,
                                         on_change=self.on_change,
                                         data="telegram_chat_id",
-                                    ),
-                                ),
-                            ],
-                        ),
-                        self.create_channel_config(
-                            "Email",
-                            [
-                                self.create_setting_row(
-                                    self._["smtp_server"],
-                                    ft.TextField(
-                                        value=self.get_config_value("smtp_server"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="smtp_server",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["email_username"],
-                                    ft.TextField(
-                                        value=self.get_config_value("email_username"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="email_username",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["email_password"],
-                                    ft.TextField(
-                                        value=self.get_config_value("email_password"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="email_password",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["sender_email"],
-                                    ft.TextField(
-                                        value=self.get_config_value("sender_email"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="sender_email",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["sender_name"],
-                                    ft.TextField(
-                                        value=self.get_config_value("sender_name"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="sender_name",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["recipient_email"],
-                                    ft.TextField(
-                                        value=self.get_config_value("recipient_email"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="recipient_email",
                                     ),
                                 ),
                             ],

@@ -1,4 +1,5 @@
 import base64
+import re
 import smtplib
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -187,3 +188,57 @@ class NotificationService:
                 results["error"].append(_api)
                 logger.info(f"Ntfy push failed, push address: {_api},  Failure message: {json_data['error']}")
         return results
+
+    async def send_to_serverchan(
+            self, 
+            sendkey: str,
+            title: str = "message",
+            content: str = "test",
+            short: str = "",
+            channel: int = 9,
+            tags: str = "partying_face"
+        ) -> dict[str, Any]:
+            """发送消息到ServerChan服务
+            
+            参数:
+                sckey: ServerChan的SCKEY，多个用逗号分隔
+                title: 消息标题
+                content: 消息内容
+                short: 短消息内容
+                channel: 消息通道
+            
+            返回:
+                包含成功和失败SCKEY的字典
+            """
+            results = {"success": [], "error": []}
+            sendkey_list = sendkey.replace("，", ",").split(",") if sendkey.strip() else []
+
+            for key in sendkey_list:
+                # 根据SCKEY类型构造URL
+                if key.startswith('sctp'):
+                    match = re.match(r'sctp(\d+)t', key)
+                    if match:
+                        num = match.group(1)
+                        url = f'https://{num}.push.ft07.com/send/{key}.send'
+                    else:
+                        logger.error(f"Invalid sendkey format for sctp: {key}")
+                        results["error"].append(key)
+                        continue
+                else:
+                    url = f'https://sctapi.ftqq.com/{key}.send'
+                
+                json_data = {
+                "title": title,
+                "desp": content,
+                "short": short,
+                "channel": channel,
+                "tags": tags
+                }
+                resp = await self._async_post(url, json_data)
+                if resp.get("code") == 0:
+                    results["success"].append(key)
+                else:
+                    results["error"].append(key)
+                    logger.info(f"ServerChan push failed, SCKEY: {key}, Error message: {resp.get('message')}")
+            
+            return results

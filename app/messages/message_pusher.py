@@ -79,3 +79,15 @@ class MessagePusher:
                 )
             )
             logger.info("Push Email message successfully")
+
+        if self.settings.user_config.get("serverchan_enabled"):
+            create_task(
+                self.notifier.send_to_serverchan(
+                    sendkey=self.settings.user_config.get("serverchan_sendkey"),
+                    title=msg_title,
+                    content=push_content,
+                    channel=self.settings.user_config.get("serverchan_channel", 9),
+                    tags= self.settings.user_config.get("serverchan_tags", "直播通知"),
+                )
+            )
+            logger.info("Push ServerChan message successfully")

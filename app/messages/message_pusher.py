@@ -83,7 +83,7 @@ class MessagePusher:
         if self.settings.user_config.get("serverchan_enabled"):
             create_task(
                 self.notifier.send_to_serverchan(
-                    sckey=self.settings.user_config.get("serverchan_sckey"),
+                    sendkey=self.settings.user_config.get("serverchan_sendkey"),
                     title=msg_title,
                     content=push_content,
                     channel=self.settings.user_config.get("serverchan_channel", 9),

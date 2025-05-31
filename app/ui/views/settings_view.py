@@ -566,12 +566,12 @@ class SettingsPage(PageBase):
                             "ServerChan",
                             [
                                 self.create_setting_row(
-                                    self._["serverchan_sckey"],
+                                    self._["serverchan_sendkey"],
                                     ft.TextField(
-                                        value=self.get_config_value("serverchan_sckey"),
+                                        value=self.get_config_value("serverchan_sendkey"),
                                         width=300,
                                         on_change=self.on_change,
-                                        data="serverchan_sckey",
+                                        data="serverchan_sendkey",
                                     ),
                                 ),
                                 self.create_setting_row(

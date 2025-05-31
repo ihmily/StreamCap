@@ -33,7 +33,7 @@
     "bark_enabled": false,
     "ntfy_enabled": false,
     "serverchan_enabled": false,
-    "serverchan_sckey": "",
+    "serverchan_sendkey": "",
     "serverchan_channel": "9",
     "serverchan_tags": "直播通知",
     "telegram_enabled": false,

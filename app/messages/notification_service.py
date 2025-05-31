@@ -191,7 +191,7 @@ class NotificationService:
 
     async def send_to_serverchan(
             self, 
-            sckey: str,
+            sendkey: str,
             title: str = "message",
             content: str = "test",
             short: str = "",
@@ -211,9 +211,9 @@ class NotificationService:
                 包含成功和失败SCKEY的字典
             """
             results = {"success": [], "error": []}
-            sckey_list = sckey.replace("，", ",").split(",") if sckey.strip() else []
+            sendkey_list = sendkey.replace("，", ",").split(",") if sendkey.strip() else []
 
-            for key in sckey_list:
+            for key in sendkey_list:
                 # 根据SCKEY类型构造URL
                 if key.startswith('sctp'):
                     match = re.match(r'sctp(\d+)t', key)

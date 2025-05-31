@@ -209,7 +209,7 @@
     "ntfy_email": "Ntfy Email",
     "ntfy_action_url": "Ntfy Action URL",
     "telegram_api_token": "Telegram API Token",
-    "serverchan_sckey": "ServerChan SCKEY",
+    "serverchan_sendkey": "serverchan_sendkey",
     "serverchan_channel": "Push Channel",
     "serverchan_tags": "ServerChan Tags",
     "serverchan": "ServerChan",

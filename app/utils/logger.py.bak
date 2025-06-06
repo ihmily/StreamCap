@@ -40,42 +40,14 @@ def is_memory_cleanup_log(record):
 def not_memory_cleanup_log(record):
     return not is_memory_cleanup_log(record)
 
-# 确保日志目录存在
-os.makedirs(f"{script_path}/logs", exist_ok=True)
+# 添加一个控制台输出的处理器，用于所有日志（包括内存清理日志）
+logger.add(
+    sys.stderr,
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+    enqueue=True,
+)
 
-# 检查是否为GUI模式（没有控制台）
-is_gui_mode = False
-try:
-    # 尝试写入stderr，如果失败则认为是GUI模式
-    sys.stderr.write("")
-except Exception:
-    is_gui_mode = True
-
-# 根据模式选择日志配置
-if not is_gui_mode:
-    # 控制台模式：添加控制台输出处理器
-    logger.add(
-        sys.stderr,
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
-        enqueue=True,
-    )
-else:
-    # GUI模式：添加内存清理日志文件处理器
-    logger.add(
-        f"{script_path}/logs/memory_clean.log",
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
-        filter=lambda i: is_memory_cleanup_log(i),
-        serialize=False,
-        enqueue=True,
-        retention=3,
-        rotation="3 MB",
-        encoding="utf-8",
-    )
-    print(f"内存清理日志将写入: {script_path}/logs/memory_clean.log")
-
-# 无论何种模式，都添加文件日志处理器
 # 文件日志处理器，排除内存清理日志
 logger.add(
     f"{script_path}/logs/streamget.log",
@@ -100,4 +72,4 @@ logger.add(
     retention=1,
     rotation="500 KB",
     encoding="utf-8",
-) 
+)

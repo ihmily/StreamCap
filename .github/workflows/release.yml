@@ -59,9 +59,23 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Prepare icon file
+        run: |
+          if (Test-Path -Path "assets\icon.ico") {
+            New-Item -ItemType Directory -Force -Path "assets\images" | Out-Null
+            Copy-Item -Path "assets\icon.ico" -Destination "assets\images\logo.ico" -Force
+            Write-Host "Icon file copied to assets\images\logo.ico"
+          } else {
+            Write-Host "Warning: Icon file assets\icon.ico not found. Using default icon."
+          }
+
       - name: Build Windows executable
         run: |
-          pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.ico main.py
+          if (Test-Path -Path "assets\images\logo.ico") {
+            pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.ico main.py
+          } else {
+            pyinstaller --name StreamCap --onefile --windowed main.py
+          }
 
       - name: Create ZIP archive
         run: |
@@ -95,9 +109,23 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
+      - name: Prepare icon file
+        run: |
+          if [ -f "assets/icon.ico" ]; then
+            mkdir -p assets/images
+            cp assets/icon.ico assets/images/logo.ico
+            echo "Icon file copied to assets/images/logo.ico"
+          else
+            echo "Warning: Icon file assets/icon.ico not found. Using default icon."
+          fi
+
       - name: Build macOS app
         run: |
-          pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.icns main.py
+          if [ -f "assets/images/logo.icns" ]; then
+            pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.icns main.py
+          else
+            pyinstaller --name StreamCap --onefile --windowed main.py
+          fi
 
       - name: Create DMG
         run: |

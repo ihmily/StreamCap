@@ -35,7 +35,10 @@
     "filter_recording": "录制中",
     "filter_error": "录制错误",
     "filter_offline": "未开播",
-    "filter_stopped": "未监控"
+    "filter_stopped": "未监控",
+    "filter_live_monitoring_not_recording": "直播中（未录制）",
+    "platform_filter": "平台筛选",
+    "filter_all_platforms": "全部平台"
   },
   "recording_dialog": {
     "input_live_link": "输入直播间地址",
@@ -65,7 +68,10 @@
     "minute_label_text": "分",
     "select_media_type": "选择媒体类型",
     "video": "视频",
-    "audio": "音频"
+    "audio": "音频",
+    "record_mode": "录制模式",
+    "auto_record": "自动录制",
+    "manual_record": "手动录制"
   },
   "search_dialog": {
     "search_keyword": "输入搜索关键词"
@@ -78,7 +84,7 @@
     "push_content": "直播间状态更新：[room_name] 正在直播中，时间：[time]",
     "status_notify": "直播间状态更新通知",
     "platform_not_supported_tip": "暂不支持该平台录制",
-    "STOPPED_MONITORING": "直播间已停止监控",
+    "STOPPED_MONITORING": "直播间已停止监控，停止录制",
     "MONITORING": "当前该直播间未开播, 持续监控中",
     "RECORDING": "直播间正在录制中",
     "NOT_RECORDING": "直播间正在直播, 未在录制中",
@@ -94,14 +100,15 @@
     "record_stream_error": "直播源录制出错"
   },
   "recording_card": {
-    "stop_monitor_tip": "提示：已停止直播监控👁️",
-    "start_monitor_tip": "提示：已开启直播监控👁️",
-    "please_stop_monitor_tip": "提示：请先停止直播监控👁️‍🗨️",
-    "please_start_monitor_tip": "提示：请先开启直播监控👁️‍🗨️",
+    "stop_monitor_tip": "提示：已停止直播监控",
+    "start_monitor_tip": "提示：已开启直播监控",
+    "please_stop_monitor_tip": "提示：请先停止直播监控",
+    "please_start_monitor_tip": "提示：请先开启直播监控",
     "is_not_live_tip": "提示：该直播间未开播",
     "pre_record_tip": "提示：准备开始录制",
     "stop_record_tip": "提示：已停止直播间录制️",
     "no_folder_tip": "提示：该直播间文件夹不存在",
+    "no_recording_started": "提示：没有录制文件，请先开始录制",
     "edit_record_config": "编辑录制配置",
     "delete_monitor": "删除监控",
     "open_folder": "打开文件夹",
@@ -137,7 +144,11 @@
     "stopped": "已停止",
     "filter": "筛选",
     "offline": "未开播",
-    "no_monitor": "未监控"
+    "no_monitor": "未监控",
+    "play_stream": "播放",
+    "vlc_not_set": "未配置VLC路径，无法播放",
+    "play_failed": "播放失败，未获取到直播源或VLC路径",
+    "live_monitoring_not_recording": "直播中（未录制）"
   },
   "settings_page": {
     "recording_settings": "录制设置",
@@ -193,8 +204,6 @@
     "push_channels": "推送渠道",
     "dingtalk": "钉钉",
     "wechat": "微信",
-    "email": "邮箱",
-    "telegram": "电报",
     "select_and_enable_channels": "选择并启用您希望使用的推送渠道",
     "channel_configuration": "渠道配置",
     "configure_enabled_channels": "配置您已启用的通知渠道",
@@ -211,13 +220,9 @@
     "ntfy_tags": "Ntfy推送标签",
     "ntfy_email": "Ntfy推送邮箱",
     "ntfy_action_url": "Ntfy动作地址",
-    "serverchan_send_key": "SCKEY/SendKey",
-    "serverchan_channel": "推送通道",
-    "serverchan_tags": "Server酱标签",
-    "serverchan": "Server酱",
     "telegram_api_token": "Telegram API令牌",
-    "telegram_chat_id": "Telegram 聊天ID",
-    "smtp_server": "Smtp服务器",
+    "telegram_chat_id": "Telegram Chat ID",
+    "smtp_server": "smtp服务器",
     "email_username": "邮箱登录账号",
     "email_password": "发件人密码(授权码)",
     "sender_email": "发件人邮箱",
@@ -290,7 +295,16 @@
     "switch_video_format": "切换视频录制格式",
     "switch_recording_quality": "切换视频录制质量",
     "switch_account_type": "切换账号类型",
-    "switch_language_tip": "提示: 建议切换语言后重启程序"
+    "switch_language_tip": "提示: 建议切换语言后重启程序",
+    "vlc_path": "VLC播放器路径",
+    "vlc_path_hint": "如 C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+    "vlc_not_set": "未配置VLC路径，无法播放",
+    "play_stream": "播放",
+    "play_failed": "播放失败，未获取到直播源或VLC路径",
+    "platform_filter_style": "直播平台筛选风格",
+    "platform_filter_style_tile": "平铺",
+    "platform_filter_style_dropdown": "聚合（下拉框）",
+    "platform_filter_style_tip": "设置主界面直播平台筛选的展示风格。平铺为按钮组，聚合为下拉框。"
   },
   "about_page": {
     "about_project": "关于本程序",
@@ -353,8 +367,7 @@
     "later_on": "稍后再说",
     "install_guide": "组件安装向导",
     "install_tip": "本程序需要以下组件来完成特定功能，请保持网络连接并耐心等待安装完成。",
-    "lack_components": "缺少必要组件",
-    "dont_show_again": "下次不再提示"
+    "lack_components": "缺少必要组件"
   },
   "storage_page": {
     "storage_path": "存储路径",
@@ -366,6 +379,9 @@
     "no_video_file":"⚠️ 未找到视频文件",
     "no_recording_folder":"⚠️ 录制目录不存在",
     "copy_stream_url": "复制直播源地址",
+    "stream_url_copied": "直播源地址已复制！",
+    "please_start_monitor": "请先开始监控该直播间！",
+    "no_stream_url": "未获取到直播源地址",
     "copy_video_url": "复制视频地址",
     "copy_success": "复制成功",
     "video_api_server_not_set": "⚠️ 未设置视频播放服务器地址"

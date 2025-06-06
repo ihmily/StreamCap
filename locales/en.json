@@ -27,7 +27,7 @@
     "delete_recording_success_tip": "Tip: Live room deleted successfully!",
     "stop_recording_success_tip": "Tip: Live room monitoring stopped successfully!",
     "start_recording_success_tip": "Tip: Live room monitoring started successfully!",
-    "not_search_result": "Tip: No search results found",
+    "not_search_result": "Tip: No results found",
     "toggle_view": "Toggle View",
     "preview_video": "Preview Video",
     "filter": "Filter",
@@ -35,7 +35,10 @@
     "filter_recording": "Recording",
     "filter_error": "Error",
     "filter_offline": "Offline",
-    "filter_stopped": "Not Monitored"
+    "filter_stopped": "Stopped",
+    "filter_live_monitoring_not_recording": "Live (Not Recording)",
+    "platform_filter": "Platform Filter",
+    "filter_all_platforms": "All Platforms"
   },
   "recording_dialog": {
     "input_live_link": "Enter Live Room URL",
@@ -65,7 +68,10 @@
     "minute_label_text": "Minute",
     "select_media_type": "Select Media Type",
     "video": "Video",
-    "audio": "Audio"
+    "audio": "Audio",
+    "record_mode": "Record Mode",
+    "auto_record": "Auto Record",
+    "manual_record": "Manual Record"
   },
   "search_dialog": {
     "search_keyword": "Enter search keyword"
@@ -77,7 +83,7 @@
     "recorded": "Recorded",
     "push_content": "Live room status update: [room_name] is live, time: [time]",
     "status_notify": "Live room status update notification",
-    "STOPPED_MONITORING": "Monitoring Stopped",
+    "STOPPED_MONITORING": "Monitoring Stopped, Stop Recording",
     "MONITORING": "Monitoring In Progress",
     "RECORDING": "Recording In Progress",
     "NOT_RECORDING": "Is living, not Recording",
@@ -101,6 +107,7 @@
     "pre_record_tip": "Tip: Preparing to start recording",
     "stop_record_tip": "Tip: Live room recording has been stopped",
     "no_folder_tip": "Tip: The live room folder does not exist",
+    "no_recording_started": "Tip: No recording files, please start recording first",
     "edit_record_config": "Edit Recording Configuration",
     "delete_monitor": "Delete Monitoring",
     "open_folder": "Open Folder",
@@ -136,7 +143,11 @@
     "stopped": "Stopped",
     "filter": "Filter",
     "offline": "Offline",
-    "no_monitor": "Not Monitored"
+    "no_monitor": "Not Monitored",
+    "play_stream": "Play",
+    "vlc_not_set": "VLC path not set, cannot play",
+    "play_failed": "Play failed, no stream or VLC path",
+    "live_monitoring_not_recording": "Live (Not Recording)"
   },
   "settings_page": {
     "recording_settings": "Recording Settings",
@@ -190,10 +201,8 @@
     "custom_open_broadcast_content": "Custom Broadcast Start Notification Content",
     "custom_close_broadcast_content": "Custom Broadcast End Notification Content",
     "push_channels": "Push Channels",
-    "dingtalk": "DingTalk",
-    "wechat": "Wechat",
-    "email": "Email",
-    "telegram": "Telegram",
+    "dingtalk": "dingtalk",
+    "wechat": "wechat",
     "select_and_enable_channels": "Select and enable the channels you want to use",
     "channel_configuration": "Channel Configuration",
     "configure_enabled_channels": "Configure your enabled notification channels",
@@ -211,10 +220,6 @@
     "ntfy_email": "Ntfy Email",
     "ntfy_action_url": "Ntfy Action URL",
     "telegram_api_token": "Telegram API Token",
-    "serverchan_send_key": "SCKEY/SendKey",
-    "serverchan_channel": "Push Channel",
-    "serverchan_tags": "ServerChan Tags",
-    "serverchan": "ServerChan",
     "telegram_chat_id": "Telegram Chat ID",
     "smtp_server": "Smtp Server",
     "email_username": "Email Username",
@@ -289,7 +294,13 @@
     "switch_video_format": "Switch video recording format",
     "switch_recording_quality": "Switch video recording quality",
     "switch_account_type": "Switch account type",
-    "switch_language_tip": "Tip: It is recommended to restart the program after switching languages"
+    "switch_language_tip": "Tip: It is recommended to restart the program after switching languages",
+    "vlc_path": "VLC Player Path",
+    "vlc_path_hint": "e.g. C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+    "platform_filter_style": "Platform Filter Style",
+    "platform_filter_style_tile": "Tile",
+    "platform_filter_style_dropdown": "Dropdown (Aggregated)",
+    "platform_filter_style_tip": "Set the display style of the platform filter on the main page. Tile is a button group, Dropdown is a dropdown box."
   },
   "about_page": {
     "about_project": "About This Application",
@@ -352,8 +363,7 @@
     "later_on": "Later",
     "install_guide": "Component Installation Guide",
     "install_tip": "This program requires the following components to function properly.",
-    "lack_components": "Missing Required Components",
-    "dont_show_again": "Don't Show Again"
+    "lack_components": "Missing Required Components"
   },
   "storage_page": {
     "storage_path": "Storage Path",
@@ -365,6 +375,9 @@
     "no_video_file":"⚠️ No video file found",
     "no_recording_folder":"⚠️ No recording folder found",
     "copy_stream_url": "Copy Stream URL",
+    "stream_url_copied": "Stream URL copied!",
+    "please_start_monitor": "Please start monitoring this room first!",
+    "no_stream_url": "No stream URL found",
     "copy_video_url": "Copy Video URL",
     "copy_success": "Copy Success",
     "video_api_server_not_set": "⚠️ Video play server address not set"
@@ -402,5 +415,10 @@
     "saving_recordings": "Saving {active_recordings_count} recordings, please wait...",
     "confirm_exit": "Confirm Exit",
     "confirm_exit_content": "Are you sure you want to exit the program?"
-  }
+  },
+  "vlc_path": "VLC Player Path",
+  "vlc_path_hint": "e.g. C:\\Program Files\\VideoLAN\\VLC\\vlc.exe",
+  "vlc_not_set": "VLC path not set, cannot play",
+  "play_stream": "Play",
+  "play_failed": "Play failed, no stream or VLC path"
 }

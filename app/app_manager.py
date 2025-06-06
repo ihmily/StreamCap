@@ -42,6 +42,9 @@ class App:
         self.assets_dir = os.path.join(execute_dir, "assets")
         self.process_manager = AsyncProcessManager()
         self.config_manager = ConfigManager(self.run_path)
+        self.is_web_mode = False
+        self.auth_manager = None
+        self.current_username = None
         self.content_area = ft.Column(
             controls=[],
             expand=True,
@@ -70,7 +73,6 @@ class App:
                 self.page.snack_bar_area,
             ]
         )
-        self.page.add(self.complete_page)
         self.snack_bar = ShowSnackBar(self.page)
         self.subprocess_start_up_info = utils.get_startup_info()
         self.record_card_manager = RecordingCardManager(self)

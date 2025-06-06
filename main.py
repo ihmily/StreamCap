@@ -9,8 +9,10 @@ from dotenv import load_dotenv
 from screeninfo import get_monitors
 
 from app.app_manager import App, execute_dir
+from app.auth.auth_manager import AuthManager
 from app.lifecycle.app_close_handler import handle_app_close
 from app.ui.components.save_progress_overlay import SaveProgressOverlay
+from app.ui.views.login_view import LoginPage
 from app.utils.logger import logger
 from app.utils.window_constants import (
     DEFAULT_WIDTH, DEFAULT_HEIGHT, MIN_WIDTH, MIN_HEIGHT,
@@ -186,7 +188,7 @@ def handle_window_resize(page: ft.Page, app: App) -> callable:
     return on_window_resize
 
 
-def main(page: ft.Page) -> None:
+async def main(page: ft.Page) -> None:
 
     page.title = "StreamCap"
     page.window.min_width = MIN_WIDTH
@@ -197,6 +199,7 @@ def main(page: ft.Page) -> None:
     # 先创建App实例以获取用户配置
     app = App(page)
     page.data = app
+    app.is_web_mode = is_web
     
     # 使用用户配置设置窗口
     setup_window(page, is_web, app.settings.user_config)
@@ -209,19 +212,46 @@ def main(page: ft.Page) -> None:
     
     save_progress_overlay = SaveProgressOverlay(app)
     page.overlay.append(save_progress_overlay.overlay)
-
-    page.on_route_change = handle_route_change(page, app)
-    page.window.prevent_close = True
-    page.window.on_event = handle_window_event(page, app, save_progress_overlay)
     
     # 添加窗口大小调整事件处理
     page.window.on_resize = handle_window_resize(page, app)
+    
+    async def load_app():
+        page.add(app.complete_page)
+        page.on_route_change = handle_route_change(page, app)
+        page.window.prevent_close = True
+        page.window.on_event = handle_window_event(page, app, save_progress_overlay)
+        
+        if is_web:
+            page.on_disconnect = handle_disconnect(page)
+        
+        page.update()
+        page.on_route_change(ft.RouteChangeEvent(route=page.route))
 
     if is_web:
-        page.on_disconnect = handle_disconnect(page)
-
-    page.update()
-    page.on_route_change(ft.RouteChangeEvent(route=page.route))
+        auth_manager = AuthManager(app)
+        app.auth_manager = auth_manager
+        await auth_manager.initialize()
+        
+        session_token = await page.client_storage.get_async("session_token")
+        if not session_token or not auth_manager.validate_session(session_token):
+            async def on_login_success(token):
+                _session_info = auth_manager.active_sessions.get(token, {})
+                app.current_username = _session_info.get("username")
+                
+                page.clean()
+                await load_app()
+            
+            page.clean()
+            
+            login_page = LoginPage(page, auth_manager, on_login_success)
+            page.add(login_page.get_view())
+            return
+        else:
+            session_info = auth_manager.active_sessions.get(session_token, {})
+            app.current_username = session_info.get("username")
+    
+    await load_app()
 
 
 if __name__ == "__main__":

@@ -33,6 +33,7 @@ class SettingsPage(PageBase):
         self.tab_push = None
         self.tab_cookies = None
         self.tab_accounts = None
+        self.tab_security = None
         self.has_unsaved_changes = {}
         self.delay_handler = DelayedTaskExecutor(self.app, self)
         self.load_language()
@@ -51,15 +52,21 @@ class SettingsPage(PageBase):
         self.tab_accounts = self.create_accounts_settings_tab()
         self.page.on_keyboard_event = self.on_keyboard
 
+        tabs = [
+            ft.Tab(text=self._["recording_settings"], content=self.tab_recording),
+            ft.Tab(text=self._["push_settings"], content=self.tab_push),
+            ft.Tab(text=self._["cookies_settings"], content=self.tab_cookies),
+            ft.Tab(text=self._["accounts_settings"], content=self.tab_accounts),
+        ]
+        
+        if self.app.page.web:
+            self.tab_security = self.create_security_settings_tab()
+            tabs.append(ft.Tab(text=self._["security_settings"], content=self.tab_security))
+
         settings_tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
-            tabs=[
-                ft.Tab(text=self._["recording_settings"], content=self.tab_recording),
-                ft.Tab(text=self._["push_settings"], content=self.tab_push),
-                ft.Tab(text=self._["cookies_settings"], content=self.tab_cookies),
-                ft.Tab(text=self._["accounts_settings"], content=self.tab_accounts),
-            ],
+            tabs=tabs,
         )
 
         scrollable_content = ft.Container(
@@ -588,28 +595,7 @@ class SettingsPage(PageBase):
                 self.create_setting_group(
                     self._["push_channels"],
                     self._["select_and_enable_channels"],
-                    [
-                        ft.Row(
-                            controls=[
-                                self.create_channel_switch_container(
-                                    self._["dingtalk"], ft.Icons.BUSINESS_CENTER, "dingtalk_enabled"
-                                ),
-                                self.create_channel_switch_container(
-                                    self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
-                                ),
-                                self.create_channel_switch_container(
-                                    "Bark", ft.Icons.NOTIFICATIONS_ACTIVE, "bark_enabled"
-                                ),
-                                self.create_channel_switch_container("Ntfy", ft.Icons.NOTIFICATIONS, "ntfy_enabled"),
-                                self.create_channel_switch_container("Telegram", ft.Icons.SMS, "telegram_enabled"),
-                                self.create_channel_switch_container("Email", ft.Icons.EMAIL, "email_enabled"),
-                            ],
-                            wrap=False,
-                            alignment=ft.MainAxisAlignment.START,
-                            spacing=10,
-                            run_spacing=10,
-                        )
-                    ],
+                    [self.create_push_channels_layout()]
                 ),
                 self.create_setting_group(
                     self._["channel_configuration"],
@@ -825,6 +811,50 @@ class SettingsPage(PageBase):
             scroll=ft.ScrollMode.AUTO,
         )
 
+    def create_push_channels_layout(self):
+        controls = [
+            self.create_channel_switch_container(
+                self._["dingtalk"], ft.Icons.BUSINESS_CENTER, "dingtalk_enabled"
+            ),
+            self.create_channel_switch_container(
+                self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
+            ),
+            self.create_channel_switch_container(
+                self._["serverchan"], ft.Icons.CLOUD_OUTLINED, "serverchan_enabled"
+            ),
+            self.create_channel_switch_container(
+                self._["email"], ft.Icons.EMAIL, "email_enabled"
+            ),
+            self.create_channel_switch_container(
+                "Bark", ft.Icons.NOTIFICATIONS_ACTIVE, "bark_enabled"
+            ),
+            self.create_channel_switch_container(
+                "Ntfy", ft.Icons.NOTIFICATIONS, "ntfy_enabled"
+            ),
+            self.create_channel_switch_container(
+                self._["telegram"], ft.Icons.SMS, "telegram_enabled"
+            ),
+        ]
+        
+        if self.app.page.web:
+            return ft.Row(
+                controls=controls,
+                alignment=ft.MainAxisAlignment.START,
+                spacing=12,
+            )
+        else:
+            return ft.Container(
+                content=ft.GridView(
+                    controls=controls,
+                    runs_count=3,
+                    max_extent=175,
+                    spacing=5,
+                    run_spacing=2,
+                    child_aspect_ratio=2.5,
+                ),
+                expand=True,
+            )
+        
     def create_cookies_settings_tab(self):
         """Create UI elements for push configuration."""
         platforms = [
@@ -894,7 +924,7 @@ class SettingsPage(PageBase):
         )
 
     def create_accounts_settings_tab(self):
-        """Create UI elements for push configuration."""
+        """Create UI elements for platform accounts configuration."""
         return ft.Column(
             [
                 self.create_setting_group(
@@ -1076,7 +1106,8 @@ class SettingsPage(PageBase):
 
     def create_setting_row(self, label, control):
         """Helper method to create a row for each setting."""
-        control.on_focus = lambda e: self.set_focused_control(e.control)
+        if hasattr(control, 'on_focus'):
+            control.on_focus = lambda e: self.set_focused_control(e.control)
         return ft.Row(
             [ft.Text(label, width=200, text_align=ft.TextAlign.RIGHT), control],
             alignment=ft.MainAxisAlignment.START,
@@ -1142,3 +1173,99 @@ class SettingsPage(PageBase):
 
         if self.app.current_page == self and e.ctrl and e.key == "S":
             self.page.run_task(self.is_changed)
+
+    def create_security_settings_tab(self):
+        
+        async def change_password(_):
+            old_password = old_password_field.value
+            new_password = new_password_field.value
+            confirm_password = confirm_password_field.value
+            
+            if not old_password:
+                await self.app.snack_bar.show_snack_bar(self._["old_password_required"], bgcolor=ft.Colors.RED)
+                return
+                
+            if not new_password:
+                await self.app.snack_bar.show_snack_bar(self._["new_password_required"], bgcolor=ft.Colors.RED)
+                return
+                
+            if new_password != confirm_password:
+                await self.app.snack_bar.show_snack_bar(self._["passwords_not_match"], bgcolor=ft.Colors.RED)
+                return
+                
+            _username = self.app.current_username
+            if _username:
+                success = await self.app.auth_manager.change_password(_username, old_password, new_password)
+                
+                if success:
+                    old_password_field.value = ""
+                    new_password_field.value = ""
+                    confirm_password_field.value = ""
+                    old_password_field.update()
+                    new_password_field.update()
+                    confirm_password_field.update()
+                    
+                    await self.app.snack_bar.show_snack_bar(self._["password_changed"], bgcolor=ft.Colors.GREEN)
+                else:
+                    await self.app.snack_bar.show_snack_bar(self._["old_password_incorrect"], bgcolor=ft.Colors.RED)
+            else:
+                await self.app.snack_bar.show_snack_bar(self._["not_logged_in"], bgcolor=ft.Colors.RED)
+        
+        username = self.app.current_username or "admin"
+        
+        old_password_field = ft.TextField(
+            password=True,
+            width=300,
+            label=self._["old_password"],
+        )
+        
+        new_password_field = ft.TextField(
+            password=True,
+            width=300,
+            label=self._["new_password"],
+        )
+        
+        confirm_password_field = ft.TextField(
+            password=True,
+            width=300,
+            label=self._["confirm_password"],
+        )
+        
+        change_password_button = ft.ElevatedButton(
+            text=self._["change_password"],
+            on_click=change_password,
+            icon=ft.icons.LOCK_RESET,
+        )
+        
+        return ft.Column(
+            [
+                self.create_setting_group(
+                    self._["security_settings"],
+                    self._["web_login_configuration"],
+                    [
+                        self.create_setting_row(
+                            self._["current_username"],
+                            ft.Text(username),
+                        ),
+                        self.create_setting_row(
+                            self._["old_password"],
+                            old_password_field,
+                        ),
+                        self.create_setting_row(
+                            self._["new_password"],
+                            new_password_field,
+                        ),
+                        self.create_setting_row(
+                            self._["confirm_password"],
+                            confirm_password_field,
+                        ),
+                        self.create_setting_row(
+                            "",
+                            change_password_button,
+                        ),
+                    ],
+                ),
+            ],
+            spacing=10,
+            scroll=ft.ScrollMode.AUTO,
+        )

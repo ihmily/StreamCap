@@ -230,7 +230,7 @@ jobs:
 
       - name: Upload Windows GUI build as artifact
         if: github.ref == 'refs/heads/dev'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: StreamCap-Windows-GUI
           path: ./StreamCap-Windows-GUI.zip
@@ -289,7 +289,7 @@ jobs:
 
       - name: Upload Windows Console build as artifact
         if: github.ref == 'refs/heads/dev'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: StreamCap-Windows-Console
           path: ./StreamCap-Windows-Console.zip
@@ -373,7 +373,7 @@ jobs:
 
       - name: Upload macOS build as artifact
         if: github.ref == 'refs/heads/dev'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: StreamCap-macOS
           path: ./StreamCap-macOS.dmg

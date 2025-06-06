@@ -4,42 +4,7 @@ import re
 
 from loguru import logger
 
-# 获取应用程序根目录
-def get_application_root():
-    """获取应用程序根目录，支持PyInstaller打包和开发环境"""
-    if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
-        # PyInstaller打包环境
-        base_path = os.path.dirname(sys.executable)
-    else:
-        # 开发环境
-        base_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
-    return base_path
-
-# 获取日志目录
-def get_logs_dir():
-    """获取或创建日志目录"""
-    root_dir = get_application_root()
-    logs_dir = os.path.join(root_dir, "logs")
-    
-    # 确保日志目录存在
-    if not os.path.exists(logs_dir):
-        try:
-            os.makedirs(logs_dir, exist_ok=True)
-            print(f"Created logs directory: {logs_dir}")
-        except Exception as e:
-            print(f"Error creating logs directory: {e}")
-            # 使用当前目录作为备用
-            logs_dir = os.path.join(os.getcwd(), "logs")
-            os.makedirs(logs_dir, exist_ok=True)
-            print(f"Using fallback logs directory: {logs_dir}")
-    
-    return logs_dir
-
-# 创建日志文件路径
-def get_log_file_path(filename):
-    """获取日志文件的完整路径"""
-    logs_dir = get_logs_dir()
-    return os.path.join(logs_dir, filename)
+script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
 
 # 添加内存清理日志过滤器
 def is_memory_cleanup_log(record):
@@ -75,10 +40,6 @@ def is_memory_cleanup_log(record):
 def not_memory_cleanup_log(record):
     return not is_memory_cleanup_log(record)
 
-# 初始化日志目录
-logs_dir = get_logs_dir()
-print(f"Using logs directory: {logs_dir}")
-
 # 添加一个控制台输出的处理器，用于所有日志（包括内存清理日志）
 logger.add(
     sys.stderr,
@@ -87,41 +48,28 @@ logger.add(
     enqueue=True,
 )
 
-try:
-    # 文件日志处理器，排除内存清理日志
-    streamget_log_path = get_log_file_path("streamget.log")
-    logger.add(
-        streamget_log_path,
-        level="DEBUG",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
-        filter=lambda i: not_memory_cleanup_log(i) and i["level"].name != "STREAM",
-        serialize=False,
-        enqueue=True,
-        retention=3,
-        rotation="3 MB",
-        encoding="utf-8",
-    )
-    print(f"Added streamget log handler: {streamget_log_path}")
+# 文件日志处理器，排除内存清理日志
+logger.add(
+    f"{script_path}/logs/streamget.log",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    filter=lambda i: not_memory_cleanup_log(i) and i["level"].name != "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=3,
+    rotation="3 MB",
+    encoding="utf-8",
+)
 
-    # 添加自定义日志级别
-    logger.level("STREAM", no=22, color="<blue>")
-    
-    # 播放URL日志处理器
-    play_url_log_path = get_log_file_path("play_url.log")
-    logger.add(
-        play_url_log_path,
-        level="STREAM",
-        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
-        filter=lambda i: i["level"].name == "STREAM",
-        serialize=False,
-        enqueue=True,
-        retention=1,
-        rotation="500 KB",
-        encoding="utf-8",
-    )
-    print(f"Added play_url log handler: {play_url_log_path}")
-except Exception as e:
-    # 捕获任何日志初始化错误，但不影响程序运行
-    print(f"Error initializing log handlers: {e}")
-    # 仅使用控制台日志
-    logger.warning(f"Failed to initialize file logs, using console logging only: {e}")
+logger.level("STREAM", no=22, color="<blue>")
+logger.add(
+    f"{script_path}/logs/play_url.log",
+    level="STREAM",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
+    filter=lambda i: i["level"].name == "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=1,
+    rotation="500 KB",
+    encoding="utf-8",
+)

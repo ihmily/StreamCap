@@ -134,7 +134,6 @@ celerybeat.pid
 # Environments
 .env
 .venv
-.vscode/
 env/
 venv/
 ENV/
@@ -173,6 +172,3 @@ cython_debug/
 #.idea/
 
 backup_config/
-ffmpeg.exe
-ffplay.exe
-ffprobe.exe

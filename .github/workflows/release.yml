@@ -81,6 +81,15 @@ jobs:
           New-Item -ItemType File -Force -Path "logs\play_url.log" | Out-Null
           New-Item -ItemType File -Force -Path "logs\streamget.log" | Out-Null
           Write-Host "Created logs directory with required log files"
+          
+          # 确保logs目录权限正确
+          if (Test-Path -Path "logs") {
+            $Acl = Get-Acl -Path "logs"
+            $Ar = New-Object System.Security.AccessControl.FileSystemAccessRule("Everyone", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+            $Acl.SetAccessRule($Ar)
+            Set-Acl -Path "logs" -AclObject $Acl
+            Write-Host "Set full permissions on logs directory"
+          }
 
       - name: Build Windows executable with dependencies
         run: |
@@ -178,6 +187,10 @@ jobs:
           touch logs/play_url.log
           touch logs/streamget.log
           echo "Created logs directory with required log files"
+          
+          # 确保logs目录权限正确
+          chmod -R 777 logs
+          echo "Set full permissions on logs directory"
 
       - name: Build macOS app with dependencies
         run: |

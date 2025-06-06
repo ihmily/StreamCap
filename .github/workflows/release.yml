@@ -69,73 +69,43 @@ jobs:
             Write-Host "Warning: Icon file assets\icon.ico not found. Using default icon."
           }
 
-      - name: Create required directories and files
+      - name: Build Windows executable with dependencies (-D mode)
         run: |
-          # 创建downloads空文件夹
-          New-Item -ItemType Directory -Force -Path "downloads" | Out-Null
-          New-Item -ItemType File -Force -Path "downloads\.gitkeep" | Out-Null
-          Write-Host "Created downloads directory with .gitkeep file"
-          
-          # 创建logs文件夹和必要的日志文件
-          New-Item -ItemType Directory -Force -Path "logs" | Out-Null
-          New-Item -ItemType File -Force -Path "logs\play_url.log" | Out-Null
-          New-Item -ItemType File -Force -Path "logs\streamget.log" | Out-Null
-          Write-Host "Created logs directory with required log files"
-          
-          # 确保logs目录权限正确
-          if (Test-Path -Path "logs") {
-            $Acl = Get-Acl -Path "logs"
-            $Ar = New-Object System.Security.AccessControl.FileSystemAccessRule("Everyone", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
-            $Acl.SetAccessRule($Ar)
-            Set-Acl -Path "logs" -AclObject $Acl
-            Write-Host "Set full permissions on logs directory"
-          }
-
-      - name: Build Windows executable with dependencies
-        run: |
-          # 确保目录存在
-          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
-          New-Item -ItemType Directory -Force -Path "_internal" | Out-Null
-          
-          # 构建可执行文件
+          # 使用-D选项创建目录模式的打包
           if (Test-Path -Path "assets\images\logo.ico") {
-            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --add-data "downloads;downloads" --add-data "logs;logs" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.ico main.py
+            pyinstaller --name StreamCap -D --windowed --icon=assets/images/logo.ico main.py
           } else {
-            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --add-data "downloads;downloads" --add-data "logs;logs" --collect-all streamget --collect-all flet --onefile --windowed main.py
+            pyinstaller --name StreamCap -D --windowed main.py
           }
           
-          # 安装依赖到_internal目录
-          pip install -r requirements.txt --target="_internal"
-          Write-Host "Dependencies installed to _internal directory"
+          # 创建必要的目录和文件
+          New-Item -ItemType Directory -Force -Path "dist\StreamCap\downloads" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist\StreamCap\logs" | Out-Null
+          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\play_url.log" | Out-Null
+          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\streamget.log" | Out-Null
+          
+          # 复制资源文件夹到dist\StreamCap目录
+          if (-not (Test-Path -Path "dist\StreamCap\assets")) {
+            Copy-Item -Path "assets" -Destination "dist\StreamCap\" -Recurse -Force
+          }
+          if (-not (Test-Path -Path "dist\StreamCap\config")) {
+            Copy-Item -Path "config" -Destination "dist\StreamCap\" -Recurse -Force
+          }
+          if (-not (Test-Path -Path "dist\StreamCap\locales")) {
+            Copy-Item -Path "locales" -Destination "dist\StreamCap\" -Recurse -Force
+          }
+          
+          Write-Host "Successfully built StreamCap with dependencies in directory mode"
 
       - name: Debug directory contents
         run: |
-          Write-Host "Current directory structure:"
-          Get-ChildItem -Path .\ -Recurse -Depth 1 | Select-Object FullName
-          Write-Host "dist directory:"
-          Get-ChildItem -Path .\dist -Recurse -Depth 1 | Select-Object FullName
-          Write-Host "_internal directory:"
-          Get-ChildItem -Path .\_internal -Recurse -Depth 1 | Select-Object FullName
-          Write-Host "downloads directory:"
-          Get-ChildItem -Path .\downloads -Recurse -Depth 1 | Select-Object FullName
+          Write-Host "dist\StreamCap directory structure:"
+          Get-ChildItem -Path .\dist\StreamCap -Recurse -Depth 2 | Select-Object FullName
 
       - name: Create ZIP archive
         run: |
-          # 确保文件和目录存在
-          if (-not (Test-Path -Path "dist\StreamCap.exe")) {
-            Write-Error "StreamCap.exe not found in dist directory"
-            exit 1
-          }
-          
-          # 创建一个临时目录来准备打包内容
-          New-Item -ItemType Directory -Force -Path "package" | Out-Null
-          Copy-Item -Path "dist\StreamCap.exe" -Destination "package\" -Force
-          Copy-Item -Path "assets", "config", "locales" -Destination "package\" -Recurse -Force
-          Copy-Item -Path "downloads", "logs" -Destination "package\" -Recurse -Force
-          Copy-Item -Path "_internal" -Destination "package\" -Recurse -Force
-          
-          # 创建ZIP文件
-          Compress-Archive -Path "package\*" -DestinationPath "StreamCap-Windows.zip" -Force
+          # 压缩整个dist\StreamCap目录
+          Compress-Archive -Path "dist\StreamCap\*" -DestinationPath "StreamCap-Windows.zip" -Force
 
       - name: Upload Windows build
         uses: actions/upload-release-asset@v1
@@ -175,67 +145,43 @@ jobs:
             echo "Warning: Icon file assets/icon.ico not found. Using default icon."
           fi
 
-      - name: Create required directories and files
+      - name: Build macOS app with dependencies (-D mode)
         run: |
-          # 创建downloads空文件夹
-          mkdir -p downloads
-          touch downloads/.gitkeep
-          echo "Created downloads directory with .gitkeep file"
-          
-          # 创建logs文件夹和必要的日志文件
-          mkdir -p logs
-          touch logs/play_url.log
-          touch logs/streamget.log
-          echo "Created logs directory with required log files"
-          
-          # 确保logs目录权限正确
-          chmod -R 777 logs
-          echo "Set full permissions on logs directory"
-
-      - name: Build macOS app with dependencies
-        run: |
-          # 确保目录存在
-          mkdir -p dist
-          mkdir -p _internal
-          
-          # 构建可执行文件
+          # 使用-D选项创建目录模式的打包
           if [ -f "assets/images/logo.icns" ]; then
-            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --add-data "downloads:downloads" --add-data "logs:logs" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.icns main.py
+            pyinstaller --name StreamCap -D --windowed --icon=assets/images/logo.icns main.py
           else
-            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --add-data "downloads:downloads" --add-data "logs:logs" --collect-all streamget --collect-all flet --onefile --windowed main.py
+            pyinstaller --name StreamCap -D --windowed main.py
           fi
           
-          # 安装依赖到_internal目录
-          pip install -r requirements.txt --target="_internal"
-          echo "Dependencies installed to _internal directory"
+          # 创建必要的目录和文件
+          mkdir -p dist/StreamCap/downloads
+          mkdir -p dist/StreamCap/logs
+          touch dist/StreamCap/logs/play_url.log
+          touch dist/StreamCap/logs/streamget.log
+          
+          # 复制资源文件夹到dist/StreamCap目录
+          if [ ! -d "dist/StreamCap/assets" ]; then
+            cp -r assets dist/StreamCap/
+          fi
+          if [ ! -d "dist/StreamCap/config" ]; then
+            cp -r config dist/StreamCap/
+          fi
+          if [ ! -d "dist/StreamCap/locales" ]; then
+            cp -r locales dist/StreamCap/
+          fi
+          
+          echo "Successfully built StreamCap with dependencies in directory mode"
 
       - name: Debug directory contents
         run: |
-          echo "Current directory structure:"
-          find . -maxdepth 2 -type d
-          echo "dist directory:"
-          find ./dist -maxdepth 2
-          echo "_internal directory:"
-          find ./_internal -maxdepth 2
-          echo "downloads directory:"
-          find ./downloads -maxdepth 2
+          echo "dist/StreamCap directory structure:"
+          find ./dist/StreamCap -maxdepth 2
 
       - name: Create DMG
         run: |
-          # 创建一个临时目录来准备打包内容
-          mkdir -p dist/dmg
-          
-          # 复制应用和必要的文件
-          cp -r dist/StreamCap.app dist/dmg/
-          cp -r assets dist/dmg/
-          cp -r config dist/dmg/
-          cp -r locales dist/dmg/
-          cp -r downloads dist/dmg/
-          cp -r logs dist/dmg/
-          cp -r _internal dist/dmg/
-          
-          # 创建DMG
-          hdiutil create -volname StreamCap -srcfolder dist/dmg -ov -format UDZO StreamCap-macOS.dmg
+          # 直接从dist/StreamCap创建DMG
+          hdiutil create -volname StreamCap -srcfolder dist/StreamCap -ov -format UDZO StreamCap-macOS.dmg
 
       - name: Upload macOS build
         uses: actions/upload-release-asset@v1

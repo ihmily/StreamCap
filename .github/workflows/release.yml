@@ -60,9 +60,10 @@ jobs:
           pip install pyinstaller
 
       - name: Create logger_fix.py for GUI mode
+        shell: pwsh
         run: |
-          # 创建logger_fix.py文件，支持GUI模式
-          $loggerFixContent = @"
+          # 创建logger_fix.py文件内容
+          $content = @'
 import os
 import sys
 import re
@@ -165,12 +166,12 @@ logger.add(
     rotation="500 KB",
     encoding="utf-8",
 )
-"@
+'@
 
           # 创建app/utils目录（如果不存在）
           New-Item -ItemType Directory -Force -Path "app\utils" | Out-Null
           # 写入logger_fix.py文件
-          Set-Content -Path "app\utils\logger_fix.py" -Value $loggerFixContent
+          Set-Content -Path "app\utils\logger_fix.py" -Value $content
           Write-Host "Created logger_fix.py for GUI mode"
 
       - name: Apply logger fix

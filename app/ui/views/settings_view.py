@@ -814,16 +814,16 @@ class SettingsPage(PageBase):
     def create_push_channels_layout(self):
         controls = [
             self.create_channel_switch_container(
-                self._["dingtalk"], ft.Icons.BUSINESS_CENTER, "dingtalk_enabled"
+                "DingTalk", ft.Icons.BUSINESS_CENTER, "dingtalk_enabled"
             ),
             self.create_channel_switch_container(
-                self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
+                "WeChat", ft.Icons.WECHAT, "wechat_enabled"
             ),
             self.create_channel_switch_container(
-                self._["serverchan"], ft.Icons.CLOUD_OUTLINED, "serverchan_enabled"
+                "ServerChan", ft.Icons.CLOUD_OUTLINED, "serverchan_enabled"
             ),
             self.create_channel_switch_container(
-                self._["email"], ft.Icons.EMAIL, "email_enabled"
+                "Email", ft.Icons.EMAIL, "email_enabled"
             ),
             self.create_channel_switch_container(
                 "Bark", ft.Icons.NOTIFICATIONS_ACTIVE, "bark_enabled"
@@ -832,7 +832,7 @@ class SettingsPage(PageBase):
                 "Ntfy", ft.Icons.NOTIFICATIONS, "ntfy_enabled"
             ),
             self.create_channel_switch_container(
-                self._["telegram"], ft.Icons.SMS, "telegram_enabled"
+                "Telegram", ft.Icons.SMS, "telegram_enabled"
             ),
         ]
         

@@ -17,6 +17,7 @@ dependencies = [
     "streamget>=4.0.5",
     "python-dotenv>=1.0.1",
     "cachetools>=5.5.2",
+    "psutil>=5.9.0",
 ]
 
 [project.urls]

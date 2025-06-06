@@ -1,3 +1,4 @@
+# -*- mode: python ; coding: utf-8 -*-
 name: Release
 
 on:
@@ -41,7 +42,7 @@ jobs:
           prerelease: false
           body_path: CHANGELOG.md
 
-  build-windows:
+  build-windows-gui:
     needs: create_release
     runs-on: windows-latest
     steps:
@@ -59,62 +60,212 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Prepare icon file
+      - name: Create logger_fix.py for GUI mode
         run: |
-          if (Test-Path -Path "assets\icon.ico") {
-            New-Item -ItemType Directory -Force -Path "assets\images" | Out-Null
-            Copy-Item -Path "assets\icon.ico" -Destination "assets\images\logo.ico" -Force
-            Write-Host "Icon file copied to assets\images\logo.ico"
-          } else {
-            Write-Host "Warning: Icon file assets\icon.ico not found. Using default icon."
-          }
+          $loggerFixContent = @'
+          import os
+          import sys
+          import re
 
-      - name: Build Windows executable with dependencies (-D mode)
-        run: |
-          # 使用-D选项创建目录模式的打包
-          if (Test-Path -Path "assets\images\logo.ico") {
-            pyinstaller --name StreamCap -D --windowed --icon=assets/images/logo.ico main.py
-          } else {
-            pyinstaller --name StreamCap -D --windowed main.py
+          from loguru import logger
+
+          script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+
+          # 添加内存清理日志过滤器
+          def is_memory_cleanup_log(record):
+              """检查是否为内存清理相关的日志"""
+              message = record["message"]
+              memory_cleanup_patterns = [
+                  r"执行轻量级清理任务",
+                  r"执行完整清理任务",
+                  r"轻量级清理",
+                  r"完整清理",
+                  r"内存使用率过高",
+                  r"内存使用详情",
+                  r"系统统计",
+                  r"开始执行完整清理",
+                  r"内存使用率:",
+                  r"实例清理",
+                  r"实例统计",
+                  r"实例管理",
+                  # 测试脚本中使用的内存相关日志模式
+                  r"开始内存测试",
+                  r"内存状态",
+                  r"创建实例",
+                  r"内存测试总结",
+                  r"主动触发垃圾回收",
+                  r"显式清理未使用的实例",
+                  r"等待.*秒让自动清理机制工作",
+                  r"清理实例后",
+                  r"开始内存优化测试"
+              ]
+              return any(re.search(pattern, message) for pattern in memory_cleanup_patterns)
+
+          # 添加一个普通日志的过滤器
+          def not_memory_cleanup_log(record):
+              return not is_memory_cleanup_log(record)
+
+          # 确保日志目录存在
+          os.makedirs(f"{script_path}/logs", exist_ok=True)
+
+          # 检查是否为GUI模式（没有控制台）
+          is_gui_mode = False
+          try:
+              # 尝试写入stderr，如果失败则认为是GUI模式
+              sys.stderr.write("")
+          except Exception:
+              is_gui_mode = True
+
+          # 根据模式选择日志配置
+          if not is_gui_mode:
+              # 控制台模式：添加控制台输出处理器
+              logger.add(
+                  sys.stderr,
+                  level="DEBUG",
+                  format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+                  enqueue=True,
+              )
+          else:
+              # GUI模式：添加内存清理日志文件处理器
+              logger.add(
+                  f"{script_path}/logs/memory_clean.log",
+                  level="DEBUG",
+                  format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+                  filter=lambda i: is_memory_cleanup_log(i),
+                  serialize=False,
+                  enqueue=True,
+                  retention=3,
+                  rotation="3 MB",
+                  encoding="utf-8",
+              )
+
+          # 无论何种模式，都添加文件日志处理器
+          # 文件日志处理器，排除内存清理日志
+          logger.add(
+              f"{script_path}/logs/streamget.log",
+              level="DEBUG",
+              format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+              filter=lambda i: not_memory_cleanup_log(i) and i["level"].name != "STREAM",
+              serialize=False,
+              enqueue=True,
+              retention=3,
+              rotation="3 MB",
+              encoding="utf-8",
+          )
+
+          logger.level("STREAM", no=22, color="<blue>")
+          logger.add(
+              f"{script_path}/logs/play_url.log",
+              level="STREAM",
+              format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
+              filter=lambda i: i["level"].name == "STREAM",
+              serialize=False,
+              enqueue=True,
+              retention=1,
+              rotation="500 KB",
+              encoding="utf-8",
+          )
+          '@
+          
+          # 创建app/utils目录（如果不存在）
+          New-Item -ItemType Directory -Force -Path "app/utils" | Out-Null
+          
+          # 创建logger_fix.py文件
+          Set-Content -Path "app/utils/logger_fix.py" -Value $loggerFixContent
+          
+          # 备份原始logger.py
+          if (Test-Path -Path "app/utils/logger.py") {
+            Copy-Item -Path "app/utils/logger.py" -Destination "app/utils/logger.py.bak" -Force
           }
+          
+          # 应用修复
+          Copy-Item -Path "app/utils/logger_fix.py" -Destination "app/utils/logger.py" -Force
+          
+          Write-Host "Logger fix applied for GUI mode"
+
+      - name: Build Windows GUI executable
+        run: |
+          # 使用修改后的logger模块构建GUI版本
+          pyinstaller --name StreamCap -D --noconsole --icon=assets/icon.ico main.py
           
           # 创建必要的目录和文件
-          New-Item -ItemType Directory -Force -Path "dist\StreamCap\downloads" | Out-Null
-          New-Item -ItemType Directory -Force -Path "dist\StreamCap\logs" | Out-Null
-          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\play_url.log" | Out-Null
-          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\streamget.log" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist/StreamCap/downloads" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist/StreamCap/logs" | Out-Null
+          New-Item -ItemType File -Force -Path "dist/StreamCap/logs/play_url.log" | Out-Null
+          New-Item -ItemType File -Force -Path "dist/StreamCap/logs/streamget.log" | Out-Null
+          New-Item -ItemType File -Force -Path "dist/StreamCap/logs/memory_clean.log" | Out-Null
           
-          # 复制资源文件夹到dist\StreamCap目录
-          if (-not (Test-Path -Path "dist\StreamCap\assets")) {
-            Copy-Item -Path "assets" -Destination "dist\StreamCap\" -Recurse -Force
-          }
-          if (-not (Test-Path -Path "dist\StreamCap\config")) {
-            Copy-Item -Path "config" -Destination "dist\StreamCap\" -Recurse -Force
-          }
-          if (-not (Test-Path -Path "dist\StreamCap\locales")) {
-            Copy-Item -Path "locales" -Destination "dist\StreamCap\" -Recurse -Force
-          }
+          # 复制资源文件夹到dist/StreamCap目录
+          Copy-Item -Path "assets" -Destination "dist/StreamCap/" -Recurse -Force
+          Copy-Item -Path "config" -Destination "dist/StreamCap/" -Recurse -Force
+          Copy-Item -Path "locales" -Destination "dist/StreamCap/" -Recurse -Force
           
-          Write-Host "Successfully built StreamCap with dependencies in directory mode"
+          Write-Host "Successfully built StreamCap GUI version"
 
-      - name: Debug directory contents
+      - name: Create ZIP archive (GUI)
         run: |
-          Write-Host "dist\StreamCap directory structure:"
-          Get-ChildItem -Path .\dist\StreamCap -Recurse -Depth 2 | Select-Object FullName
+          # 压缩整个dist/StreamCap目录
+          Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows-GUI.zip" -Force
 
-      - name: Create ZIP archive
-        run: |
-          # 压缩整个dist\StreamCap目录
-          Compress-Archive -Path "dist\StreamCap\*" -DestinationPath "StreamCap-Windows.zip" -Force
-
-      - name: Upload Windows build
+      - name: Upload Windows GUI build
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ needs.create_release.outputs.upload_url }}
-          asset_path: ./StreamCap-Windows.zip
-          asset_name: StreamCap-Windows.zip
+          asset_path: ./StreamCap-Windows-GUI.zip
+          asset_name: StreamCap-Windows-GUI.zip
+          asset_content_type: application/zip
+
+  build-windows-console:
+    needs: create_release
+    runs-on: windows-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build Windows Console executable
+        run: |
+          # 构建控制台版本
+          pyinstaller --name StreamCap -D --console --icon=assets/icon.ico main.py
+          
+          # 创建必要的目录和文件
+          New-Item -ItemType Directory -Force -Path "dist/StreamCap/downloads" | Out-Null
+          New-Item -ItemType Directory -Force -Path "dist/StreamCap/logs" | Out-Null
+          New-Item -ItemType File -Force -Path "dist/StreamCap/logs/play_url.log" | Out-Null
+          New-Item -ItemType File -Force -Path "dist/StreamCap/logs/streamget.log" | Out-Null
+          
+          # 复制资源文件夹到dist/StreamCap目录
+          Copy-Item -Path "assets" -Destination "dist/StreamCap/" -Recurse -Force
+          Copy-Item -Path "config" -Destination "dist/StreamCap/" -Recurse -Force
+          Copy-Item -Path "locales" -Destination "dist/StreamCap/" -Recurse -Force
+          
+          Write-Host "Successfully built StreamCap Console version"
+
+      - name: Create ZIP archive (Console)
+        run: |
+          # 压缩整个dist/StreamCap目录
+          Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows-Console.zip" -Force
+
+      - name: Upload Windows Console build
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
+          asset_path: ./StreamCap-Windows-Console.zip
+          asset_name: StreamCap-Windows-Console.zip
           asset_content_type: application/zip
 
   build-macos:

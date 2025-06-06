@@ -6,7 +6,7 @@ on:
       - 'v*'
 
 jobs:
-  create-release:
+  create_release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -42,7 +42,7 @@ jobs:
           body_path: CHANGELOG.md
 
   build-windows:
-    needs: create-release
+    needs: create_release
     runs-on: windows-latest
     steps:
       - name: Checkout code
@@ -72,13 +72,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
           asset_path: ./StreamCap-Windows.zip
           asset_name: StreamCap-Windows.zip
           asset_content_type: application/zip
 
   build-macos:
-    needs: create-release
+    needs: create_release
     runs-on: macos-latest
     steps:
       - name: Checkout code
@@ -113,13 +113,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          upload_url: ${{ needs.create_release.outputs.upload_url }}
           asset_path: ./StreamCap-macOS.dmg
           asset_name: StreamCap-macOS.dmg
           asset_content_type: application/octet-stream
 
   build-docker:
-    needs: create-release
+    needs: create_release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code

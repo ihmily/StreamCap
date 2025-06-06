@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.PAT_TOKEN || secrets.GITHUB_TOKEN }}
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -89,5 +89,18 @@ jobs:
 
       - name: Create version tag
         run: |
-          git tag v${{ steps.bump_version.outputs.new_version }}
-          git push origin v${{ steps.bump_version.outputs.new_version }} 
+          git tag -a v${{ steps.bump_version.outputs.new_version }} -m "Release v${{ steps.bump_version.outputs.new_version }}"
+          git push origin v${{ steps.bump_version.outputs.new_version }}
+          
+      - name: Verify tag was pushed
+        run: |
+          echo "检查标签是否成功推送..."
+          # 等待几秒钟确保GitHub API已更新
+          sleep 5
+          # 检查远程标签是否存在
+          if git ls-remote --tags origin | grep -q "v${{ steps.bump_version.outputs.new_version }}"; then
+            echo "✅ 标签 v${{ steps.bump_version.outputs.new_version }} 已成功推送"
+          else
+            echo "❌ 标签推送失败，请检查权限设置"
+            exit 1
+          fi 

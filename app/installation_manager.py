@@ -1,3 +1,4 @@
+
 import flet as ft
 
 from .scripts.ffmpeg_install import check_ffmpeg_installed, install_ffmpeg
@@ -111,10 +112,6 @@ class InstallationManager:
                 ft.Divider(height=20),
                 ft.Text(self._["install_tip"], size=14),
                 components_list,
-                ft.Row(
-                    [ft.Checkbox(label=self._["dont_show_again"], value=False, on_change=self.on_dont_show_again)],
-                    alignment=ft.MainAxisAlignment.START,
-                )
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=15,
@@ -156,18 +153,8 @@ class InstallationManager:
     async def on_install_clicked(self, _):
         await self.install_components()
 
-    async def on_dont_show_again(self, e):
-        user_config = self.app.settings.user_config
-        user_config["hide_install_dialog"] = e.control.value
-        await self.app.config_manager.save_user_config(user_config)
-
     async def check_env(self):
-        if not self.app.settings.user_config.get("hide_install_dialog", False):
-            await self.get_install_components()
-            if self.components_to_install:
-                logger.info(f"Missing components: {[i['name'] for i in self.components_to_install]}")
-                self.page.run_task(self.show_install_dialog)
-        else:
-            from .scripts import ffmpeg_install, node_install
-            ffmpeg_install.update_env_path()
-            node_install.update_env_path()
+        await self.get_install_components()
+        if self.components_to_install:
+            logger.info(f"Missing components: {[i['name'] for i in self.components_to_install]}")
+            self.page.run_task(self.show_install_dialog)

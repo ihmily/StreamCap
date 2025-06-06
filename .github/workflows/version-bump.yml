@@ -1,0 +1,93 @@
+name: Version Bump
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: '版本更新类型 (patch, minor, major)'
+        required: true
+        default: 'patch'
+        type: choice
+        options:
+        - patch
+        - minor
+        - major
+
+jobs:
+  bump-version:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install toml
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          python -c "
+          import toml
+          import re
+          import sys
+          import os
+          
+          # 读取当前版本
+          with open('pyproject.toml', 'r', encoding='utf-8') as f:
+              data = toml.load(f)
+          
+          current_version = data['project']['version']
+          print(f'当前版本: {current_version}')
+          
+          # 解析版本号
+          major, minor, patch = map(int, current_version.split('.'))
+          
+          # 根据输入更新版本号
+          version_type = '${{ github.event.inputs.version_type }}'
+          if version_type == 'major':
+              major += 1
+              minor = 0
+              patch = 0
+          elif version_type == 'minor':
+              minor += 1
+              patch = 0
+          else:  # patch
+              patch += 1
+          
+          new_version = f'{major}.{minor}.{patch}'
+          print(f'新版本: {new_version}')
+          
+          # 更新pyproject.toml
+          data['project']['version'] = new_version
+          with open('pyproject.toml', 'w', encoding='utf-8') as f:
+              toml.dump(data, f)
+          
+          # 输出新版本号供后续步骤使用
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f'new_version={new_version}\\n')
+          "
+
+      - name: Commit and push changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add pyproject.toml
+          git commit -m "chore: 版本更新至 ${{ steps.bump_version.outputs.new_version }}"
+          git push
+
+      - name: Create version tag
+        run: |
+          git tag v${{ steps.bump_version.outputs.new_version }}
+          git push origin v${{ steps.bump_version.outputs.new_version }} 

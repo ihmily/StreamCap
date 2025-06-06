@@ -39,17 +39,22 @@ select = [
 
 ignore = [
     "E402", # module-import-not-at-top-of-file
+    "E501", # line-too-long
     "E711", # none-comparison
     "E712", # true-false-comparison
     "E721", # type-comparison
     "E722", # bare-except
+    "F401", # unused-import
     "F821", # undefined-name
     "F841", # unused-variable
     "FURB113", # repeated-append
     "FURB152", # math-constant
     "UP007", # non-pep604-annotation
     "UP032", # f-string
+    "UP035", # deprecated-typing-alias
+    "UP006", # use-list-instead-of-List
     "UP045", # non-pep604-annotation-optional
+    "RUF013", # implicit-optional
     "B005", # strip-with-multi-characters
     "B006", # mutable-argument-default
     "B007", # unused-loop-control-variable
@@ -66,8 +71,14 @@ ignore = [
     "SIM107", # return-in-try-except-finally
     "SIM108", # if-else-block-instead-of-if-exp
     "SIM113", # enumerate-for-loop
+    "SIM116", # use-dict-instead-of-if-statements
     "SIM117", # multiple-with-statements
+    "SIM118", # key-in-dict
     "SIM210", # if-expr-with-true-false
+    "SIM401", # use-dict-get
+    "C403", # unnecessary-list-comprehension
+    "C414", # unnecessary-list-call
+    "I001", # unsorted-imports
 ]
 
 

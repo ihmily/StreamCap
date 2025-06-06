@@ -42,5 +42,5 @@ jobs:
           pip install ruff
 
       - name: Run ruff lint check
-        run: ruff check main.py app --config .ruff.toml
+        run: ruff check main.py app --config .ruff.toml --fix
         working-directory: .

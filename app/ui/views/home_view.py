@@ -3,6 +3,7 @@ import uuid
 
 import flet as ft
 
+from ...core.platform_handlers import get_platform_info
 from ...models.recording_model import Recording
 from ...models.recording_status_model import RecordingStatus
 from ...utils.logger import logger
@@ -10,6 +11,7 @@ from ..base_page import PageBase
 from ..components.help_dialog import HelpDialog
 from ..components.recording_dialog import RecordingDialog
 from ..components.search_dialog import SearchDialog
+from app.core.platform_handlers.platform_map import get_platform_display_name
 
 
 class HomePage(PageBase):
@@ -23,6 +25,8 @@ class HomePage(PageBase):
         self.app.language_manager.add_observer(self)
         self.load_language()
         self.current_filter = "all"
+        self.current_platform_filter = "all"
+        self.platform_dropdown = None
         self.init()
 
     def load_language(self):
@@ -80,6 +84,10 @@ class HomePage(PageBase):
         
         self.page.on_keyboard_event = self.on_keyboard
         self.page.on_resized = self.update_grid_layout
+        
+        # 确保录制卡片显示正确的格式和分段时间
+        if hasattr(self.app, "config_validator"):
+            self.page.run_task(self.app.config_validator.update_recording_cards)
 
     def pubsub_subscribe(self):
         self.app.page.pubsub.subscribe_topic('add', self.subscribe_add_cards)
@@ -155,59 +163,136 @@ class HomePage(PageBase):
     
     def create_filter_area(self):
         """Create the filter area"""
-        return ft.Row(
-            [
-                ft.Text(self._["filter"] + ":", size=14),
+        platforms = self.get_available_platforms()
+        style = self.app.settings.user_config.get("platform_filter_style", "tile")
+        lang = getattr(self.app, 'language_code', 'zh_CN')
+        def get_display_name(key):
+            return get_platform_display_name(key, lang)
+
+        if style == "dropdown":
+            # 下拉框风格
+            platform_dropdown = ft.Dropdown(
+            value=self.current_platform_filter,
+            options=[
+                ft.dropdown.Option(key="all", text=self._["filter_all_platforms"]),
+                    *[ft.dropdown.Option(key=platform[1], text=get_display_name(platform[1])) for platform in platforms]
+            ],
+            on_change=self.on_platform_filter_change,
+                width=200,
+            )
+            platform_filter_control = platform_dropdown
+        else:
+            # 平铺按钮组风格
+            platform_buttons = [
                 ft.ElevatedButton(
-                    self._["filter_all"],
-                    on_click=self.filter_all_on_click,
-                    bgcolor=ft.colors.BLUE if self.current_filter == "all" else None,
-                    color=ft.colors.WHITE if self.current_filter == "all" else None,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                    ),
+                    self._["filter_all_platforms"],
+                    on_click=self.filter_all_platforms_on_click,
+                    bgcolor=ft.colors.BLUE if self.current_platform_filter == "all" else None,
+                    color=ft.colors.WHITE if self.current_platform_filter == "all" else None,
+                    style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                )
+            ]
+            for name, key in platforms:
+                selected = self.current_platform_filter == key
+                platform_buttons.append(
+                    ft.ElevatedButton(
+                        get_display_name(key),
+                        on_click=lambda e, k=key: self.on_platform_button_click(k),
+                        bgcolor=ft.colors.BLUE if selected else None,
+                        color=ft.colors.WHITE if selected else None,
+                        style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                    )
+                )
+            platform_filter_control = ft.Container(
+                content=ft.Row(
+                    platform_buttons,
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=5,
+                    scroll=ft.ScrollMode.AUTO,
+                    wrap=False
                 ),
-                ft.ElevatedButton(
-                    self._["filter_recording"],
-                    on_click=self.filter_recording_on_click,
-                    bgcolor=ft.colors.GREEN if self.current_filter == "recording" else None,
-                    color=ft.colors.WHITE if self.current_filter == "recording" else None,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                    ),
+                expand=True,
+        )
+        
+        return ft.Column(
+            controls=[
+                ft.Row(
+                    [
+                        ft.Text(self._["filter"] + ":", size=14),
+                        ft.ElevatedButton(
+                            self._["filter_all"],
+                            on_click=self.filter_all_on_click,
+                            bgcolor=ft.colors.BLUE if self.current_filter == "all" else None,
+                            color=ft.colors.WHITE if self.current_filter == "all" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                        ),
+                        ft.ElevatedButton(
+                            self._["filter_recording"],
+                            on_click=self.filter_recording_on_click,
+                            bgcolor=ft.colors.GREEN if self.current_filter == "recording" else None,
+                            color=ft.colors.WHITE if self.current_filter == "recording" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                            ),
+                        ft.ElevatedButton(
+                            self._["filter_live_monitoring_not_recording"],
+                            on_click=self.filter_live_monitoring_not_recording_on_click,
+                            bgcolor=ft.colors.CYAN if self.current_filter == "live_monitoring_not_recording" else None,
+                            color=ft.colors.WHITE if self.current_filter == "live_monitoring_not_recording" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                        ),
+                        ft.ElevatedButton(
+                            self._["filter_offline"],
+                            on_click=self.filter_offline_on_click,
+                            bgcolor=ft.colors.AMBER if self.current_filter == "offline" else None,
+                            color=ft.colors.WHITE if self.current_filter == "offline" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                        ),
+                        ft.ElevatedButton(
+                            self._["filter_error"],
+                            on_click=self.filter_error_on_click,
+                            bgcolor=ft.colors.RED if self.current_filter == "error" else None,
+                            color=ft.colors.WHITE if self.current_filter == "error" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                        ),
+                        ft.ElevatedButton(
+                            self._["filter_stopped"],
+                            on_click=self.filter_stopped_on_click,
+                            bgcolor=ft.colors.GREY if self.current_filter == "stopped" else None,
+                            color=ft.colors.WHITE if self.current_filter == "stopped" else None,
+                            style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=5,
                 ),
-                ft.ElevatedButton(
-                    self._["filter_offline"],
-                    on_click=self.filter_offline_on_click,
-                    bgcolor=ft.colors.AMBER if self.current_filter == "offline" else None,
-                    color=ft.colors.WHITE if self.current_filter == "offline" else None,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                    ),
-                ),
-                ft.ElevatedButton(
-                    self._["filter_error"],
-                    on_click=self.filter_error_on_click,
-                    bgcolor=ft.colors.RED if self.current_filter == "error" else None,
-                    color=ft.colors.WHITE if self.current_filter == "error" else None,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                    ),
-                ),
-                ft.ElevatedButton(
-                    self._["filter_stopped"],
-                    on_click=self.filter_stopped_on_click,
-                    bgcolor=ft.colors.GREY if self.current_filter == "stopped" else None,
-                    color=ft.colors.WHITE if self.current_filter == "stopped" else None,
-                    style=ft.ButtonStyle(
-                        shape=ft.RoundedRectangleBorder(radius=5),
-                    ),
+                ft.Row(
+                    [
+                        ft.Text(self._["platform_filter"] + ":", size=14),
+                        platform_filter_control
+                    ],
+                    alignment=ft.MainAxisAlignment.START,
+                    spacing=5,
                 ),
             ],
-            alignment=ft.MainAxisAlignment.START,
             spacing=5,
         )
     
+    def get_available_platforms(self):
+        platforms = set()
+        recordings = self.app.record_manager.recordings
+        
+        for recording in recordings:
+            if hasattr(recording, 'url') and recording.url:
+                platform_name, platform_key = get_platform_info(recording.url)
+                if platform_name and platform_key:
+                    platforms.add((platform_name, platform_key))
+        
+        return sorted(list(platforms), key=lambda x: x[0])
+    
+    async def on_platform_filter_change(self, e):
+        self.current_platform_filter = e.control.value
+        await self.apply_filter()
+
     async def filter_all_on_click(self, _):
         self.current_filter = "all"
         await self.apply_filter()
@@ -228,6 +313,10 @@ class HomePage(PageBase):
         self.current_filter = "stopped"
         await self.apply_filter()
     
+    async def filter_live_monitoring_not_recording_on_click(self, _):
+        self.current_filter = "live_monitoring_not_recording"
+        await self.apply_filter()
+    
     async def apply_filter(self):
         self.content_area.controls[1] = self.create_filter_area()
         
@@ -239,22 +328,11 @@ class HomePage(PageBase):
             if not card_info:
                 continue
                 
-            visible = False
-            if self.current_filter == "all":
-                visible = True
-            elif self.current_filter == "recording":
-                visible = recording.recording
-            elif self.current_filter == "error":
-                visible = recording.status_info == RecordingStatus.RECORDING_ERROR
-            elif self.current_filter == "offline":
-                visible = not recording.is_live and recording.monitor_status
-            elif self.current_filter == "stopped":
-                visible = not recording.monitor_status
-                
+            visible = self.should_show_recording(self.current_filter, recording, self.current_platform_filter)
             card_info["card"].visible = visible
-            
+        
+        self.recording_card_area.content.update()
         self.content_area.update()
-        self.recording_card_area.update()
 
     async def reset_cards_visibility(self):
         cards_obj = self.app.record_card_manager.cards_obj
@@ -264,46 +342,50 @@ class HomePage(PageBase):
                 card_info["card"].update()
 
     @staticmethod
-    def should_show_recording(filter_type, recording):
-        return (
-                filter_type == "all"
-                or (filter_type == "recording" and recording.recording)
-                or (filter_type == "error" and recording.status_info == RecordingStatus.RECORDING_ERROR)
-                or (filter_type == "offline" and not recording.is_live and recording.monitor_status)
-                or (filter_type == "stopped" and not recording.monitor_status)
-        )
+    def should_show_recording(filter_type, recording, platform_filter="all"):
+        if platform_filter != "all":
+            _, platform_key = get_platform_info(recording.url)
+            if platform_key != platform_filter:
+                return False
+        
+        if filter_type == "all":
+            return True
+        elif filter_type == "recording":
+            return recording.recording
+        elif filter_type == "live_monitoring_not_recording":
+            return recording.is_live and recording.monitor_status and not recording.recording
+        elif filter_type == "error":
+            return recording.status_info == RecordingStatus.RECORDING_ERROR
+        elif filter_type == "offline":
+            return not recording.is_live and recording.monitor_status
+        elif filter_type == "stopped":
+            return not recording.monitor_status
+        return True
 
     async def filter_recordings(self, query):
-        recordings = self.app.record_manager.recordings
         cards_obj = self.app.record_card_manager.cards_obj
-
-        if not query.strip():
-            await self.apply_filter()
-            return {}
-        else:
-            lower_query = query.strip().lower()
-            search_ids = {
-                rec.rec_id
-                for rec in recordings
-                if lower_query in str(rec.to_dict()).lower() or lower_query in rec.display_title
-            }
+        recordings = self.app.record_manager.recordings
+        
+        for recording in recordings:
+            card_info = cards_obj.get(recording.rec_id)
+            if not card_info:
+                continue
+                
+            match_query = (
+                query.lower() in recording.streamer_name.lower()
+                or query.lower() in recording.url.lower()
+                or (recording.live_title and query.lower() in recording.live_title.lower())
+            )
             
-            filtered_ids = set()
-            for rec_id in search_ids:
-                recording = self.app.record_manager.find_recording_by_id(rec_id)
-                if not recording:
-                    continue
-
-                if self.should_show_recording(self.current_filter, recording):
-                    filtered_ids.add(rec_id)
-
-            for card_info in cards_obj.values():
-                card_info["card"].visible = card_info["card"].key in filtered_ids
-                card_info["card"].update()
-
-            if not filtered_ids:
-                await self.app.snack_bar.show_snack_bar(self._["not_search_result"], duration=2000)
-            return filtered_ids
+            match_platform = True
+            if self.current_platform_filter != "all":
+                _, platform_key = get_platform_info(recording.url)
+                match_platform = (platform_key == self.current_platform_filter)
+                
+            visible = match_query and match_platform
+            card_info["card"].visible = visible
+        
+        self.recording_card_area.content.update()
 
     def create_home_content_area(self):
         return ft.Column(
@@ -381,11 +463,15 @@ class HomePage(PageBase):
         
         new_recordings = []
         for recording_info in recordings_info:
+            streamer_name = recording_info.get("streamer_name")
+            live_title = recording_info.get("live_title")
+            title = recording_info.get("title")
+            display_title = recording_info.get("display_title")
             if recording_info.get("record_format"):
                 recording = Recording(
                     rec_id=str(uuid.uuid4()),
                     url=recording_info["url"],
-                    streamer_name=recording_info["streamer_name"],
+                    streamer_name=streamer_name,
                     quality=recording_info["quality"],
                     record_format=recording_info["record_format"],
                     segment_record=recording_info["segment_record"],
@@ -395,13 +481,14 @@ class HomePage(PageBase):
                     scheduled_start_time=recording_info["scheduled_start_time"],
                     monitor_hours=recording_info["monitor_hours"],
                     recording_dir=recording_info["recording_dir"],
-                    enabled_message_push=recording_info["enabled_message_push"]
+                    enabled_message_push=recording_info["enabled_message_push"],
+                    record_mode=recording_info.get("record_mode", "auto")
                 )
             else:
                 recording = Recording(
                     rec_id=str(uuid.uuid4()),
                     url=recording_info["url"],
-                    streamer_name=recording_info["streamer_name"],
+                    streamer_name=streamer_name,
                     quality=recording_info["quality"],
                     record_format=user_config.get("video_format", "TS"),
                     segment_record=user_config.get("segmented_recording_enabled", False),
@@ -411,11 +498,15 @@ class HomePage(PageBase):
                     scheduled_start_time=user_config.get("scheduled_start_time"),
                     monitor_hours=user_config.get("monitor_hours"),
                     recording_dir=None,
-                    enabled_message_push=False
+                    enabled_message_push=False,
+                    record_mode=recording_info.get("record_mode", "auto")
                 )
-
+            recording.live_title = live_title
+            if title:
+                recording.title = title
+            if display_title:
+                recording.display_title = display_title
             recording.loop_time_seconds = int(user_config.get("loop_time_seconds", 300))
-            recording.update_title(self._[recording.quality])
             await self.app.record_manager.add_recording(recording)
             new_recordings.append(recording)
 
@@ -440,6 +531,8 @@ class HomePage(PageBase):
             self.recording_card_area.update()
 
         await self.app.snack_bar.show_snack_bar(self._["add_recording_success_tip"], bgcolor=ft.Colors.GREEN)
+        self.content_area.controls[1] = self.create_filter_area()
+        self.content_area.update()
 
     async def search_on_click(self, _e):
         """Open the search dialog when the search button is clicked."""
@@ -452,10 +545,11 @@ class HomePage(PageBase):
         await self.add_recording_dialog.show_dialog()
 
     async def refresh_cards_on_click(self, _e):
-        
         self.loading_indicator.visible = True
         self.loading_indicator.update()
-        
+
+        self.app.record_card_manager.load()
+
         cards_obj = self.app.record_card_manager.cards_obj
         recordings = self.app.record_manager.recordings
         selected_cards = self.app.record_card_manager.selected_cards
@@ -475,10 +569,14 @@ class HomePage(PageBase):
             cards_obj.pop(card_key, None)
             self.recording_card_area.controls.remove(card["card"])
         await self.show_all_cards()
-        
+
+        for recording in recordings:
+            await self.app.record_card_manager.update_card(recording)
+            await asyncio.sleep(0.05)
+
         self.loading_indicator.visible = False
         self.loading_indicator.update()
-        
+
         await self.app.snack_bar.show_snack_bar(self._["refresh_success_tip"], bgcolor=ft.Colors.GREEN)
 
     async def start_monitor_recordings_on_click(self, _):
@@ -535,9 +633,13 @@ class HomePage(PageBase):
         self.recording_card_area.content.controls.clear()
         self.recording_card_area.update()
         self.app.record_card_manager.cards_obj = {}
+        self.content_area.controls[1] = self.create_filter_area()
+        self.content_area.update()
 
     async def subscribe_del_all_cards(self, *_):
         await self.delete_all_recording_cards()
+        self.content_area.controls[1] = self.create_filter_area()
+        self.content_area.update()
 
     async def subscribe_add_cards(self, _, recording: Recording):
         """Handle the subscription of adding cards from other clients"""
@@ -558,6 +660,8 @@ class HomePage(PageBase):
             self.loading_indicator.update()
             
             self.recording_card_area.update()
+            self.content_area.controls[1] = self.create_filter_area()
+            self.content_area.update()
 
     async def update_grid_layout(self, _):
         self.page.run_task(self.recalculate_grid_columns)
@@ -592,3 +696,11 @@ class HomePage(PageBase):
                 self.page.run_task(self.stop_monitor_recordings_on_click, e)
             elif e.alt and e.key == "D":
                 self.page.run_task(self.delete_monitor_recordings_on_click, e)
+
+    def filter_all_platforms_on_click(self, _):
+        self.current_platform_filter = "all"
+        self.page.run_task(self.apply_filter)
+
+    def on_platform_button_click(self, key):
+        self.current_platform_filter = key
+        self.page.run_task(self.apply_filter)

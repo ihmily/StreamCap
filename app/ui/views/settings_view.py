@@ -1,5 +1,6 @@
 import asyncio
 import os
+import json
 
 import flet as ft
 
@@ -9,6 +10,8 @@ from ...utils.delay import DelayedTaskExecutor
 from ...utils.logger import logger
 from ..base_page import PageBase
 from ..components.help_dialog import HelpDialog
+from ...core.platform_handlers import get_platform_info
+from app.core.platform_handlers.platform_map import get_platform_display_name, platform_map
 
 
 class SettingsPage(PageBase):
@@ -94,6 +97,9 @@ class SettingsPage(PageBase):
         self.app.language_code = self.language_code
 
     def get_config_value(self, key, default=None):
+        # 默认平台筛选风格为平铺
+        if key == "platform_filter_style":
+            return self.user_config.get(key, self.default_config.get(key, "tile"))
         return self.user_config.get(key, self.default_config.get(key, default))
 
     def get_cookies_value(self, key, default=""):
@@ -108,8 +114,15 @@ class SettingsPage(PageBase):
 
         async def confirm_dlg(_):
             ui_language = self.user_config["language"]
+            vlc_path = self.user_config.get("vlc_path", "")
             self.user_config = self.default_config.copy()
             self.user_config["language"] = ui_language
+            self.user_config["enable_proxy"] = False
+            # 保留VLC路径设置
+            if vlc_path:
+                self.user_config["vlc_path"] = vlc_path
+            # 恢复默认平台筛选风格为平铺
+            self.user_config["platform_filter_style"] = "tile"
             self.app.language_manager.notify_observers()
             self.page.run_task(self.load)
             await self.config_manager.save_user_config(self.user_config)
@@ -142,7 +155,11 @@ class SettingsPage(PageBase):
         if isinstance(e.control, (ft.Switch, ft.Checkbox)):
             self.user_config[key] = e.data.lower() == "true"
         else:
-            self.user_config[key] = e.data
+            # 特殊处理vlc_path，替换为Windows风格分隔符
+            if key == "vlc_path":
+                self.user_config[key] = e.data.replace("/", "\\")
+            else:
+                self.user_config[key] = e.data
             
         if key in ["folder_name_platform", "folder_name_author", "folder_name_time", "folder_name_title"]:
             for recording in self.app.record_manager.recordings:
@@ -154,6 +171,10 @@ class SettingsPage(PageBase):
             self.app.language_manager.load()
             self.app.language_manager.notify_observers()
             self.page.run_task(self.load)
+            # 国际化提示
+            is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
+            tip = "请点击主界面的刷新按钮来刷新监控卡片信息" if is_zh else "Please click the refresh button on the main page to refresh the monitor cards"
+            self.page.run_task(self.app.snack_bar.show_snack_bar, tip, ft.Colors.AMBER)
 
         if key == "loop_time_seconds":
             self.app.record_manager.initialize_dynamic_state()
@@ -201,6 +222,61 @@ class SettingsPage(PageBase):
 
     def create_recording_settings_tab(self):
         """Create UI elements for recording settings."""
+        def get_all_platforms():
+            return platform_map
+        def get_platform_display_name_wrapper(key):
+            lang = self.app.language_code if hasattr(self.app, 'language_code') else 'zh_CN'
+            return get_platform_display_name(key, lang)
+
+        def get_selected_platforms_text():
+            current_value = self.get_config_value("default_platform_with_proxy", "")
+            selected_keys = [k for k in current_value.replace("，", ",").split(",") if k]
+            if not selected_keys:
+                return self._["none"] if "none" in self._ else "无"
+            return ", ".join([get_platform_display_name_wrapper(k) for k in selected_keys])
+
+        proxy_platform_text = ft.Text(get_selected_platforms_text(), width=220)
+        def show_platform_select_dialog(e):
+            current_value = self.get_config_value("default_platform_with_proxy", "")
+            selected_keys = set([k for k in current_value.replace("，", ",").split(",") if k])
+            all_platforms = get_all_platforms()
+            checkboxes = []
+            for key in all_platforms:
+                cb = ft.Checkbox(
+                    label=get_platform_display_name_wrapper(key),
+                    value=key in selected_keys,
+                    data=key
+                )
+                checkboxes.append(cb)
+            dialog = ft.AlertDialog(
+                title=ft.Text(self._["default_platform_with_proxy"]),
+                content=ft.Column(checkboxes, scroll=ft.ScrollMode.AUTO, height=400),
+                actions=[
+                    ft.TextButton(self._["cancel"], on_click=lambda e: close_dialog()),
+                    ft.TextButton(self._["sure"], on_click=lambda e: save_selection(checkboxes, dialog)),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+                modal=True,
+            )
+            self.app.dialog_area.content = dialog
+            dialog.open = True
+            self.app.dialog_area.update()
+
+        def save_selection(checkboxes, dialog):
+            selected = [cb.data for cb in checkboxes if cb.value]
+            self.user_config["default_platform_with_proxy"] = ",".join(selected)
+            self.page.run_task(self.delay_handler.start_task_timer, self.save_user_config_after_delay, None)
+            self.has_unsaved_changes['user_config'] = True
+            dialog.open = False
+            self.app.dialog_area.update()
+            proxy_platform_text.value = get_selected_platforms_text()
+            proxy_platform_text.update()
+            self.page.update()
+
+        def close_dialog():
+            self.app.dialog_area.content.open = False
+            self.app.dialog_area.update()
+
         return ft.Column(
             [
                 self.create_setting_group(
@@ -255,6 +331,42 @@ class SettingsPage(PageBase):
                             ),
                         ),
                         self.create_folder_setting_row(self._["name_rules"]),
+                        self.create_setting_row(
+                            self._["vlc_path"],
+                            ft.TextField(
+                                value=self.get_config_value("vlc_path", ""),
+                                width=380,
+                                on_change=self.on_change,
+                                data="vlc_path",
+                                hint_text=self._["vlc_path_hint"] if "vlc_path_hint" in self._ else "",
+                            ),
+                        ),
+                        self.create_setting_row(
+                            self._["default_platform_with_proxy"],
+                            ft.Row([
+                                proxy_platform_text,
+                                ft.ElevatedButton(
+                                    text=self._["select"],
+                                    icon=ft.Icons.LIST_ALT,
+                                    on_click=show_platform_select_dialog,
+                                    tooltip=self._["default_platform_with_proxy"]
+                                )
+                            ]),
+                        ),
+                        self.create_setting_row(
+                            self._["platform_filter_style"],
+                            ft.Dropdown(
+                                options=[
+                                    ft.dropdown.Option(key="tile", text=self._["platform_filter_style_tile"]),
+                                    ft.dropdown.Option(key="dropdown", text=self._["platform_filter_style_dropdown"]),
+                                ],
+                                value=self.get_config_value("platform_filter_style", "tile"),
+                                width=260,
+                                on_change=self.on_change,
+                                data="platform_filter_style",
+                                tooltip=self._["platform_filter_style_tip"],
+                            ),
+                        ),
                     ],
                 ),
                 self.create_setting_group(
@@ -390,15 +502,6 @@ class SettingsPage(PageBase):
                                 on_change=self.on_change,
                             ),
                         ),
-                        self.create_setting_row(
-                            self._["default_platform_with_proxy"],
-                            ft.TextField(
-                                value=self.get_config_value("default_platform_with_proxy"),
-                                width=300,
-                                data="default_platform_with_proxy",
-                                on_change=self.on_change,
-                            ),
-                        ),
                     ],
                 ),
             ],
@@ -495,25 +598,17 @@ class SettingsPage(PageBase):
                                     self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
                                 ),
                                 self.create_channel_switch_container(
-                                    self._["serverchan"], ft.Icons.CLOUD_OUTLINED, "serverchan_enabled"
-                                ),
-                                self.create_channel_switch_container(self._["email"], ft.Icons.EMAIL, "email_enabled"),
-                                self.create_channel_switch_container(
                                     "Bark", ft.Icons.NOTIFICATIONS_ACTIVE, "bark_enabled"
-                                )
-                            ],
-                            alignment=ft.MainAxisAlignment.START,
-                            spacing=12,
-                        ),
-                        ft.Row(
-                            controls=[
+                                ),
                                 self.create_channel_switch_container("Ntfy", ft.Icons.NOTIFICATIONS, "ntfy_enabled"),
-                                self.create_channel_switch_container(
-                                    self._["telegram"], ft.Icons.SMS, "telegram_enabled"),
+                                self.create_channel_switch_container("Telegram", ft.Icons.SMS, "telegram_enabled"),
+                                self.create_channel_switch_container("Email", ft.Icons.EMAIL, "email_enabled"),
                             ],
+                            wrap=False,
                             alignment=ft.MainAxisAlignment.START,
-                            spacing=12,
-                        ),
+                            spacing=10,
+                            run_spacing=10,
+                        )
                     ],
                 ),
                 self.create_setting_group(
@@ -563,99 +658,6 @@ class SettingsPage(PageBase):
                                         width=300,
                                         on_change=self.on_change,
                                         data="wechat_webhook_url",
-                                    ),
-                                ),
-                            ],
-                        ),
-                        self.create_channel_config(
-                            self._["serverchan"],
-                            [
-                                self.create_setting_row(
-                                    self._["serverchan_send_key"],
-                                    ft.TextField(
-                                        value=self.get_config_value("serverchan_sendkey"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="serverchan_sendkey",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["serverchan_channel"],
-                                    ft.TextField(
-                                        value=self.get_config_value("serverchan_channel"),
-                                        width=300,
-                                        keyboard_type=ft.KeyboardType.NUMBER,
-                                        on_change=self.on_change,
-                                        data="serverchan_channel",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["serverchan_tags"],
-                                    ft.TextField(
-                                        value=self.get_config_value("serverchan_tags"),
-                                        width=300,
-                                        keyboard_type=ft.KeyboardType.NUMBER,
-                                        on_change=self.on_change,
-                                        data="serverchan_tags",
-                                    ),
-                                ),
-                            ],
-                        ),
-                        self.create_channel_config(
-                            self._["email"],
-                            [
-                                self.create_setting_row(
-                                    self._["smtp_server"],
-                                    ft.TextField(
-                                        value=self.get_config_value("smtp_server"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="smtp_server",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["email_username"],
-                                    ft.TextField(
-                                        value=self.get_config_value("email_username"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="email_username",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["email_password"],
-                                    ft.TextField(
-                                        value=self.get_config_value("email_password"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="email_password",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["sender_email"],
-                                    ft.TextField(
-                                        value=self.get_config_value("sender_email"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="sender_email",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["sender_name"],
-                                    ft.TextField(
-                                        value=self.get_config_value("sender_name"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="sender_name",
-                                    ),
-                                ),
-                                self.create_setting_row(
-                                    self._["recipient_email"],
-                                    ft.TextField(
-                                        value=self.get_config_value("recipient_email"),
-                                        width=300,
-                                        on_change=self.on_change,
-                                        data="recipient_email",
                                     ),
                                 ),
                             ],
@@ -735,7 +737,7 @@ class SettingsPage(PageBase):
                             ],
                         ),
                         self.create_channel_config(
-                            self._["telegram"],
+                            "Telegram",
                             [
                                 self.create_setting_row(
                                     self._["telegram_api_token"],
@@ -753,6 +755,65 @@ class SettingsPage(PageBase):
                                         width=300,
                                         on_change=self.on_change,
                                         data="telegram_chat_id",
+                                    ),
+                                ),
+                            ],
+                        ),
+                        self.create_channel_config(
+                            "Email",
+                            [
+                                self.create_setting_row(
+                                    self._["smtp_server"],
+                                    ft.TextField(
+                                        value=self.get_config_value("smtp_server"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="smtp_server",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["email_username"],
+                                    ft.TextField(
+                                        value=self.get_config_value("email_username"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="email_username",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["email_password"],
+                                    ft.TextField(
+                                        value=self.get_config_value("email_password"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="email_password",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["sender_email"],
+                                    ft.TextField(
+                                        value=self.get_config_value("sender_email"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="sender_email",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["sender_name"],
+                                    ft.TextField(
+                                        value=self.get_config_value("sender_name"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="sender_name",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["recipient_email"],
+                                    ft.TextField(
+                                        value=self.get_config_value("recipient_email"),
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="recipient_email",
                                     ),
                                 ),
                             ],

@@ -2,9 +2,13 @@ import abc
 import inspect
 import re
 import threading
+import weakref
+import gc
+import time
 from typing import Any, Optional, TypeVar
 
 from streamget import StreamData
+from ...utils.logger import logger
 
 T = TypeVar("T", bound="PlatformHandler")
 InstanceKey = tuple[str | None, tuple[tuple[str, str], ...] | None, str, str | None]
@@ -12,8 +16,12 @@ InstanceKey = tuple[str | None, tuple[tuple[str, str], ...] | None, str, str | N
 
 class PlatformHandler(abc.ABC):
     _registry: dict[str, type["PlatformHandler"]] = {}
-    _instances: dict[InstanceKey, "PlatformHandler"] = {}
+    _instances: weakref.WeakValueDictionary = weakref.WeakValueDictionary()
+    _instance_last_used: dict[InstanceKey, float] = {}  # 记录实例最后使用时间
     _lock: threading.Lock = threading.Lock()
+    _instance_creation_count = 0  # 跟踪创建的实例总数
+    _instance_access_count = 0    # 跟踪访问实例的次数
+    _INACTIVE_THRESHOLD = 300    # 5分钟不活跃的实例将被标记为可清理
 
     def __init__(
         self,
@@ -32,6 +40,10 @@ class PlatformHandler(abc.ABC):
         self.username = username
         self.password = password
         self.account_type = account_type
+        # 记录实例创建的平台信息，用于日志
+        self._platform_info = f"{platform or 'unknown'}-{record_quality or 'default'}"
+        self._created_at = time.time()
+        self._last_accessed = time.time()
 
     @abc.abstractmethod
     async def get_stream_info(self, live_url: str) -> StreamData:
@@ -93,12 +105,25 @@ class PlatformHandler(abc.ABC):
         """
         Get or create an instance of a platform handler based on the live URL and other parameters.
         """
+        cls._instance_access_count += 1
+        
         handler_class = cls._get_handler_class(live_url)
         if not handler_class:
+            logger.warning(f"实例管理 - 未找到匹配的处理器类: {live_url}")
             return None
 
         instance_key = cls._get_instance_key(proxy, cookies, record_quality, platform)
-        if instance_key not in cls._instances:
+        instance_exists = instance_key in cls._instances
+        
+        if instance_exists:
+            logger.info(f"实例管理 - 复用现有实例: {platform or 'unknown'}-{record_quality or 'default'}")
+            # 更新最后使用时间
+            with cls._lock:
+                cls._instance_last_used[instance_key] = time.time()
+                instance = cls._instances[instance_key]
+                instance._last_accessed = time.time()
+        
+        if not instance_exists:
             init_signature = inspect.signature(handler_class.__init__)
             handler_kwargs: dict[str, Any] = {
                 "proxy": proxy,
@@ -112,6 +137,79 @@ class PlatformHandler(abc.ABC):
             filtered_kwargs = {k: v for k, v in handler_kwargs.items() if k in init_signature.parameters}
             with cls._lock:
                 if instance_key not in cls._instances:
-                    cls._instances[instance_key] = handler_class(**filtered_kwargs)
+                    cls._instance_creation_count += 1
+                    instance = handler_class(**filtered_kwargs)
+                    cls._instances[instance_key] = instance
+                    cls._instance_last_used[instance_key] = time.time()
+                    logger.info(f"实例管理 - 创建新实例: {platform or 'unknown'}-{record_quality or 'default'}, "
+                               f"总创建数: {cls._instance_creation_count}, 当前缓存数: {len(cls._instances)}")
 
         return cls._instances[instance_key]
+    
+    @classmethod
+    def clear_unused_instances(cls):
+        """
+        清理未使用的实例缓存，主动移除长时间未使用的实例和已不再被引用的实例
+        """
+        with cls._lock:
+            before_count = len(cls._instances)
+            current_time = time.time()
+            
+            # 首先，移除长时间未使用的实例引用
+            inactive_keys = [
+                key for key, last_used in cls._instance_last_used.items()
+                if current_time - last_used > cls._INACTIVE_THRESHOLD
+            ]
+            
+            for key in inactive_keys:
+                if key in cls._instances:
+                    logger.info(f"实例清理 - 移除长时间未使用的实例: {key}")
+                    # 从WeakValueDictionary中移除引用，允许GC回收
+                    del cls._instances[key]
+                    
+                # 从使用时间记录中移除
+                if key in cls._instance_last_used:
+                    del cls._instance_last_used[key]
+            
+            # 清理_instance_last_used中不存在于_instances的键
+            orphaned_keys = [key for key in cls._instance_last_used.keys() if key not in cls._instances]
+            for key in orphaned_keys:
+                del cls._instance_last_used[key]
+            
+            # 手动触发垃圾回收
+            gc.collect()
+            
+            after_count = len(cls._instances)
+            logger.info(f"实例清理 - 清理前: {before_count}, 清理后: {after_count}, "
+                       f"减少: {before_count - after_count}, 主动清理: {len(inactive_keys)}")
+            logger.info(f"实例统计 - 总创建数: {cls._instance_creation_count}, "
+                       f"总访问数: {cls._instance_access_count}, "
+                       f"使用时间记录数: {len(cls._instance_last_used)}")
+            
+    @classmethod
+    def get_instances_count(cls) -> int:
+        """
+        获取当前缓存的实例数量，用于监控
+        """
+        return len(cls._instances)
+        
+    @classmethod
+    def get_instance_stats(cls) -> dict:
+        """
+        获取实例统计信息
+        """
+        inactive_count = 0
+        current_time = time.time()
+        
+        with cls._lock:
+            for key, last_used in cls._instance_last_used.items():
+                if current_time - last_used > cls._INACTIVE_THRESHOLD:
+                    inactive_count += 1
+        
+        return {
+            "current_count": len(cls._instances),
+            "inactive_count": inactive_count,
+            "total_created": cls._instance_creation_count,
+            "total_accessed": cls._instance_access_count,
+            "usage_records": len(cls._instance_last_used)
+        }

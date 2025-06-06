@@ -73,7 +73,8 @@ jobs:
         run: |
           # 创建downloads空文件夹
           New-Item -ItemType Directory -Force -Path "downloads" | Out-Null
-          Write-Host "Created downloads directory"
+          New-Item -ItemType File -Force -Path "downloads\.gitkeep" | Out-Null
+          Write-Host "Created downloads directory with .gitkeep file"
           
           # 创建logs文件夹和必要的日志文件
           New-Item -ItemType Directory -Force -Path "logs" | Out-Null
@@ -81,34 +82,51 @@ jobs:
           New-Item -ItemType File -Force -Path "logs\streamget.log" | Out-Null
           Write-Host "Created logs directory with required log files"
 
-      - name: Build Windows executable
+      - name: Build Windows executable with dependencies
         run: |
-          if (Test-Path -Path "assets\images\logo.ico") {
-            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.ico main.py
-          } else {
-            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --collect-all streamget --collect-all flet --onefile --windowed main.py
-          }
-
-      - name: Create _internal directory
-        run: |
-          # 创建_internal目录用于存放依赖
+          # 确保目录存在
+          New-Item -ItemType Directory -Force -Path "dist" | Out-Null
           New-Item -ItemType Directory -Force -Path "_internal" | Out-Null
           
-          # 复制必要的依赖文件到_internal目录
-          Copy-Item -Path "dist\_internal\*" -Destination "_internal\" -Recurse -Force -ErrorAction SilentlyContinue
-          if (-not (Test-Path -Path "_internal")) {
-            # 如果_internal目录不存在，则从site-packages复制
-            $SitePackages = & python -c "import site; print(site.getsitepackages()[0])"
-            New-Item -ItemType Directory -Force -Path "_internal\site-packages" | Out-Null
-            Copy-Item -Path "$SitePackages\flet*" -Destination "_internal\site-packages\" -Recurse -Force -ErrorAction SilentlyContinue
-            Copy-Item -Path "$SitePackages\streamget*" -Destination "_internal\site-packages\" -Recurse -Force -ErrorAction SilentlyContinue
+          # 构建可执行文件
+          if (Test-Path -Path "assets\images\logo.ico") {
+            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --add-data "downloads;downloads" --add-data "logs;logs" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.ico main.py
+          } else {
+            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --add-data "downloads;downloads" --add-data "logs;logs" --collect-all streamget --collect-all flet --onefile --windowed main.py
           }
-          Write-Host "Created _internal directory with dependencies"
+          
+          # 安装依赖到_internal目录
+          pip install -r requirements.txt --target="_internal"
+          Write-Host "Dependencies installed to _internal directory"
+
+      - name: Debug directory contents
+        run: |
+          Write-Host "Current directory structure:"
+          Get-ChildItem -Path .\ -Recurse -Depth 1 | Select-Object FullName
+          Write-Host "dist directory:"
+          Get-ChildItem -Path .\dist -Recurse -Depth 1 | Select-Object FullName
+          Write-Host "_internal directory:"
+          Get-ChildItem -Path .\_internal -Recurse -Depth 1 | Select-Object FullName
+          Write-Host "downloads directory:"
+          Get-ChildItem -Path .\downloads -Recurse -Depth 1 | Select-Object FullName
 
       - name: Create ZIP archive
         run: |
-          # 添加所有必要的文件和目录到ZIP
-          Compress-Archive -Path dist/StreamCap.exe, assets, config, locales, downloads, logs, _internal -DestinationPath StreamCap-Windows.zip
+          # 确保文件和目录存在
+          if (-not (Test-Path -Path "dist\StreamCap.exe")) {
+            Write-Error "StreamCap.exe not found in dist directory"
+            exit 1
+          }
+          
+          # 创建一个临时目录来准备打包内容
+          New-Item -ItemType Directory -Force -Path "package" | Out-Null
+          Copy-Item -Path "dist\StreamCap.exe" -Destination "package\" -Force
+          Copy-Item -Path "assets", "config", "locales" -Destination "package\" -Recurse -Force
+          Copy-Item -Path "downloads", "logs" -Destination "package\" -Recurse -Force
+          Copy-Item -Path "_internal" -Destination "package\" -Recurse -Force
+          
+          # 创建ZIP文件
+          Compress-Archive -Path "package\*" -DestinationPath "StreamCap-Windows.zip" -Force
 
       - name: Upload Windows build
         uses: actions/upload-release-asset@v1
@@ -152,7 +170,8 @@ jobs:
         run: |
           # 创建downloads空文件夹
           mkdir -p downloads
-          echo "Created downloads directory"
+          touch downloads/.gitkeep
+          echo "Created downloads directory with .gitkeep file"
           
           # 创建logs文件夹和必要的日志文件
           mkdir -p logs
@@ -160,34 +179,40 @@ jobs:
           touch logs/streamget.log
           echo "Created logs directory with required log files"
 
-      - name: Build macOS app
+      - name: Build macOS app with dependencies
         run: |
-          if [ -f "assets/images/logo.icns" ]; then
-            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.icns main.py
-          else
-            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --collect-all streamget --collect-all flet --onefile --windowed main.py
-          fi
-
-      - name: Create _internal directory
-        run: |
-          # 创建_internal目录用于存放依赖
+          # 确保目录存在
+          mkdir -p dist
           mkdir -p _internal
           
-          # 复制必要的依赖文件到_internal目录
-          if [ -d "dist/_internal" ]; then
-            cp -r dist/_internal/* _internal/
+          # 构建可执行文件
+          if [ -f "assets/images/logo.icns" ]; then
+            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --add-data "downloads:downloads" --add-data "logs:logs" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.icns main.py
           else
-            # 如果_internal目录不存在，则从site-packages复制
-            SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
-            mkdir -p _internal/site-packages
-            cp -r $SITE_PACKAGES/flet* _internal/site-packages/ 2>/dev/null || true
-            cp -r $SITE_PACKAGES/streamget* _internal/site-packages/ 2>/dev/null || true
+            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --add-data "downloads:downloads" --add-data "logs:logs" --collect-all streamget --collect-all flet --onefile --windowed main.py
           fi
-          echo "Created _internal directory with dependencies"
+          
+          # 安装依赖到_internal目录
+          pip install -r requirements.txt --target="_internal"
+          echo "Dependencies installed to _internal directory"
+
+      - name: Debug directory contents
+        run: |
+          echo "Current directory structure:"
+          find . -maxdepth 2 -type d
+          echo "dist directory:"
+          find ./dist -maxdepth 2
+          echo "_internal directory:"
+          find ./_internal -maxdepth 2
+          echo "downloads directory:"
+          find ./downloads -maxdepth 2
 
       - name: Create DMG
         run: |
+          # 创建一个临时目录来准备打包内容
           mkdir -p dist/dmg
+          
+          # 复制应用和必要的文件
           cp -r dist/StreamCap.app dist/dmg/
           cp -r assets dist/dmg/
           cp -r config dist/dmg/
@@ -195,6 +220,8 @@ jobs:
           cp -r downloads dist/dmg/
           cp -r logs dist/dmg/
           cp -r _internal dist/dmg/
+          
+          # 创建DMG
           hdiutil create -volname StreamCap -srcfolder dist/dmg -ov -format UDZO StreamCap-macOS.dmg
 
       - name: Upload macOS build

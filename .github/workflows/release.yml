@@ -5,6 +5,8 @@ on:
   push:
     tags:
       - 'v*'
+    branches:
+      - dev
 
 jobs:
   create_release:
@@ -13,6 +15,7 @@ jobs:
       contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
+      is_tag: ${{ startsWith(github.ref, 'refs/tags/') }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -30,8 +33,9 @@ jobs:
             git log --pretty=format:"* %s" $PREV_TAG..HEAD > CHANGELOG.md
           fi
 
-      - name: Create Release
+      - name: Create Release (only for tags)
         id: create_release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/create-release@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,6 +45,12 @@ jobs:
           draft: false
           prerelease: false
           body_path: CHANGELOG.md
+      
+      # 为dev分支创建一个模拟的upload_url输出，避免后续任务失败
+      - name: Set mock upload URL for dev branch
+        if: github.ref == 'refs/heads/dev'
+        id: mock_upload_url
+        run: echo "upload_url=https://mock-url-for-dev-branch" >> $GITHUB_OUTPUT
 
   build-windows-gui:
     needs: create_release
@@ -207,7 +217,8 @@ jobs:
           # 压缩整个dist/StreamCap目录
           Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows-GUI.zip" -Force
 
-      - name: Upload Windows GUI build
+      - name: Upload Windows GUI build to release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -216,6 +227,13 @@ jobs:
           asset_path: ./StreamCap-Windows-GUI.zip
           asset_name: StreamCap-Windows-GUI.zip
           asset_content_type: application/zip
+
+      - name: Upload Windows GUI build as artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v3
+        with:
+          name: StreamCap-Windows-GUI
+          path: ./StreamCap-Windows-GUI.zip
 
   build-windows-console:
     needs: create_release
@@ -258,7 +276,8 @@ jobs:
           # 压缩整个dist/StreamCap目录
           Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows-Console.zip" -Force
 
-      - name: Upload Windows Console build
+      - name: Upload Windows Console build to release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -267,6 +286,13 @@ jobs:
           asset_path: ./StreamCap-Windows-Console.zip
           asset_name: StreamCap-Windows-Console.zip
           asset_content_type: application/zip
+
+      - name: Upload Windows Console build as artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v3
+        with:
+          name: StreamCap-Windows-Console
+          path: ./StreamCap-Windows-Console.zip
 
   build-macos:
     needs: create_release
@@ -334,7 +360,8 @@ jobs:
           # 直接从dist/StreamCap创建DMG
           hdiutil create -volname StreamCap -srcfolder dist/StreamCap -ov -format UDZO StreamCap-macOS.dmg
 
-      - name: Upload macOS build
+      - name: Upload macOS build to release
+        if: startsWith(github.ref, 'refs/tags/')
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -343,6 +370,13 @@ jobs:
           asset_path: ./StreamCap-macOS.dmg
           asset_name: StreamCap-macOS.dmg
           asset_content_type: application/octet-stream
+
+      - name: Upload macOS build as artifact
+        if: github.ref == 'refs/heads/dev'
+        uses: actions/upload-artifact@v3
+        with:
+          name: StreamCap-macOS
+          path: ./StreamCap-macOS.dmg
 
   build-docker:
     needs: create_release
@@ -360,12 +394,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       
+      - name: Set Docker tags
+        id: docker_tags
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "DOCKER_TAGS=${{ secrets.DOCKER_HUB_USERNAME }}/streamcap:latest,${{ secrets.DOCKER_HUB_USERNAME }}/streamcap:${{ github.ref_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "DOCKER_TAGS=${{ secrets.DOCKER_HUB_USERNAME }}/streamcap:dev" >> $GITHUB_OUTPUT
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ secrets.DOCKER_HUB_USERNAME }}/streamcap:latest
-            ${{ secrets.DOCKER_HUB_USERNAME }}/streamcap:${{ github.ref_name }} 
+          tags: ${{ steps.docker_tags.outputs.DOCKER_TAGS }} 

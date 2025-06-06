@@ -69,17 +69,46 @@ jobs:
             Write-Host "Warning: Icon file assets\icon.ico not found. Using default icon."
           }
 
+      - name: Create required directories and files
+        run: |
+          # 创建downloads空文件夹
+          New-Item -ItemType Directory -Force -Path "downloads" | Out-Null
+          Write-Host "Created downloads directory"
+          
+          # 创建logs文件夹和必要的日志文件
+          New-Item -ItemType Directory -Force -Path "logs" | Out-Null
+          New-Item -ItemType File -Force -Path "logs\play_url.log" | Out-Null
+          New-Item -ItemType File -Force -Path "logs\streamget.log" | Out-Null
+          Write-Host "Created logs directory with required log files"
+
       - name: Build Windows executable
         run: |
           if (Test-Path -Path "assets\images\logo.ico") {
-            pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.ico main.py
+            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.ico main.py
           } else {
-            pyinstaller --name StreamCap --onefile --windowed main.py
+            pyinstaller --name StreamCap --add-data "assets;assets" --add-data "config;config" --add-data "locales;locales" --collect-all streamget --collect-all flet --onefile --windowed main.py
           }
+
+      - name: Create _internal directory
+        run: |
+          # 创建_internal目录用于存放依赖
+          New-Item -ItemType Directory -Force -Path "_internal" | Out-Null
+          
+          # 复制必要的依赖文件到_internal目录
+          Copy-Item -Path "dist\_internal\*" -Destination "_internal\" -Recurse -Force -ErrorAction SilentlyContinue
+          if (-not (Test-Path -Path "_internal")) {
+            # 如果_internal目录不存在，则从site-packages复制
+            $SitePackages = & python -c "import site; print(site.getsitepackages()[0])"
+            New-Item -ItemType Directory -Force -Path "_internal\site-packages" | Out-Null
+            Copy-Item -Path "$SitePackages\flet*" -Destination "_internal\site-packages\" -Recurse -Force -ErrorAction SilentlyContinue
+            Copy-Item -Path "$SitePackages\streamget*" -Destination "_internal\site-packages\" -Recurse -Force -ErrorAction SilentlyContinue
+          }
+          Write-Host "Created _internal directory with dependencies"
 
       - name: Create ZIP archive
         run: |
-          Compress-Archive -Path dist/StreamCap.exe, assets, config, locales -DestinationPath StreamCap-Windows.zip
+          # 添加所有必要的文件和目录到ZIP
+          Compress-Archive -Path dist/StreamCap.exe, assets, config, locales, downloads, logs, _internal -DestinationPath StreamCap-Windows.zip
 
       - name: Upload Windows build
         uses: actions/upload-release-asset@v1
@@ -119,13 +148,42 @@ jobs:
             echo "Warning: Icon file assets/icon.ico not found. Using default icon."
           fi
 
+      - name: Create required directories and files
+        run: |
+          # 创建downloads空文件夹
+          mkdir -p downloads
+          echo "Created downloads directory"
+          
+          # 创建logs文件夹和必要的日志文件
+          mkdir -p logs
+          touch logs/play_url.log
+          touch logs/streamget.log
+          echo "Created logs directory with required log files"
+
       - name: Build macOS app
         run: |
           if [ -f "assets/images/logo.icns" ]; then
-            pyinstaller --name StreamCap --onefile --windowed --icon=assets/images/logo.icns main.py
+            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --collect-all streamget --collect-all flet --onefile --windowed --icon=assets/images/logo.icns main.py
           else
-            pyinstaller --name StreamCap --onefile --windowed main.py
+            pyinstaller --name StreamCap --add-data "assets:assets" --add-data "config:config" --add-data "locales:locales" --collect-all streamget --collect-all flet --onefile --windowed main.py
           fi
+
+      - name: Create _internal directory
+        run: |
+          # 创建_internal目录用于存放依赖
+          mkdir -p _internal
+          
+          # 复制必要的依赖文件到_internal目录
+          if [ -d "dist/_internal" ]; then
+            cp -r dist/_internal/* _internal/
+          else
+            # 如果_internal目录不存在，则从site-packages复制
+            SITE_PACKAGES=$(python -c "import site; print(site.getsitepackages()[0])")
+            mkdir -p _internal/site-packages
+            cp -r $SITE_PACKAGES/flet* _internal/site-packages/ 2>/dev/null || true
+            cp -r $SITE_PACKAGES/streamget* _internal/site-packages/ 2>/dev/null || true
+          fi
+          echo "Created _internal directory with dependencies"
 
       - name: Create DMG
         run: |
@@ -134,6 +192,9 @@ jobs:
           cp -r assets dist/dmg/
           cp -r config dist/dmg/
           cp -r locales dist/dmg/
+          cp -r downloads dist/dmg/
+          cp -r logs dist/dmg/
+          cp -r _internal dist/dmg/
           hdiutil create -volname StreamCap -srcfolder dist/dmg -ov -format UDZO StreamCap-macOS.dmg
 
       - name: Upload macOS build

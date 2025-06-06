@@ -49,12 +49,13 @@ class RecordingDialog:
             value=initial_values.get("url"),
             on_change=on_url_change,
         )
+        user_config = self.app.settings.user_config
         quality_dropdown = ft.Dropdown(
             label=self._["select_resolution"],
             options=[ft.dropdown.Option(i, text=self._[i]) for i in VideoQuality.get_qualities()],
             border_radius=5,
             filled=False,
-            value=initial_values.get("quality", VideoQuality.OD),
+            value=initial_values.get("quality", user_config.get("record_quality", VideoQuality.OD)),
             width=500,
         )
         streamer_name_field = ft.TextField(
@@ -74,12 +75,13 @@ class RecordingDialog:
             value="video",
             on_change=update_format_options
         )
+        user_config = self.app.settings.user_config
         record_format_field = ft.Dropdown(
             label=self._["select_record_format"],
             options=[ft.dropdown.Option(i) for i in VideoFormat.get_formats()],
             border_radius=5,
             filled=False,
-            value=initial_values.get("record_format", VideoFormat.TS),
+            value=initial_values.get("record_format", user_config.get("video_format", VideoFormat.TS)),
             width=245,
             menu_height=200
         )
@@ -213,6 +215,16 @@ class RecordingDialog:
             width=500,
         )
 
+        record_mode_dropdown = ft.Dropdown(
+            label=self._.get("record_mode", "录制模式"),
+            options=[
+                ft.dropdown.Option("auto", self._.get("auto_record", "自动录制")),
+                ft.dropdown.Option("manual", self._.get("manual_record", "手动录制"))
+            ],
+            value=initial_values.get("record_mode", "auto"),
+            width=500,
+        )
+
         hint_text_dict = {
             "en": "Example:\n0，https://v.douyin.com/AbcdE，nickname1\n0，https://v.douyin.com/EfghI，nickname2\n\nPS: "
             "0=original image or Blu ray, 1=ultra clear, 2=high-definition, 3=standard definition, 4=smooth\n",
@@ -251,9 +263,9 @@ class RecordingDialog:
                                 ft.Container(margin=ft.margin.only(top=10)),
                                 url_field,
                                 streamer_name_field,
-                                # record_format_field,
                                 format_row,
                                 quality_dropdown,
+                                record_mode_dropdown,
                                 recording_dir_field,
                                 segment_setting_dropdown,
                                 segment_input,
@@ -275,7 +287,12 @@ class RecordingDialog:
         )
 
         async def not_supported(url):
-            logger.warning(f"This platform does not support recording: {url}")
+            lang_code = getattr(self.app, "language_code", "zh_CN").lower()
+            if not lang_code or "zh" in lang_code:
+                log_msg = f"⚠️ 暂不支持该平台录制: {url}"
+            else:
+                log_msg = f"⚠️ This platform does not support recording: {url}"
+            logger.warning(log_msg)
             await self.app.snack_bar.show_snack_bar(self._["platform_not_supported_tip"], duration=3000)
 
         async def on_confirm(e):
@@ -298,25 +315,93 @@ class RecordingDialog:
                     await close_dialog(e)
                     return
 
+                # 新增：直接获取直播间信息
+                real_anchor_name = anchor_name
+                real_title = title
+                try:
+                    from ...core.stream_manager import LiveStreamRecorder
+                    recording_info_dict = {
+                        "platform": platform,
+                        "platform_key": platform_key,
+                        "live_url": live_url,
+                        "output_dir": self.app.record_manager.settings.get_video_save_path(),
+                        "segment_record": segment_input.visible,
+                        "segment_time": segment_input.value,
+                        "save_format": record_format_field.value,
+                        "quality": quality_dropdown.value,
+                    }
+                    # 创建一个临时Recording对象传递给LiveStreamRecorder，避免使用None
+                    from ...models.recording_model import Recording
+                    temp_recording = Recording(
+                        rec_id=None,
+                        url=live_url,
+                        streamer_name=anchor_name,
+                        record_format=record_format_field.value,
+                        quality=quality_dropdown.value,
+                        segment_record=segment_input.visible,
+                        segment_time=segment_input.value,
+                        monitor_status=False,
+                        scheduled_recording=False,
+                        scheduled_start_time=None,
+                        monitor_hours=None,
+                        recording_dir=None,
+                        enabled_message_push=False
+                    )
+                    
+                    # 在编辑对话框中获取直播间信息时，不使用代理，避免可能的JSON解析错误
+                    # 强制设置proxy为None，避免使用系统代理
+                    user_config = self.app.settings.user_config
+                    original_proxy_setting = user_config.get("enable_proxy", False)
+                    original_proxy_platforms = user_config.get("default_platform_with_proxy", "")
+                    
+                    # 临时禁用代理
+                    try:
+                        # 创建不使用代理的LiveStreamRecorder实例
+                        recorder = LiveStreamRecorder(self.app, temp_recording, recording_info_dict)
+                        # 强制设置proxy为None
+                        recorder.proxy = None
+                        stream_info = await recorder.fetch_stream()
+                        if stream_info:
+                            real_anchor_name = getattr(stream_info, "anchor_name", anchor_name)
+                            real_title = getattr(stream_info, "title", title)
+                    except Exception as ex:
+                        logger.error(f"[Dialog] 不使用代理获取直播间信息失败: {ex}")
+                        # 如果不使用代理失败，尝试使用代理
+                        logger.info("[Dialog] 尝试使用代理获取直播间信息")
+                        try:
+                            recorder = LiveStreamRecorder(self.app, temp_recording, recording_info_dict)
+                            stream_info = await recorder.fetch_stream()
+                            if stream_info:
+                                real_anchor_name = getattr(stream_info, "anchor_name", anchor_name)
+                                real_title = getattr(stream_info, "title", title)
+                        except Exception as ex2:
+                            logger.error(f"[Dialog] 使用代理获取直播间信息也失败: {ex2}")
+                            # 继续使用默认值
+                except Exception as ex:
+                    logger.error(f"[Dialog] 获取直播间信息失败: {ex}")
+                    # 继续使用默认值
+
                 recordings_info = [
                     {
                         "rec_id": rec_id,
                         "url": live_url,
-                        "streamer_name": anchor_name,
+                        "streamer_name": real_anchor_name,
                         "record_format": record_format_field.value,
                         "quality": quality_dropdown.value,
                         "quality_info": quality_info,
-                        "title": title,
+                        "title": f"{real_anchor_name} - {quality_info}",
                         "speed": "X KB/s",
                         "segment_record": segment_input.visible,
                         "segment_time": segment_input.value,
                         "monitor_status": initial_values.get("monitor_status", True),
-                        "display_title": display_title,
+                        "display_title": f"{real_anchor_name} - {quality_info}",
                         "scheduled_recording": schedule_and_monitor_row.visible,
                         "scheduled_start_time": str(scheduled_start_time_input.value),
                         "monitor_hours": monitor_hours_input.value,
                         "recording_dir": recording_dir_field.value,
-                        "enabled_message_push": message_push_dropdown.value == "true"
+                        "enabled_message_push": message_push_dropdown.value == "true",
+                        "record_mode": record_mode_dropdown.value,
+                        "live_title": real_title,
                     }
                 ]
                 await self.on_confirm_callback(recordings_info)

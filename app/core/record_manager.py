@@ -126,6 +126,14 @@ class RecordingManager:
                 selected=False,
             )
             self.stop_recording(recording)
+            
+            # 手动停止监控时，重置通知状态和was_recording标志
+            # 这样下次开始监控时可以再次发送通知
+            recording.notification_sent = False
+            if hasattr(recording, 'was_recording'):
+                recording.was_recording = False
+            logger.info(f"手动停止监控，重置通知状态: {recording.streamer_name}")
+            
             self.app.page.run_task(self.app.record_card_manager.update_card, recording)
             self.app.page.pubsub.send_others_on_topic("update", recording)
             if auto_save:
@@ -252,68 +260,147 @@ class RecordingManager:
                 logger.error(f"Fetch stream data failed: {recording.url}")
                 recording.is_checking = False
                 recording.status_info = RecordingStatus.LIVE_STATUS_CHECK_ERROR
-                if recording.monitor_status:
-                    self.app.page.run_task(self.app.record_card_manager.update_card, recording)
                 return
 
             if self.settings.user_config.get("remove_emojis"):
                 stream_info.anchor_name = utils.clean_name(stream_info.anchor_name, self._["live_room"])
 
+            # 检查直播状态变化
+            was_live = recording.is_live
             recording.is_live = stream_info.is_live
+            
+            # 如果直播状态从在线变为离线，重置通知状态
+            if was_live and not recording.is_live:
+                recording.notification_sent = False
+                logger.info(f"直播已结束，重置通知状态: {recording.streamer_name}")
+                
             is_record = True
             if recording.is_live and not recording.recording:
-                recording.status_info = RecordingStatus.PREPARING_RECORDING
                 recording.live_title = stream_info.title
-                if recording.streamer_name.strip() == self._["live_room"]:
+                if not recording.streamer_name or recording.streamer_name.strip() == self._["live_room"]:
                     recording.streamer_name = stream_info.anchor_name
                 recording.title = f"{recording.streamer_name} - {self._[recording.quality]}"
                 recording.display_title = f"[{self._['is_live']}] {recording.title}"
 
-                if self.settings.user_config["stream_start_notification_enabled"] or recording.enabled_message_push:
-                    push_content = self._["push_content"]
-                    begin_push_message_text = self.settings.user_config.get("custom_stream_start_content")
-                    if begin_push_message_text:
-                        push_content = begin_push_message_text
+                if getattr(recording, "record_mode", "auto") == "auto":
+                    recording.status_info = RecordingStatus.PREPARING_RECORDING
+                    if self.settings.user_config["stream_start_notification_enabled"] or recording.enabled_message_push:
+                        # 检查是否有至少一个推送渠道被启用
+                        user_config = self.settings.user_config
+                        bark_enabled = user_config.get("bark_enabled", False)
+                        wechat_enabled = user_config.get("wechat_enabled", False)
+                        dingtalk_enabled = user_config.get("dingtalk_enabled", False)
+                        ntfy_enabled = user_config.get("ntfy_enabled", False)
+                        telegram_enabled = user_config.get("telegram_enabled", False)
+                        email_enabled = user_config.get("email_enabled", False)
+                        
+                        any_channel_enabled = (
+                            bark_enabled or wechat_enabled or dingtalk_enabled or 
+                            ntfy_enabled or telegram_enabled or email_enabled
+                        )
+                        
+                        logger.info(f"推送渠道状态: bark={bark_enabled}, wechat={wechat_enabled}, "
+                                   f"dingtalk={dingtalk_enabled}, ntfy={ntfy_enabled}, "
+                                   f"telegram={telegram_enabled}, email={email_enabled}")
+                        
+                        # 检查是否已经发送过通知，避免重复发送
+                        if any_channel_enabled and not recording.notification_sent:
+                            push_content = self._["push_content"]
+                            begin_push_message_text = self.settings.user_config.get("custom_stream_start_content")
+                            if begin_push_message_text:
+                                push_content = begin_push_message_text
 
-                    push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
-                    push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
-                        "[time]", push_at
-                    )
-                    msg_title = self.settings.user_config.get("custom_notification_title").strip()
-                    msg_title = msg_title or self._["status_notify"]
+                            push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
+                            push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
+                                "[time]", push_at
+                            )
+                            msg_title = self.settings.user_config.get("custom_notification_title").strip()
+                            msg_title = msg_title or self._["status_notify"]
 
-                    msg_manager = MessagePusher(self.settings)
-                    self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                            logger.info(f"自动录制模式下触发消息推送: {msg_title} - {push_content}")
+                            msg_manager = MessagePusher(self.settings)
+                            self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                            # 设置通知已发送标志
+                            recording.notification_sent = True
+                        elif recording.notification_sent:
+                            logger.info(f"已经发送过开播通知，跳过重复发送: {recording.streamer_name}")
+                        else:
+                            logger.info("没有启用任何推送渠道，跳过消息推送")
 
-                    if self.settings.user_config.get("only_notify_no_record"):
-                        notify_loop_time = self.settings.user_config.get("notify_loop_time")
-                        recording.loop_time_seconds = int(notify_loop_time or 3600)
-                        is_record = False
-                    else:
-                        recording.loop_time_seconds = self.loop_time_seconds
+                        if self.settings.user_config.get("only_notify_no_record"):
+                            notify_loop_time = self.settings.user_config.get("notify_loop_time")
+                            recording.loop_time_seconds = int(notify_loop_time or 3600)
+                            is_record = False
+                            # 设置状态为"直播中（未录制）"，确保UI显示正确
+                            recording.status_info = RecordingStatus.NOT_RECORDING
+                        else:
+                            recording.loop_time_seconds = self.loop_time_seconds
 
-                if is_record:
-                    self.start_update(recording)
-                    self.app.page.run_task(recorder.start_recording, stream_info)
+                    if is_record:
+                        self.start_update(recording)
+                        self.app.page.run_task(recorder.start_recording, stream_info)
 
-                self.app.page.run_task(self.app.record_card_manager.update_card, recording)
-                self.app.page.pubsub.send_others_on_topic("update", recording)
-
-            else:
-                recording.status_info = RecordingStatus.MONITORING
-                title = f"{stream_info.anchor_name or recording.streamer_name} - {self._[recording.quality]}"
-                if recording.streamer_name == self._["live_room"] or \
-                        f"[{self._['is_live']}]" in recording.display_title:
-                    recording.update(
-                        {
-                            "streamer_name": stream_info.anchor_name,
-                            "title": title,
-                            "display_title": title,
-                        }
-                    )
                     self.app.page.run_task(self.app.record_card_manager.update_card, recording)
                     self.app.page.pubsub.send_others_on_topic("update", recording)
-                    self.app.page.run_task(self.persist_recordings)
+                else:
+                    # 手动录制模式下，设置状态为"直播中（未录制）"
+                    recording.status_info = RecordingStatus.NOT_RECORDING
+                    
+                    # 在手动模式下，当直播间处于"直播中（未录制）"状态时也触发消息推送
+                    # 但要避免从"录制中"状态变为"直播中（未录制）"状态时重复发送
+                    was_recording = getattr(recording, "was_recording", False)
+                    
+                    if self.settings.user_config["stream_start_notification_enabled"] or recording.enabled_message_push:
+                        # 检查是否有至少一个推送渠道被启用
+                        user_config = self.settings.user_config
+                        bark_enabled = user_config.get("bark_enabled", False)
+                        wechat_enabled = user_config.get("wechat_enabled", False)
+                        dingtalk_enabled = user_config.get("dingtalk_enabled", False)
+                        ntfy_enabled = user_config.get("ntfy_enabled", False)
+                        telegram_enabled = user_config.get("telegram_enabled", False)
+                        email_enabled = user_config.get("email_enabled", False)
+                        
+                        any_channel_enabled = (
+                            bark_enabled or wechat_enabled or dingtalk_enabled or 
+                            ntfy_enabled or telegram_enabled or email_enabled
+                        )
+                        
+                        logger.info(f"推送渠道状态: bark={bark_enabled}, wechat={wechat_enabled}, "
+                                  f"dingtalk={dingtalk_enabled}, ntfy={ntfy_enabled}, "
+                                  f"telegram={telegram_enabled}, email={email_enabled}")
+                        
+                        # 检查是否已经发送过通知，避免重复发送
+                        # 如果是从"录制中"状态变为"直播中（未录制）"状态，则不发送通知
+                        if any_channel_enabled and not recording.notification_sent and not was_recording:
+                            push_content = self._["push_content"]
+                            begin_push_message_text = self.settings.user_config.get("custom_stream_start_content")
+                            if begin_push_message_text:
+                                push_content = begin_push_message_text
+
+                            push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
+                            push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
+                                "[time]", push_at
+                            )
+                            msg_title = self.settings.user_config.get("custom_notification_title").strip()
+                            msg_title = msg_title or self._["status_notify"]
+
+                            logger.info(f"手动录制模式下直播中（未录制）状态触发消息推送: {msg_title} - {push_content}")
+                            msg_manager = MessagePusher(self.settings)
+                            self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                            # 设置通知已发送标志
+                            recording.notification_sent = True
+                        elif recording.notification_sent:
+                            logger.info(f"已经发送过开播通知，跳过重复发送: {recording.streamer_name}")
+                        elif was_recording:
+                            logger.info(f"从录制中状态变为直播中（未录制）状态，跳过消息推送: {recording.streamer_name}")
+                        else:
+                            logger.info("没有启用任何推送渠道，跳过消息推送")
+                    
+                    # 重置was_recording标志
+                    recording.was_recording = False
+                    
+                    self.app.page.run_task(self.app.record_card_manager.update_card, recording)
+                    self.app.page.pubsub.send_others_on_topic("update", recording)
 
     @staticmethod
     def start_update(recording: Recording):
@@ -343,6 +430,17 @@ class RecordingManager:
             recording.start_time = None
             recording.recording = False
             logger.info(f"Stopped recording for {recording.title}")
+            
+            # 当直播结束时（而不是仅仅停止录制时），重置notification_sent标志
+            # 这样下次直播开始时可以再次发送通知
+            if not recording.is_live:
+                recording.notification_sent = False
+                logger.info(f"直播已结束，重置通知状态: {recording.streamer_name}")
+            else:
+                # 如果直播仍在进行中，设置was_recording标志
+                # 这样在下次检测到直播状态时知道这是从"录制中"状态变为"直播中（未录制）"状态
+                recording.was_recording = True
+                logger.info(f"直播仍在进行中，保持通知状态，避免重复推送: {recording.streamer_name}")
 
     def get_duration(self, recording: Recording):
         """Get the duration of the current recording session in a formatted string."""
@@ -360,6 +458,33 @@ class RecordingManager:
         self.app.page.run_task(self.app.record_card_manager.remove_recording_card, recordings)
         self.app.page.pubsub.send_others_on_topic('delete', recordings)
         await self.remove_recordings(recordings)
+        
+        # 检查是否需要切换平台视图
+        home_page = self.app.current_page
+        if hasattr(home_page, "current_platform_filter") and home_page.current_platform_filter != "all":
+            current_platform = home_page.current_platform_filter
+            
+            # 检查是否还有当前平台的录制项
+            remaining_items = False
+            for recording in self.recordings:
+                _, platform_key = get_platform_info(recording.url)
+                if platform_key == current_platform:
+                    remaining_items = True
+                    break
+            
+            # 如果当前平台没有剩余录制项，自动切换到全部平台视图
+            if not remaining_items:
+                logger.info(f"批量删除后平台 {current_platform} 下没有剩余直播间，自动切换到全部平台视图")
+                home_page.current_platform_filter = "all"
+        
+        # 删除后更新主页筛选区域
+        if hasattr(self.app.current_page, "create_filter_area") and hasattr(self.app.current_page, "content_area"):
+            self.app.current_page.content_area.controls[1] = self.app.current_page.create_filter_area()
+            self.app.current_page.content_area.update()
+            
+            # 应用筛选
+            if hasattr(self.app.current_page, "apply_filter"):
+                self.app.page.run_task(self.app.current_page.apply_filter)
 
     async def check_free_space(self, output_dir: str | None = None):
         disk_space_limit = float(self.settings.user_config.get("recording_space_threshold"))
@@ -386,3 +511,28 @@ class RecordingManager:
             end_time = utils.add_hours_to_time(scheduled_start_time, monitor_hours)
             scheduled_time_range = f"{scheduled_start_time}~{end_time}"
             return scheduled_time_range
+
+    async def get_stream_url(self, recording: Recording):
+        """
+        获取直播源地址，仅在已开始监控状态下可用。
+        返回record_url（如m3u8/flv），如未获取到则返回None。
+        """
+        if not recording.monitor_status:
+            return None, "未开始监控，无法获取直播源地址"
+        platform, platform_key = get_platform_info(recording.url)
+        output_dir = self.settings.get_video_save_path()
+        recording_info = {
+            "platform": platform,
+            "platform_key": platform_key,
+            "live_url": recording.url,
+            "output_dir": output_dir,
+            "segment_record": recording.segment_record,
+            "segment_time": recording.segment_time,
+            "save_format": recording.record_format,
+            "quality": recording.quality,
+        }
+        recorder = LiveStreamRecorder(self.app, recording, recording_info)
+        stream_info = await recorder.fetch_stream()
+        if not stream_info or not getattr(stream_info, "record_url", None):
+            return None, "未获取到直播源地址，可能未开播或平台暂不支持"
+        return stream_info.record_url, None

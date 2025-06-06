@@ -1,5 +1,4 @@
 import base64
-import re
 import smtplib
 from email.header import Header
 from email.mime.multipart import MIMEMultipart
@@ -17,16 +16,35 @@ class NotificationService:
 
     async def _async_post(self, url: str, json_data: dict[str, Any]) -> dict[str, Any]:
         try:
+            logger.info(f"发送POST请求到: {url}")
+            logger.info(f"请求头: {self.headers}")
+            logger.info(f"请求数据: {json_data}")
+            
             async with httpx.AsyncClient() as client:
                 response = await client.post(url, json=json_data, headers=self.headers)
-                response.raise_for_status()
-                return response.json()
+                status_code = response.status_code
+                logger.info(f"响应状态码: {status_code}")
+                
+                try:
+                    response_json = response.json()
+                    logger.info(f"响应内容: {response_json}")
+                    return response_json
+                except Exception as json_error:
+                    logger.error(f"解析响应JSON失败: {str(json_error)}")
+                    response_text = response.text
+                    logger.info(f"响应文本: {response_text}")
+                    return {"error": f"解析JSON失败: {str(json_error)}", "text": response_text}
+        except httpx.RequestError as req_error:
+            error_msg = f"请求错误: {str(req_error)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
         except Exception as e:
-            logger.info(f"Push failed, push address: {url},  Error message: {e}")
-            return {"error": str(e)}
+            error_msg = f"推送失败, URL: {url}, 错误信息: {str(e)}"
+            logger.error(error_msg)
+            return {"error": error_msg}
 
     async def send_to_dingtalk(
-            self, url: str, content: str, number: Optional[str] = None, is_atall: bool = False
+        self, url: str, content: str, number: Optional[str] = None, is_atall: bool = False
     ) -> dict[str, list[str]]:
         results = {"success": [], "error": []}
         api_list = [u.strip() for u in url.replace("，", ",").split(",") if u.strip()]
@@ -58,16 +76,16 @@ class NotificationService:
 
     @staticmethod
     async def send_to_email(
-            email_host: str,
-            login_email: str,
-            password: str,
-            sender_email: str,
-            sender_name: str,
-            to_email: str,
-            title: str,
-            content: str,
-            smtp_port: str | None = None,
-            open_ssl: bool = True,
+        email_host: str,
+        login_email: str,
+        password: str,
+        sender_email: str,
+        sender_name: str,
+        to_email: str,
+        title: str,
+        content: str,
+        smtp_port: str | None = None,
+        open_ssl: bool = True,
     ) -> dict[str, Any]:
         receivers = to_email.replace("，", ",").split(",") if to_email.strip() else []
 
@@ -106,22 +124,29 @@ class NotificationService:
             return {"success": [], "error": [1]}
 
     async def send_to_bark(
-            self,
-            api: str,
-            title: str = "message",
-            content: str = "test",
-            level: str = "active",
-            badge: int = 1,
-            auto_copy: int = 1,
-            sound: str = "",
-            icon: str = "",
-            group: str = "",
-            is_archive: int = 1,
-            url: str = "",
+        self,
+        api: str,
+        title: str = "message",
+        content: str = "test",
+        level: str = "active",
+        badge: int = 1,
+        auto_copy: int = 1,
+        sound: str = "",
+        icon: str = "",
+        group: str = "",
+        is_archive: int = 1,
+        url: str = "",
     ) -> dict[str, Any]:
         results = {"success": [], "error": []}
         api_list = api.replace("，", ",").split(",") if api.strip() else []
+        logger.info(f"Bark API列表: {api_list}")
+        
+        if not api_list:
+            logger.error("Bark API地址为空，无法发送推送")
+            return {"success": [], "error": ["API地址为空"]}
+            
         for _api in api_list:
+            logger.info(f"正在向Bark API发送请求: {_api}")
             json_data = {
                 "title": title,
                 "body": content,
@@ -134,29 +159,39 @@ class NotificationService:
                 "isArchive": is_archive,
                 "url": url,
             }
-            resp = await self._async_post(_api, json_data)
-            if resp.get("code") == 200:
-                results["success"].append(_api)
-            else:
+            try:
+                logger.info(f"Bark请求数据: {json_data}")
+                resp = await self._async_post(_api, json_data)
+                logger.info(f"Bark响应结果: {resp}")
+                
+                if resp.get("code") == 200:
+                    results["success"].append(_api)
+                    logger.info(f"Bark推送成功: {_api}")
+                else:
+                    results["error"].append(_api)
+                    error_msg = resp.get("message", "未知错误")
+                    logger.error(f"Bark推送失败, API: {_api}, 错误信息: {error_msg}")
+            except Exception as e:
                 results["error"].append(_api)
-                logger.info(f"Bark push failed, push address: {_api},  Failure message: {json_data['message']}")
+                logger.error(f"Bark推送异常: {_api}, 异常信息: {str(e)}")
+                
         return results
 
     async def send_to_ntfy(
-            self,
-            api: str,
-            title: str = "message",
-            content: str = "test",
-            tags: str = "tada",
-            priority: int = 3,
-            action_url: str = "",
-            attach: str = "",
-            filename: str = "",
-            click: str = "",
-            icon: str = "",
-            delay: str = "",
-            email: str = "",
-            call: str = "",
+        self,
+        api: str,
+        title: str = "message",
+        content: str = "test",
+        tags: str = "tada",
+        priority: int = 3,
+        action_url: str = "",
+        attach: str = "",
+        filename: str = "",
+        click: str = "",
+        icon: str = "",
+        delay: str = "",
+        email: str = "",
+        call: str = "",
     ) -> dict[str, Any]:
         results = {"success": [], "error": []}
         api_list = api.replace("，", ",").split(",") if api.strip() else []
@@ -187,46 +222,4 @@ class NotificationService:
             else:
                 results["error"].append(_api)
                 logger.info(f"Ntfy push failed, push address: {_api},  Failure message: {json_data['error']}")
-        return results
-
-    async def send_to_serverchan(
-            self,
-            sendkey: str,
-            title: str = "message",
-            content: str = "test",
-            short: str = "",
-            channel: int = 9,
-            tags: str = "partying_face"
-    ) -> dict[str, Any]:
-
-        results = {"success": [], "error": []}
-        sendkey_list = sendkey.replace("，", ",").split(",") if sendkey.strip() else []
-
-        for key in sendkey_list:
-            if key.startswith('sctp'):
-                match = re.match(r'sctp(\d+)t', key)
-                if match:
-                    num = match.group(1)
-                    url = f'https://{num}.push.ft07.com/send/{key}.send'
-                else:
-                    logger.error(f"Invalid sendkey format for sctp: {key}")
-                    results["error"].append(key)
-                    continue
-            else:
-                url = f'https://sctapi.ftqq.com/{key}.send'
-
-            json_data = {
-                "title": title,
-                "desp": content,
-                "short": short,
-                "channel": channel,
-                "tags": tags
-            }
-            resp = await self._async_post(url, json_data)
-            if resp.get("code") == 0:
-                results["success"].append(key)
-            else:
-                results["error"].append(key)
-                logger.info(f"ServerChan push failed, SCKEY/SendKey: {key}, Error message: {resp.get('message')}")
-
         return results

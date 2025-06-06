@@ -2,8 +2,9 @@ import flet as ft
 
 
 class CardDialog(ft.AlertDialog):
-    def __init__(self, app, recording):
+    def __init__(self, app, recording, final_push_enabled=None):
         self.app = app
+        self.final_push_enabled = final_push_enabled
         self._ = {}
         self.load()
         super().__init__(
@@ -18,7 +19,8 @@ class CardDialog(ft.AlertDialog):
 
     def load(self):
         language = self.app.language_manager.language
-        for key in ("recording_card", "recording_manager", "base", "video_quality"):
+        # 优先合并recording_dialog，保证录制模式相关文本一致
+        for key in ("recording_dialog", "recording_card", "recording_manager", "base", "video_quality"):
             self._.update(language.get(key, {}))
 
     def get_content(self, recording):
@@ -35,8 +37,22 @@ class CardDialog(ft.AlertDialog):
         scheduled_recording_status = self._["enabled"] if recording.scheduled_recording else self._["disabled"]
         scheduled_time_range = recording.scheduled_time_range or self._["none"]
         save_path = recording.recording_dir or self._["no_recording_dir_tip"]
-        recording_status_info = self._[recording.status_info]
-        message_push = self._["enabled"] if recording.enabled_message_push else self._["disabled"]
+        # 录制状态信息同步UI逻辑，优先显示录制中
+        if recording.recording:
+            recording_status_info = self._.get("recording", "录制中")
+        elif recording.is_live and recording.monitor_status and not recording.recording:
+            recording_status_info = self._.get("live_monitoring_not_recording", "直播中（未录制）")
+        else:
+            recording_status_info = self._[recording.status_info]
+        # 优先用final_push_enabled
+        if self.final_push_enabled is not None:
+            message_push = self._["enabled"] if self.final_push_enabled else self._["disabled"]
+        else:
+            message_push = self._["enabled"] if recording.enabled_message_push else self._["disabled"]
+        record_mode_text = (
+            self._.get("auto_record", "自动录制") if getattr(recording, "record_mode", "auto") == "auto"
+            else self._.get("manual_record", "手动录制")
+        )
 
         dialog_content = ft.Column(
             [
@@ -54,6 +70,7 @@ class CardDialog(ft.AlertDialog):
                 ft.Text(f"{self._['message_push']}: {message_push}", size=14),
                 ft.Text(f"{self._['save_path']}: {save_path}", size=14, selectable=True),
                 ft.Text(f"{self._['recording_status']}: {recording_status_info}", size=14),
+                ft.Text(f"{self._.get('record_mode', '录制模式')}: {record_mode_text}", size=14),
             ],
             spacing=8,
             scroll=ft.ScrollMode.AUTO,

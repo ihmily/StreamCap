@@ -16,7 +16,8 @@ class Recording:
         scheduled_start_time,
         monitor_hours,
         recording_dir,
-        enabled_message_push
+        enabled_message_push,
+        record_mode="auto"
     ):
         """
         Initialize a recording object.
@@ -34,6 +35,7 @@ class Recording:
         :param monitor_hours: Number of hours to monitor from the scheduled recording start time, e.g., 3.
         :param recording_dir: Directory path where the recorded files will be saved.
         :param enabled_message_push: Whether to enable message push.
+        :param record_mode: Recording mode, either 'auto' or 'manual'.
         """
 
         self.rec_id = rec_id
@@ -55,6 +57,7 @@ class Recording:
         self.is_live = False
         self.recording = False  # Record status
         self.start_time = None
+        self.record_mode = record_mode
 
         self.cumulative_duration = timedelta()  # Accumulated recording time
         self.last_duration = timedelta()  # Save the total time of the last recording
@@ -67,6 +70,8 @@ class Recording:
         self.loop_time_seconds = None
         self.use_proxy = None
         self.record_url = None
+        # 用于跟踪是否已经发送过直播状态通知
+        self.notification_sent = False
 
     def to_dict(self):
         """Convert the Recording instance to a dictionary for saving."""
@@ -84,6 +89,7 @@ class Recording:
             "monitor_hours": self.monitor_hours,
             "recording_dir": self.recording_dir,
             "enabled_message_push": self.enabled_message_push,
+            "record_mode": self.record_mode,
         }
 
     @classmethod
@@ -103,6 +109,7 @@ class Recording:
             data.get("monitor_hours"),
             data.get("recording_dir"),
             data.get("enabled_message_push"),
+            data.get("record_mode", "auto"),
         )
         recording.title = data.get("title", recording.title)
         recording.display_title = data.get("display_title", recording.title)
@@ -121,3 +128,5 @@ class Recording:
         for attr, value in updated_info.items():
             if hasattr(self, attr):
                 setattr(self, attr, value)
+        if "record_mode" in updated_info:
+            self.record_mode = updated_info["record_mode"]

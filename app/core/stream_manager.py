@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -16,9 +17,10 @@ from .platform_handlers import StreamData
 
 
 class LiveStreamRecorder:
-    DEFAULT_SEGMENT_TIME = "1800"
-    DEFAULT_SAVE_FORMAT = "mp4"
-    DEFAULT_QUALITY = VideoQuality.OD
+    DEFAULT_SEGMENT_TIME = "1800"  #默认分段时间
+    DEFAULT_SAVE_FORMAT = "ts"  #默认保存格式
+    DEFAULT_QUALITY = VideoQuality.OD  #默认录制质量
+    VALID_SAVE_FORMATS = ["ts", "flv", "mkv", "mov", "mp4", "mp3", "m4a"]   #有效录制格式列表
 
     def __init__(self, app, recording, recording_info):
         self.app = app
@@ -36,10 +38,20 @@ class LiveStreamRecorder:
         self.live_url = self._get_info("live_url")
         self.output_dir = self._get_info("output_dir")
         self.segment_record = self._get_info("segment_record", default=False)
-        self.segment_time = self._get_info("segment_time", default=self.DEFAULT_SEGMENT_TIME)
+        
+        # 验证并设置分段时间
+        segment_time = self._get_info("segment_time")
+        self.segment_time = self.validate_segment_time(segment_time)
+        
         self.quality = self._get_info("quality", default=self.DEFAULT_QUALITY)
-        self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
-        self.proxy = self.is_use_proxy()
+        
+        # 验证并设置保存格式
+        save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT)
+        self.save_format = self.validate_save_format(save_format)
+        
+        # 配置代理
+        self.proxy = self.configure_proxy()
+        
         os.makedirs(self.output_dir, exist_ok=True)
         self.app.language_manager.add_observer(self)
         self._ = {}
@@ -53,12 +65,159 @@ class LiveStreamRecorder:
     def _get_info(self, key: str, default: Any = None):
         return self.recording_info.get(key, default) or default
 
-    def is_use_proxy(self):
+    def should_use_proxy(self) -> bool:
+        """
+        判断是否应该使用代理
+        """
         default_proxy_platform = self.user_config.get("default_platform_with_proxy", "")
         proxy_list = default_proxy_platform.replace("，", ",").replace(" ", "").split(",")
-        if self.user_config.get("enable_proxy") and self.platform_key in proxy_list:
-            self.proxy = self.user_config.get("proxy_address")
-            return self.proxy
+        
+        should_use = self.user_config.get("enable_proxy") and self.platform_key in proxy_list
+        logger.info(f"代理检查 - 平台: {self.platform_key}, 是否启用代理: {should_use}")
+        logger.info(f"代理检查 - 代理平台列表: {proxy_list}")
+        return should_use
+
+    def configure_proxy(self) -> str | None:
+        """
+        配置并返回代理地址，如果不应该使用代理则返回None
+        """
+        if not self.should_use_proxy():
+            logger.info(f"代理配置 - 平台 {self.platform_key} 不需要使用代理")
+            return None
+            
+        proxy_address = self.user_config.get("proxy_address")
+        logger.info(f"代理配置 - 尝试使用代理地址: {proxy_address}")
+        
+        if not self.validate_proxy_address(proxy_address):
+            logger.warning(f"代理配置 - 无效的代理地址: {proxy_address}，将不使用代理")
+            return None
+            
+        logger.info(f"代理配置 - 成功配置代理: {proxy_address}")
+        return proxy_address
+    
+    def validate_proxy_address(self, proxy_address: str | None) -> bool:
+        """
+        验证代理地址是否有效
+        """
+        if not proxy_address:
+            logger.warning("代理验证 - 代理地址为空")
+            return False
+            
+        # 简单验证代理地址格式
+        proxy_pattern = re.compile(r'^(http|https|socks5)://[\w\-\.]+(\:\d+)?$')
+        is_valid = bool(proxy_pattern.match(proxy_address))
+        logger.info(f"代理验证 - 地址: {proxy_address}, 格式是否有效: {is_valid}")
+        
+        return is_valid
+        
+    def validate_save_format(self, format_name: str | None) -> str:
+        """
+        验证并返回有效的保存格式
+        """
+        logger.info(f"格式验证 - 输入格式: {format_name}")
+        
+        if not format_name:
+            logger.warning(f"格式验证 - 未指定保存格式，使用默认格式: {self.DEFAULT_SAVE_FORMAT}")
+            return self.DEFAULT_SAVE_FORMAT
+            
+        format_name = format_name.lower()
+        if format_name not in self.VALID_SAVE_FORMATS:
+            logger.warning(f"格式验证 - 无效的保存格式: {format_name}，使用默认格式: {self.DEFAULT_SAVE_FORMAT}")
+            
+            # 如果是从录制信息中获取的格式无效，则更新录制信息
+            if self.recording and hasattr(self.recording, "record_format"):
+                logger.info(f"格式验证 - 更新录制项 {self.recording.rec_id} 的保存格式为: {self.DEFAULT_SAVE_FORMAT}")
+                self.recording.record_format = self.DEFAULT_SAVE_FORMAT
+                self.app.page.run_task(self.app.record_manager.persist_recordings)
+            
+            # 如果是从用户配置中获取的格式无效，则更新用户配置
+            recording_info_format = self.recording_info.get("save_format")
+            if recording_info_format == format_name:
+                logger.info(f"格式验证 - 更新录制信息中的保存格式为: {self.DEFAULT_SAVE_FORMAT}")
+                self.recording_info["save_format"] = self.DEFAULT_SAVE_FORMAT
+            
+            # 检查是否是从用户配置文件中读取的无效格式
+            if self.user_config.get("video_format", "").lower() == format_name:
+                logger.info(f"格式验证 - 更新用户配置中的视频格式为: {self.DEFAULT_SAVE_FORMAT.upper()}")
+                self.user_config["video_format"] = self.DEFAULT_SAVE_FORMAT.upper()
+                # 异步保存用户配置
+                self.app.page.run_task(self.app.config_manager.save_user_config, self.user_config)
+                
+                # 更新所有录制卡片的格式显示
+                self.app.page.run_task(self.update_all_recording_formats)
+            
+            return self.DEFAULT_SAVE_FORMAT
+            
+        logger.info(f"格式验证 - 使用有效格式: {format_name}")
+        return format_name
+        
+    def validate_segment_time(self, segment_time: str | None) -> str:
+        """
+        验证并返回有效的分段时间
+        """
+        logger.info(f"分段时间验证 - 输入时间: {segment_time}")
+        
+        if not segment_time:
+            logger.info(f"分段时间验证 - 未指定分段时间，使用默认值: {self.DEFAULT_SEGMENT_TIME}")
+            return self.DEFAULT_SEGMENT_TIME
+            
+        try:
+            time_value = int(segment_time)
+            if time_value <= 0:
+                logger.warning(f"分段时间验证 - 分段时间必须为正数，输入值: {time_value}，使用默认值: {self.DEFAULT_SEGMENT_TIME}")
+                
+                # 如果是从录制信息中获取的分段时间无效，则更新录制信息
+                if self.recording and hasattr(self.recording, "segment_time"):
+                    logger.info(f"分段时间验证 - 更新录制项 {self.recording.rec_id} 的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                    self.recording.segment_time = self.DEFAULT_SEGMENT_TIME
+                    self.app.page.run_task(self.app.record_manager.persist_recordings)
+                
+                # 如果是从用户配置中获取的分段时间无效，则更新用户配置
+                recording_info_segment_time = self.recording_info.get("segment_time")
+                if recording_info_segment_time == segment_time:
+                    logger.info(f"分段时间验证 - 更新录制信息中的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                    self.recording_info["segment_time"] = self.DEFAULT_SEGMENT_TIME
+                
+                # 检查是否是从用户配置文件中读取的无效分段时间
+                if self.user_config.get("video_segment_time") == segment_time:
+                    logger.info(f"分段时间验证 - 更新用户配置中的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                    self.user_config["video_segment_time"] = self.DEFAULT_SEGMENT_TIME
+                    # 异步保存用户配置
+                    self.app.page.run_task(self.app.config_manager.save_user_config, self.user_config)
+                    
+                    # 更新所有录制卡片的分段时间显示
+                    self.app.page.run_task(self.update_all_segment_times)
+                
+                return self.DEFAULT_SEGMENT_TIME
+                
+            logger.info(f"分段时间验证 - 使用有效值: {time_value}")
+            return str(time_value)
+        except (ValueError, TypeError):
+            logger.warning(f"分段时间验证 - 无效的分段时间格式: {segment_time}，使用默认值: {self.DEFAULT_SEGMENT_TIME}")
+            
+            # 如果是从录制信息中获取的分段时间无效，则更新录制信息
+            if self.recording and hasattr(self.recording, "segment_time"):
+                logger.info(f"分段时间验证 - 更新录制项 {self.recording.rec_id} 的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                self.recording.segment_time = self.DEFAULT_SEGMENT_TIME
+                self.app.page.run_task(self.app.record_manager.persist_recordings)
+            
+            # 如果是从用户配置中获取的分段时间无效，则更新用户配置
+            recording_info_segment_time = self.recording_info.get("segment_time")
+            if recording_info_segment_time == segment_time:
+                logger.info(f"分段时间验证 - 更新录制信息中的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                self.recording_info["segment_time"] = self.DEFAULT_SEGMENT_TIME
+            
+            # 检查是否是从用户配置文件中读取的无效分段时间
+            if self.user_config.get("video_segment_time") == segment_time:
+                logger.info(f"分段时间验证 - 更新用户配置中的分段时间为: {self.DEFAULT_SEGMENT_TIME}")
+                self.user_config["video_segment_time"] = self.DEFAULT_SEGMENT_TIME
+                # 异步保存用户配置
+                self.app.page.run_task(self.app.config_manager.save_user_config, self.user_config)
+                
+                # 更新所有录制卡片的分段时间显示
+                self.app.page.run_task(self.update_all_segment_times)
+            
+            return self.DEFAULT_SEGMENT_TIME
 
     def _get_filename(self, stream_info: StreamData) -> str:
         live_title = None
@@ -128,7 +287,10 @@ class LiveStreamRecorder:
     async def fetch_stream(self) -> StreamData:
         logger.info(f"Live URL: {self.live_url}")
         logger.info(f"Use Proxy: {self.proxy or None}")
-        self.recording.use_proxy = bool(self.proxy)
+        
+        if self.recording is not None:
+            self.recording.use_proxy = bool(self.proxy)
+            
         handler = platform_handlers.get_platform_handler(
             live_url=self.live_url,
             proxy=self.proxy,
@@ -139,8 +301,24 @@ class LiveStreamRecorder:
             password=self.account_config.get(self.platform_key, {}).get("password"),
             account_type=self.account_config.get(self.platform_key, {}).get("account_type")
         )
+        if handler is None:
+            lang_code = getattr(self.app, "language_code", "zh_CN").lower()
+            logger.info(f"当前语言环境: {lang_code}")
+            if not lang_code or "zh" in lang_code:
+                msg = f"未找到适配的直播平台处理器: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
+            else:
+                msg = f"No suitable live platform handler found: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
+            logger.debug(msg)
+            
+            if self.recording is not None:
+                self.recording.is_checking = False
+                
+            return None
         stream_info = await handler.get_stream_info(self.live_url)
-        self.recording.is_checking = False
+        
+        if self.recording is not None:
+            self.recording.is_checking = False
+            
         return stream_info
 
     async def start_recording(self, stream_info: StreamData):
@@ -482,7 +660,78 @@ class LiveStreamRecorder:
             "qiandurebo": "referer:https://qiandurebo.com",
             "17live": "referer:https://17.live/en/live/6302408",
             "lang": "referer:https://www.lang.live",
-            "shopee": "origin:" + live_domain,
-            "blued": "referer:https://app.blued.cn",
+            "shopee": "origin:" + live_domain
         }
         return record_headers.get(platform_key)
+
+    async def update_all_recording_formats(self):
+        """
+        当用户配置中的默认录制格式被修改时，更新所有录制卡片的显示
+        """
+        logger.info("正在更新所有录制卡片的格式显示...")
+        
+        # 等待一小段时间确保配置已保存
+        await asyncio.sleep(0.5)
+        
+        # 获取当前页面和录制卡片管理器
+        home_page = self.app.current_page
+        if not home_page or not hasattr(self.app, "record_card_manager"):
+            logger.warning("无法更新录制卡片：主页或录制卡片管理器不可用")
+            return
+            
+        # 更新所有录制项的格式
+        default_format = self.user_config.get("video_format", self.DEFAULT_SAVE_FORMAT).upper()
+        for recording in self.app.record_manager.recordings:
+            # 只更新那些使用默认格式的录制项
+            if not recording.record_format or recording.record_format.lower() not in self.VALID_SAVE_FORMATS:
+                recording.record_format = default_format
+                # 更新卡片显示
+                await self.app.record_card_manager.update_card(recording)
+                
+        # 保存更新后的录制项
+        self.app.page.run_task(self.app.record_manager.persist_recordings)
+        
+        # 如果有刷新按钮功能，触发一次刷新
+        if hasattr(home_page, "refresh_cards_on_click"):
+            self.app.page.run_task(home_page.refresh_cards_on_click, None)
+            
+        logger.info(f"已更新所有录制卡片的默认格式为: {default_format}")
+
+    async def update_all_segment_times(self):
+        """
+        当用户配置中的默认分段时间被修改时，更新所有录制卡片的显示
+        """
+        logger.info("正在更新所有录制卡片的分段时间显示...")
+        
+        # 等待一小段时间确保配置已保存
+        await asyncio.sleep(0.5)
+        
+        # 获取当前页面和录制卡片管理器
+        home_page = self.app.current_page
+        if not home_page or not hasattr(self.app, "record_card_manager"):
+            logger.warning("无法更新录制卡片：主页或录制卡片管理器不可用")
+            return
+            
+        # 更新所有录制项的分段时间
+        default_segment_time = self.user_config.get("video_segment_time", self.DEFAULT_SEGMENT_TIME)
+        for recording in self.app.record_manager.recordings:
+            # 只更新那些使用默认分段时间或无效分段时间的录制项
+            try:
+                time_value = int(recording.segment_time)
+                if time_value <= 0:
+                    recording.segment_time = default_segment_time
+                    # 更新卡片显示
+                    await self.app.record_card_manager.update_card(recording)
+            except (ValueError, TypeError):
+                recording.segment_time = default_segment_time
+                # 更新卡片显示
+                await self.app.record_card_manager.update_card(recording)
+                
+        # 保存更新后的录制项
+        self.app.page.run_task(self.app.record_manager.persist_recordings)
+        
+        # 如果有刷新按钮功能，触发一次刷新
+        if hasattr(home_page, "refresh_cards_on_click"):
+            self.app.page.run_task(home_page.refresh_cards_on_click, None)
+            
+        logger.info(f"已更新所有录制卡片的默认分段时间为: {default_segment_time}")

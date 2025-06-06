@@ -4,9 +4,10 @@ import flet as ft
 class PopupColorItem(ft.PopupMenuItem):
     def __init__(self, color, name):
         super().__init__()
+        icon_color = "#36618e" if color == "" else color
         self.content = ft.Row(
             controls=[
-                ft.Icon(name=ft.Icons.COLOR_LENS_OUTLINED, color=color),
+                ft.Icon(name=ft.Icons.COLOR_LENS_OUTLINED, color=icon_color),
                 ft.Text(name),
             ],
         )

@@ -93,22 +93,28 @@ class LeftNavigationMenu(ft.Column):
                 on_click=self.theme_changed,
             )
 
-        colors_list = [
-            ("deeppurple", "Deep purple"),
-            ("purple", "Purple"),
-            ("indigo", "Indigo"),
-            ("blue", "Blue"),
-            ("teal", "Teal"),
-            ("deeporange", "Deep orange"),
-            ("orange", "Orange"),
-            ("pink", "Pink"),
-            ("brown", "Brown"),
-            ("bluegrey", "Blue Grey"),
-            ("green", "Green"),
-            ("cyan", "Cyan"),
-            ("lightblue", "Light Blue"),
-            ("", "Default"),
-        ]
+        color_names = {
+            "deeppurple": {"zh": "深紫色", "en": "Deep purple"},
+            "purple": {"zh": "紫色", "en": "Purple"},
+            "indigo": {"zh": "靛蓝", "en": "Indigo"},
+            "blue": {"zh": "蓝色", "en": "Blue"},
+            "teal": {"zh": "蓝绿色", "en": "Teal"},
+            "deeporange": {"zh": "深橙色", "en": "Deep orange"},
+            "orange": {"zh": "橙色", "en": "Orange"},
+            "pink": {"zh": "粉色", "en": "Pink"},
+            "brown": {"zh": "棕色", "en": "Brown"},
+            "bluegrey": {"zh": "蓝灰色", "en": "Blue Grey"},
+            "green": {"zh": "绿色", "en": "Green"},
+            "cyan": {"zh": "青色", "en": "Cyan"},
+            "lightblue": {"zh": "浅蓝色", "en": "Light Blue"},
+            "": {"zh": "默认", "en": "Default"},
+        }
+        lang = self.app.language_code if hasattr(self.app, 'language_code') else 'zh_CN'
+        if lang.startswith('zh'):
+            lang_key = 'zh'
+        else:
+            lang_key = 'en'
+        colors_list = [(color, color_names[color].get(lang_key, color_names[color]["en"])) for color in color_names]
 
         self.bottom_controls = ft.Column(
             controls=[

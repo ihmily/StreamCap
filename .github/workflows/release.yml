@@ -59,43 +59,154 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Prepare icon file
+      - name: Create logger_fix.py for GUI mode
         run: |
-          if (Test-Path -Path "assets\icon.ico") {
-            New-Item -ItemType Directory -Force -Path "assets\images" | Out-Null
-            Copy-Item -Path "assets\icon.ico" -Destination "assets\images\logo.ico" -Force
-            Write-Host "Icon file copied to assets\images\logo.ico"
-          } else {
-            Write-Host "Warning: Icon file assets\icon.ico not found. Using default icon."
-          }
+          # 创建logger_fix.py文件，支持GUI模式
+          $loggerFixContent = @"
+import os
+import sys
+import re
 
-      - name: Build Windows executable with dependencies (-D mode)
+from loguru import logger
+
+script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+
+# 添加内存清理日志过滤器
+def is_memory_cleanup_log(record):
+    """检查是否为内存清理相关的日志"""
+    message = record["message"]
+    memory_cleanup_patterns = [
+        r"执行轻量级清理任务",
+        r"执行完整清理任务",
+        r"轻量级清理",
+        r"完整清理",
+        r"内存使用率过高",
+        r"内存使用详情",
+        r"系统统计",
+        r"开始执行完整清理",
+        r"内存使用率:",
+        r"实例清理",
+        r"实例统计",
+        r"实例管理",
+        # 测试脚本中使用的内存相关日志模式
+        r"开始内存测试",
+        r"内存状态",
+        r"创建实例",
+        r"内存测试总结",
+        r"主动触发垃圾回收",
+        r"显式清理未使用的实例",
+        r"等待.*秒让自动清理机制工作",
+        r"清理实例后",
+        r"开始内存优化测试"
+    ]
+    return any(re.search(pattern, message) for pattern in memory_cleanup_patterns)
+
+# 添加一个普通日志的过滤器
+def not_memory_cleanup_log(record):
+    return not is_memory_cleanup_log(record)
+
+# 确保日志目录存在
+os.makedirs(f"{script_path}/logs", exist_ok=True)
+
+# 检查是否为GUI模式（没有控制台）
+is_gui_mode = False
+try:
+    # 尝试写入stderr，如果失败则认为是GUI模式
+    sys.stderr.write("")
+except Exception:
+    is_gui_mode = True
+
+# 根据模式选择日志配置
+if not is_gui_mode:
+    # 控制台模式：添加控制台输出处理器
+    logger.add(
+        sys.stderr,
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+        enqueue=True,
+    )
+else:
+    # GUI模式：添加内存清理日志文件处理器
+    logger.add(
+        f"{script_path}/logs/memory_clean.log",
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        filter=lambda i: is_memory_cleanup_log(i),
+        serialize=False,
+        enqueue=True,
+        retention=3,
+        rotation="3 MB",
+        encoding="utf-8",
+    )
+
+# 无论何种模式，都添加文件日志处理器
+# 文件日志处理器，排除内存清理日志
+logger.add(
+    f"{script_path}/logs/streamget.log",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    filter=lambda i: not_memory_cleanup_log(i) and i["level"].name != "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=3,
+    rotation="3 MB",
+    encoding="utf-8",
+)
+
+logger.level("STREAM", no=22, color="<blue>")
+logger.add(
+    f"{script_path}/logs/play_url.log",
+    level="STREAM",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
+    filter=lambda i: i["level"].name == "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=1,
+    rotation="500 KB",
+    encoding="utf-8",
+)
+"@
+
+          # 创建app/utils目录（如果不存在）
+          New-Item -ItemType Directory -Force -Path "app\utils" | Out-Null
+          # 写入logger_fix.py文件
+          Set-Content -Path "app\utils\logger_fix.py" -Value $loggerFixContent
+          Write-Host "Created logger_fix.py for GUI mode"
+
+      - name: Apply logger fix
         run: |
-          # 使用-D选项创建目录模式的打包
-          if (Test-Path -Path "assets\images\logo.ico") {
-            pyinstaller --name StreamCap -D --windowed --icon=assets/images/logo.ico main.py
-          } else {
-            pyinstaller --name StreamCap -D --windowed main.py
+          # 备份原始logger.py
+          if (Test-Path -Path "app\utils\logger.py") {
+            Copy-Item -Path "app\utils\logger.py" -Destination "app\utils\logger.py.bak" -Force
+            Write-Host "Backed up original logger.py"
           }
           
-          # 创建必要的目录和文件
-          New-Item -ItemType Directory -Force -Path "dist\StreamCap\downloads" | Out-Null
-          New-Item -ItemType Directory -Force -Path "dist\StreamCap\logs" | Out-Null
-          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\play_url.log" | Out-Null
-          New-Item -ItemType File -Force -Path "dist\StreamCap\logs\streamget.log" | Out-Null
-          
-          # 复制资源文件夹到dist\StreamCap目录
-          if (-not (Test-Path -Path "dist\StreamCap\assets")) {
-            Copy-Item -Path "assets" -Destination "dist\StreamCap\" -Recurse -Force
-          }
-          if (-not (Test-Path -Path "dist\StreamCap\config")) {
-            Copy-Item -Path "config" -Destination "dist\StreamCap\" -Recurse -Force
-          }
-          if (-not (Test-Path -Path "dist\StreamCap\locales")) {
-            Copy-Item -Path "locales" -Destination "dist\StreamCap\" -Recurse -Force
+          # 应用修复版本
+          Copy-Item -Path "app\utils\logger_fix.py" -Destination "app\utils\logger.py" -Force
+          Write-Host "Applied logger fix for GUI mode"
+
+      - name: Build Windows executable (GUI mode)
+        run: |
+          # 确保所需文件夹存在
+          foreach ($folder in @("assets", "config", "downloads", "locales", "logs")) {
+            if (-not (Test-Path -Path $folder)) {
+              New-Item -ItemType Directory -Force -Path $folder | Out-Null
+              Write-Host "Created folder: $folder"
+            }
           }
           
-          Write-Host "Successfully built StreamCap with dependencies in directory mode"
+          # 使用PyInstaller构建GUI模式可执行文件
+          pyinstaller --name StreamCap --windowed --icon=assets/icon.ico main.py
+          
+          Write-Host "Built StreamCap in GUI mode"
+          
+          # 复制所需文件夹到dist\StreamCap目录
+          foreach ($folder in @("assets", "config", "downloads", "locales", "logs")) {
+            if (-not (Test-Path -Path "dist\StreamCap\$folder")) {
+              Copy-Item -Path $folder -Destination "dist\StreamCap\" -Recurse -Force
+              Write-Host "Copied folder: $folder to dist\StreamCap\"
+            }
+          }
 
       - name: Debug directory contents
         run: |
@@ -135,43 +246,156 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Prepare icon file
+      - name: Create logger_fix.py for GUI mode
         run: |
-          if [ -f "assets/icon.ico" ]; then
-            mkdir -p assets/images
-            cp assets/icon.ico assets/images/logo.ico
-            echo "Icon file copied to assets/images/logo.ico"
-          else
-            echo "Warning: Icon file assets/icon.ico not found. Using default icon."
-          fi
+          # 创建app/utils目录（如果不存在）
+          mkdir -p app/utils
+          
+          # 创建logger_fix.py文件，支持GUI模式
+          cat > app/utils/logger_fix.py << 'EOL'
+import os
+import sys
+import re
 
-      - name: Build macOS app with dependencies (-D mode)
+from loguru import logger
+
+script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+
+# 添加内存清理日志过滤器
+def is_memory_cleanup_log(record):
+    """检查是否为内存清理相关的日志"""
+    message = record["message"]
+    memory_cleanup_patterns = [
+        r"执行轻量级清理任务",
+        r"执行完整清理任务",
+        r"轻量级清理",
+        r"完整清理",
+        r"内存使用率过高",
+        r"内存使用详情",
+        r"系统统计",
+        r"开始执行完整清理",
+        r"内存使用率:",
+        r"实例清理",
+        r"实例统计",
+        r"实例管理",
+        # 测试脚本中使用的内存相关日志模式
+        r"开始内存测试",
+        r"内存状态",
+        r"创建实例",
+        r"内存测试总结",
+        r"主动触发垃圾回收",
+        r"显式清理未使用的实例",
+        r"等待.*秒让自动清理机制工作",
+        r"清理实例后",
+        r"开始内存优化测试"
+    ]
+    return any(re.search(pattern, message) for pattern in memory_cleanup_patterns)
+
+# 添加一个普通日志的过滤器
+def not_memory_cleanup_log(record):
+    return not is_memory_cleanup_log(record)
+
+# 确保日志目录存在
+os.makedirs(f"{script_path}/logs", exist_ok=True)
+
+# 检查是否为GUI模式（没有控制台）
+is_gui_mode = False
+try:
+    # 尝试写入stderr，如果失败则认为是GUI模式
+    sys.stderr.write("")
+except Exception:
+    is_gui_mode = True
+
+# 根据模式选择日志配置
+if not is_gui_mode:
+    # 控制台模式：添加控制台输出处理器
+    logger.add(
+        sys.stderr,
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+        enqueue=True,
+    )
+else:
+    # GUI模式：添加内存清理日志文件处理器
+    logger.add(
+        f"{script_path}/logs/memory_clean.log",
+        level="DEBUG",
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        filter=lambda i: is_memory_cleanup_log(i),
+        serialize=False,
+        enqueue=True,
+        retention=3,
+        rotation="3 MB",
+        encoding="utf-8",
+    )
+
+# 无论何种模式，都添加文件日志处理器
+# 文件日志处理器，排除内存清理日志
+logger.add(
+    f"{script_path}/logs/streamget.log",
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+    filter=lambda i: not_memory_cleanup_log(i) and i["level"].name != "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=3,
+    rotation="3 MB",
+    encoding="utf-8",
+)
+
+logger.level("STREAM", no=22, color="<blue>")
+logger.add(
+    f"{script_path}/logs/play_url.log",
+    level="STREAM",
+    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
+    filter=lambda i: i["level"].name == "STREAM",
+    serialize=False,
+    enqueue=True,
+    retention=1,
+    rotation="500 KB",
+    encoding="utf-8",
+)
+EOL
+          echo "Created logger_fix.py for GUI mode"
+
+      - name: Apply logger fix
         run: |
-          # 使用-D选项创建目录模式的打包
-          if [ -f "assets/images/logo.icns" ]; then
-            pyinstaller --name StreamCap -D --windowed --icon=assets/images/logo.icns main.py
+          # 备份原始logger.py
+          if [ -f "app/utils/logger.py" ]; then
+            cp app/utils/logger.py app/utils/logger.py.bak
+            echo "Backed up original logger.py"
+          fi
+          
+          # 应用修复版本
+          cp app/utils/logger_fix.py app/utils/logger.py
+          echo "Applied logger fix for GUI mode"
+
+      - name: Build macOS app (GUI mode)
+        run: |
+          # 确保所需文件夹存在
+          for folder in assets config downloads locales logs; do
+            if [ ! -d "$folder" ]; then
+              mkdir -p "$folder"
+              echo "Created folder: $folder"
+            fi
+          done
+          
+          # 使用PyInstaller构建GUI模式应用
+          if [ -f "assets/icon.icns" ]; then
+            pyinstaller --name StreamCap --windowed --icon=assets/icon.icns main.py
           else
-            pyinstaller --name StreamCap -D --windowed main.py
+            pyinstaller --name StreamCap --windowed main.py
           fi
           
-          # 创建必要的目录和文件
-          mkdir -p dist/StreamCap/downloads
-          mkdir -p dist/StreamCap/logs
-          touch dist/StreamCap/logs/play_url.log
-          touch dist/StreamCap/logs/streamget.log
+          echo "Built StreamCap in GUI mode"
           
-          # 复制资源文件夹到dist/StreamCap目录
-          if [ ! -d "dist/StreamCap/assets" ]; then
-            cp -r assets dist/StreamCap/
-          fi
-          if [ ! -d "dist/StreamCap/config" ]; then
-            cp -r config dist/StreamCap/
-          fi
-          if [ ! -d "dist/StreamCap/locales" ]; then
-            cp -r locales dist/StreamCap/
-          fi
-          
-          echo "Successfully built StreamCap with dependencies in directory mode"
+          # 复制所需文件夹到dist/StreamCap目录
+          for folder in assets config downloads locales logs; do
+            if [ ! -d "dist/StreamCap/$folder" ]; then
+              cp -r "$folder" "dist/StreamCap/"
+              echo "Copied folder: $folder to dist/StreamCap/"
+            fi
+          done
 
       - name: Debug directory contents
         run: |

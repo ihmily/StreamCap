@@ -1,6 +1,6 @@
 [project]
 name = "StreamCap"
-version = "1.0.1"
+version = "1.0.2"
 description = "Live Stream Recorder"
 readme = "README.md"
 url = "https://github.com/ihmily/StreamCap"

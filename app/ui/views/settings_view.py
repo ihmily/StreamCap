@@ -41,8 +41,6 @@ class SettingsPage(PageBase):
         self.page.on_keyboard_event = self.on_keyboard
 
     async def load(self):
-        """Load the settings page content with tabs for different categories."""
-
         self.content_area.clean()
         language = self.app.language_manager.language
         self._ = language["settings_page"] | language["video_quality"] | language["base"]
@@ -854,7 +852,7 @@ class SettingsPage(PageBase):
                 ),
                 expand=True,
             )
-        
+                
     def create_cookies_settings_tab(self):
         """Create UI elements for push configuration."""
         platforms = [
@@ -1022,7 +1020,6 @@ class SettingsPage(PageBase):
         )
 
     def create_folder_setting_row(self, label):
-        """Helper method to create a row of checkboxes for folder settings."""
         return ft.Row(
             [
                 ft.Text(label, width=200, text_align=ft.TextAlign.RIGHT),

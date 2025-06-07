@@ -31,7 +31,7 @@ class HomePage(PageBase):
 
     def load_language(self):
         language = self.app.language_manager.language
-        for key in ("home_page", "video_quality", "base"):
+        for key in ("home_page", "video_quality", "base", "recording_manager"):
             self._.update(language.get(key, {}))
 
     def init(self):
@@ -591,6 +591,28 @@ class HomePage(PageBase):
 
     async def delete_monitor_recordings_on_click(self, _):
         selected_recordings = await self.app.record_manager.get_selected_recordings()
+        
+        # 检查是否有正在录制的项
+        has_recording_items = False
+        if selected_recordings:
+            for recording in selected_recordings:
+                if recording.recording:
+                    has_recording_items = True
+                    break
+        else:
+            # 如果没有选中项，则检查所有录制项
+            for recording in self.app.record_manager.recordings:
+                if recording.recording:
+                    has_recording_items = True
+                    break
+        
+        # 如果有正在录制的项，则提示无法删除
+        if has_recording_items:
+            await self.app.snack_bar.show_snack_bar(
+                self._["recording_in_progress_tip"], bgcolor=ft.Colors.RED
+            )
+            return
+        
         tips = self._["batch_delete_confirm_tip"] if selected_recordings else self._["clear_all_confirm_tip"]
 
         async def confirm_dlg(_):

@@ -77,7 +77,9 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
         
         # 立即执行一次完整的资源清理
         try:
-            await app._perform_full_cleanup()
+            # 在web模式下不执行资源清理
+            if not app.is_web_mode:
+                await app._perform_full_cleanup()
         except Exception as ex:
             logger.error(f"关闭前清理资源时出错: {ex}")
 
@@ -85,7 +87,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
         active_recordings = [p for p in app.process_manager.ffmpeg_processes if p.returncode is None]
         active_recordings_count = len(active_recordings)
 
-        if active_recordings_count > 0:
+        if active_recordings_count > 0 and not app.is_web_mode:
             # 创建事件用于通知进程清理完成
             cleanup_completed = threading.Event()
             
@@ -145,7 +147,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
             # 在单独的线程中运行关闭逻辑
             threading.Thread(target=close_app, daemon=True).start()
         else:
-            # 如果没有活动录制，直接关闭窗口
+            # 如果没有活动录制或是web模式，直接关闭窗口
             _safe_destroy_window(page)
 
         await close_dialog(e)

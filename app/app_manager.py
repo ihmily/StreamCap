@@ -89,7 +89,11 @@ class App:
         self.page.run_task(self.install_manager.check_env)
         self.page.run_task(self.record_manager.check_free_space)
         self.page.run_task(self._check_for_updates)
-        self.page.run_task(self._setup_periodic_cleanup)
+        
+        # 只有在非web模式下才启动内存清理任务
+        if not self.is_web_mode:
+            self.page.run_task(self._setup_periodic_cleanup)
+            
         self.page.run_task(self._validate_configs)
 
     def initialize_pages(self):
@@ -122,6 +126,11 @@ class App:
         self.content_area.update()
 
     async def cleanup(self):
+        # 在web模式下不执行清理
+        if self.is_web_mode:
+            logger.info("Web模式下不执行清理")
+            return
+            
         try:
             await self.process_manager.cleanup()
             # 执行更完整的清理
@@ -162,6 +171,11 @@ class App:
 
     async def _setup_periodic_cleanup(self):
         """设置定期清理任务，管理内存使用并清理未使用的资源"""
+        # 在web模式下不执行内存清理
+        if self.is_web_mode:
+            logger.info("Web模式下不执行内存清理")
+            return
+            
         # 初始化最后清理时间
         self._last_light_cleanup = time.time()
         self._last_full_cleanup = time.time()

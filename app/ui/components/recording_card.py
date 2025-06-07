@@ -429,7 +429,7 @@ class RecordingCardManager:
             # 手动录制模式下，检查监控状态
             if recording.record_mode == "manual" and not recording.monitor_status and not recording.recording:
                 await self.app.snack_bar.show_snack_bar(
-                    self._["manual_mode_record_disabled"], 
+                    self._["manual_mode_monitor_required"], 
                     bgcolor=ft.Colors.AMBER, 
                     duration=3000
                 )

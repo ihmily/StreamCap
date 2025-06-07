@@ -152,8 +152,7 @@
     "vlc_not_set": "VLC path not set, cannot play",
     "play_failed": "Play failed, no stream or VLC path",
     "live_monitoring_not_recording": "Live (Not Recording)",
-    "manual_mode_monitor_required": "Monitoring must be enabled first in manual recording mode",
-    "manual_mode_record_disabled": "Please enable monitoring before recording"
+    "manual_mode_monitor_required": "Monitoring must be enabled first in manual recording mode"
   },
   "settings_page": {
     "recording_settings": "Recording Settings",

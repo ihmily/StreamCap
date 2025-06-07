@@ -153,8 +153,7 @@
     "vlc_not_set": "未配置VLC路径，无法播放",
     "play_failed": "播放失败，未获取到直播源或VLC路径",
     "live_monitoring_not_recording": "直播中（未录制）",
-    "manual_mode_monitor_required": "手动录制模式下需先开启监控",
-    "manual_mode_record_disabled": "请先开启监控再录制"
+    "manual_mode_monitor_required": "手动录制模式下需先开启监控"
   },
   "settings_page": {
     "recording_settings": "录制设置",

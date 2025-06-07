@@ -38,7 +38,8 @@
     "filter_stopped": "未监控",
     "filter_live_monitoring_not_recording": "直播中（未录制）",
     "platform_filter": "平台筛选",
-    "filter_all_platforms": "全部平台"
+    "filter_all_platforms": "全部平台",
+    "recording_cannot_delete_tip": "提示：正在录制中，无法删除直播间"
   },
   "recording_dialog": {
     "input_live_link": "输入直播间地址",
@@ -94,7 +95,10 @@
     "RECORDING_ERROR": "直播录制失败, 等待重试",
     "NOT_RECORDING_SPACE": "磁盘空间不足, 无法录制",
     "LIVE_STATUS_CHECK_ERROR": "直播状态检测错误, 请检查地址是否可正常访问",
-    "not_disk_space_tip": "⚠️ 磁盘存储空间不足, 停止录制"
+    "not_disk_space_tip": "⚠️ 磁盘存储空间不足, 停止录制",
+    "disk_space_insufficient_title": "磁盘空间不足警告",
+    "disk_space_insufficient_content": "磁盘空间不足，录制功能已停用。当前剩余空间低于设定阈值[threshold]GB，请及时清理磁盘空间。",
+    "recording_in_progress_tip": "提示：有直播间正在录制中，无法删除"
   },
   "stream_manager": {
     "record_stream_error": "直播源录制出错"
@@ -148,7 +152,9 @@
     "play_stream": "播放",
     "vlc_not_set": "未配置VLC路径，无法播放",
     "play_failed": "播放失败，未获取到直播源或VLC路径",
-    "live_monitoring_not_recording": "直播中（未录制）"
+    "live_monitoring_not_recording": "直播中（未录制）",
+    "manual_mode_monitor_required": "手动录制模式下需先开启监控",
+    "manual_mode_record_disabled": "请先开启监控再录制"
   },
   "settings_page": {
     "recording_settings": "录制设置",

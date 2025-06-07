@@ -38,7 +38,8 @@
     "filter_stopped": "Stopped",
     "filter_live_monitoring_not_recording": "Live (Not Recording)",
     "platform_filter": "Platform Filter",
-    "filter_all_platforms": "All Platforms"
+    "filter_all_platforms": "All Platforms",
+    "recording_cannot_delete_tip": "Tip: Cannot delete live room while recording is in progress"
   },
   "recording_dialog": {
     "input_live_link": "Enter Live Room URL",
@@ -93,7 +94,10 @@
     "RECORDING_ERROR": "Recording the live stream has failed",
     "NOT_RECORDING_SPACE": "Insufficient disk space to record",
     "LIVE_STATUS_CHECK_ERROR": "Live status error, check address accessibility",
-    "not_disk_space_tip": "⚠️ Insufficient disk storage space, stop recording"
+    "not_disk_space_tip": "⚠️ Insufficient disk storage space, stop recording",
+    "disk_space_insufficient_title": "Disk Space Warning",
+    "disk_space_insufficient_content": "Disk space is insufficient, recording function has been disabled. Current free space is below the threshold of [threshold]GB, please free up disk space.",
+    "recording_in_progress_tip": "Tip: Cannot delete while recording is in progress"
   },
     "stream_manager": {
     "record_stream_error": "Live streaming source recording error"
@@ -147,7 +151,9 @@
     "play_stream": "Play",
     "vlc_not_set": "VLC path not set, cannot play",
     "play_failed": "Play failed, no stream or VLC path",
-    "live_monitoring_not_recording": "Live (Not Recording)"
+    "live_monitoring_not_recording": "Live (Not Recording)",
+    "manual_mode_monitor_required": "Monitoring must be enabled first in manual recording mode",
+    "manual_mode_record_disabled": "Please enable monitoring before recording"
   },
   "settings_page": {
     "recording_settings": "Recording Settings",

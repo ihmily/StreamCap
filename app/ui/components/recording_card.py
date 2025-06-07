@@ -56,10 +56,15 @@ class RecordingCardManager:
         speed = recording.speed
         duration_text_label = ft.Text(self.app.record_manager.get_duration(recording), size=12)
 
+        # 判断是否为手动录制模式且监控未开启
+        is_manual_mode = recording.record_mode == "manual"
+        is_record_button_disabled = is_manual_mode and not recording.monitor_status
+        
         record_button = ft.IconButton(
             icon=self.get_icon_for_recording_state(recording),
             tooltip=self.get_tip_for_recording_state(recording),
             on_click=partial(self.recording_button_on_click, recording=recording),
+            disabled=is_record_button_disabled,  # 在手动模式下，只有监控开启时才能点击录制按钮
         )
 
         edit_button = ft.IconButton(
@@ -264,84 +269,90 @@ class RecordingCardManager:
         return None
 
     async def update_card(self, recording):
-        """Update only the recordings cards in the scrollable content area."""
-        if recording.rec_id in self.cards_obj:
-            try:
-                recording_card = self.cards_obj[recording.rec_id]
+        """Update the card display based on the recording's state."""
+        try:
+            recording_card = self.cards_obj.get(recording.rec_id)
+            if not recording_card:
+                return
+
+            new_status_label = self.create_status_label(recording)
+            
+            if recording_card["card"] and recording_card["card"].content and recording_card["card"].content.content:
+                title_row = recording_card["card"].content.content.controls[0]
+                title_row.alignment = ft.MainAxisAlignment.START
+                title_row.spacing = 5
+                title_row.tight = True
                 
+                title_row_controls = title_row.controls
+                if len(title_row_controls) > 1:
+                    if new_status_label:
+                        title_row_controls[1] = new_status_label
+                    else:
+                        title_row_controls.pop(1)
+                elif new_status_label:
+                    title_row_controls.append(new_status_label)
+            
+            recording_card["status_label"] = new_status_label
+            
+            # 还原显示标题前缀的逻辑
+            if recording_card.get("display_title_label"):
                 status_prefix = ""
                 if not recording.monitor_status:
                     status_prefix = f"[{self._['monitor_stopped']}] "
                 
                 display_title = f"{status_prefix}{recording.title}"
-                if recording_card.get("display_title_label"):
-                    recording_card["display_title_label"].value = display_title
-                    title_label_weight = ft.FontWeight.BOLD if recording.recording or recording.is_live else None
-                    recording_card["display_title_label"].weight = title_label_weight
-                
-                new_status_label = self.create_status_label(recording)
-                
-                if recording_card["card"] and recording_card["card"].content and recording_card["card"].content.content:
-                    title_row = recording_card["card"].content.content.controls[0]
-                    title_row.alignment = ft.MainAxisAlignment.START
-                    title_row.spacing = 5
-                    title_row.tight = True
-                    
-                    title_row_controls = title_row.controls
-                    if len(title_row_controls) > 1:
-                        if new_status_label:
-                            title_row_controls[1] = new_status_label
-                        else:
-                            title_row_controls.pop(1)
-                    elif new_status_label:
-                        title_row_controls.append(new_status_label)
-                
-                recording_card["status_label"] = new_status_label
-                
-                if recording_card.get("duration_label"):
-                    recording_card["duration_label"].value = self.app.record_manager.get_duration(recording)
-                
-                if recording_card.get("speed_label"):
-                    recording_card["speed_label"].value = recording.speed
-                
-                # 动态获取当前语言，定义disabled_tip
-                is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
-                disabled_tip = "请开启监控或点击刷新按钮" if is_zh else "Please enable monitor or click the refresh button"
+                recording_card["display_title_label"].value = display_title
+                title_label_weight = ft.FontWeight.BOLD if recording.recording or recording.is_live else None
+                recording_card["display_title_label"].weight = title_label_weight
+            
+            if recording_card.get("duration_label"):
+                recording_card["duration_label"].value = self.app.record_manager.get_duration(recording)
+            
+            if recording_card.get("speed_label"):
+                recording_card["speed_label"].value = recording.speed
+            
+            # 动态获取当前语言，定义disabled_tip
+            is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
+            disabled_tip = "请开启监控或点击刷新按钮" if is_zh else "Please enable monitor or click the refresh button"
 
-                # 全面刷新所有按钮和文本的国际化内容
-                if recording_card.get("record_button"):
-                    recording_card["record_button"].icon = self.get_icon_for_recording_state(recording)
-                    recording_card["record_button"].tooltip = self.get_tip_for_recording_state(recording)
-                if recording_card.get("edit_button"):
-                    recording_card["edit_button"].tooltip = self._["edit_record_config"]
-                if recording_card.get("preview_button"):
-                    recording_card["preview_button"].tooltip = self._["preview_video"]
-                if recording_card.get("monitor_button"):
-                    recording_card["monitor_button"].icon = self.get_icon_for_monitor_state(recording)
-                    recording_card["monitor_button"].tooltip = self.get_tip_for_monitor_state(recording)
-                if recording_card.get("delete_button"):
-                    recording_card["delete_button"].tooltip = self._["delete_monitor"]
-                if recording_card.get("get_stream_button"):
-                    recording_card["get_stream_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
-                    recording_card["get_stream_button"].tooltip = (
-                        self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
-                    )
-                if recording_card.get("play_button"):
-                    recording_card["play_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
-                    recording_card["play_button"].tooltip = (
-                        self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
-                    )
-                if recording_card.get("open_folder_button"):
-                    recording_card["open_folder_button"].tooltip = self._["open_folder"]
-                if recording_card.get("recording_info_button"):
-                    recording_card["recording_info_button"].tooltip = self._["recording_info"]
+            # 全面刷新所有按钮和文本的国际化内容
+            if recording_card.get("record_button"):
+                recording_card["record_button"].icon = self.get_icon_for_recording_state(recording)
+                recording_card["record_button"].tooltip = self.get_tip_for_recording_state(recording)
+                # 更新录制按钮的禁用状态
+                is_manual_mode = recording.record_mode == "manual"
+                is_record_button_disabled = is_manual_mode and not recording.monitor_status
+                recording_card["record_button"].disabled = is_record_button_disabled
+            if recording_card.get("edit_button"):
+                recording_card["edit_button"].tooltip = self._["edit_record_config"]
+            if recording_card.get("preview_button"):
+                recording_card["preview_button"].tooltip = self._["preview_video"]
+            if recording_card.get("monitor_button"):
+                recording_card["monitor_button"].icon = self.get_icon_for_monitor_state(recording)
+                recording_card["monitor_button"].tooltip = self.get_tip_for_monitor_state(recording)
+            if recording_card.get("delete_button"):
+                recording_card["delete_button"].tooltip = self._["delete_monitor"]
+            if recording_card.get("get_stream_button"):
+                recording_card["get_stream_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
+                recording_card["get_stream_button"].tooltip = (
+                    self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
+                )
+            if recording_card.get("play_button"):
+                recording_card["play_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
+                recording_card["play_button"].tooltip = (
+                    self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
+                )
+            if recording_card.get("open_folder_button"):
+                recording_card["open_folder_button"].tooltip = self._["open_folder"]
+            if recording_card.get("recording_info_button"):
+                recording_card["recording_info_button"].tooltip = self._["recording_info"]
 
-                if recording_card["card"] and recording_card["card"].content:
-                    recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
-                    recording_card["card"].content.border = ft.border.all(2, self.get_card_border_color(recording))
-                    recording_card["card"].update()
-            except Exception as e:
-                print(f"Error updating card: {e}")
+            if recording_card["card"] and recording_card["card"].content:
+                recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
+                recording_card["card"].content.border = ft.border.all(2, self.get_card_border_color(recording))
+                recording_card["card"].update()
+        except Exception as e:
+            print(f"Error updating card: {e}")
 
     async def update_monitor_state(self, recording: Recording):
         """Update the monitor button state based on the current monitoring status."""
@@ -379,6 +390,13 @@ class RecordingCardManager:
         self.app.page.pubsub.send_others_on_topic("update", recording)
         self.app.page.run_task(self.app.record_manager.persist_recordings)
 
+        # 如果是手动录制模式，更新录制按钮的状态
+        if recording.record_mode == "manual":
+            recording_card = self.cards_obj.get(recording.rec_id)
+            if recording_card and recording_card.get("record_button"):
+                recording_card["record_button"].disabled = not recording.monitor_status
+                recording_card["record_button"].update()
+
     async def show_recording_info_dialog(self, recording: Recording):
         """Display a dialog with detailed information about the recording."""
         # 修复：同时判断开播和关播推送
@@ -408,6 +426,15 @@ class RecordingCardManager:
     async def on_toggle_recording(self, recording: Recording):
         """Toggle the recording state for a specific recording."""
         if recording and self.app.recording_enabled:
+            # 手动录制模式下，检查监控状态
+            if recording.record_mode == "manual" and not recording.monitor_status and not recording.recording:
+                await self.app.snack_bar.show_snack_bar(
+                    self._["manual_mode_record_disabled"], 
+                    bgcolor=ft.Colors.AMBER, 
+                    duration=3000
+                )
+                return
+                
             if recording.recording:
                 self.app.record_manager.stop_recording(recording)
                 await self.app.snack_bar.show_snack_bar(self._["stop_record_tip"])
@@ -523,10 +550,6 @@ class RecordingCardManager:
     async def on_delete_recording(self, recording: Recording):
         """Delete a recording from the list and update UI."""
         if recording:
-            if recording.recording:
-                await self.app.snack_bar.show_snack_bar(self._["please_stop_monitor_tip"])
-                return
-                
             # 在删除前检查是否需要切换平台视图
             home_page = self.app.current_page
             need_switch_to_all = False
@@ -634,6 +657,9 @@ class RecordingCardManager:
         return ft.Icons.PLAY_CIRCLE if not recording.recording else ft.Icons.STOP_CIRCLE
 
     def get_tip_for_recording_state(self, recording: Recording):
+        # 在手动录制模式下，如果监控未开启，显示特殊提示
+        if recording.record_mode == "manual" and not recording.monitor_status:
+            return self._["manual_mode_monitor_required"]
         return self._["stop_record"] if recording.recording else self._["start_record"]
 
     @staticmethod
@@ -691,6 +717,13 @@ class RecordingCardManager:
         ).show_dialog()
 
     async def recording_delete_button_click(self, _, recording: Recording):
+        # 检查是否正在录制，如果是则直接提示
+        if recording.recording:
+            await self.app.snack_bar.show_snack_bar(
+                self._["recording_in_progress_tip"], bgcolor=ft.Colors.RED
+            )
+            return
+
         async def confirm_dlg(_):
             self.app.page.run_task(self.on_delete_recording, recording)
             await close_dialog(None)
@@ -746,6 +779,13 @@ class RecordingCardManager:
 
     async def monitor_button_on_click(self, _, recording: Recording):
         await self.update_monitor_state(recording)
+        
+        # 如果是手动录制模式，更新录制按钮的状态
+        if recording.record_mode == "manual":
+            recording_card = self.cards_obj.get(recording.rec_id)
+            if recording_card and recording_card.get("record_button"):
+                recording_card["record_button"].disabled = not recording.monitor_status
+                recording_card["record_button"].update()
 
     async def recording_card_on_click(self, _, recording: Recording):
         await self.on_card_click(recording)

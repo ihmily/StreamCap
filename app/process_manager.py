@@ -4,6 +4,7 @@ import threading
 import time
 import signal
 import psutil
+import sys
 
 from .utils.logger import logger
 
@@ -69,18 +70,99 @@ class AsyncProcessManager:
         self.ffmpeg_processes = []
         self._lock = asyncio.Lock()
         self._process_start_time = {}  # 记录进程启动时间
+        self._is_frozen = getattr(sys, 'frozen', False)  # 检查是否为打包环境
+        
+        env_info = "打包环境" if self._is_frozen else "开发环境"
+        logger.info(f"进程管理器初始化完成 - 运行于{env_info}")
+        logger.info(f"系统信息: {sys.platform}, Python版本: {sys.version}")
 
     async def add_process(self, process):
         async with self._lock:
+            # 检查进程是否有效
+            if process is None:
+                logger.warning("尝试添加无效进程")
+                return
+                
+            # 检查进程是否已经存在
+            for existing_process in self.ffmpeg_processes:
+                if existing_process.pid == process.pid:
+                    logger.warning(f"进程已存在，不重复添加: PID={process.pid}")
+                    return
+            
+            # 验证进程是否真正运行
+            try:
+                if process.returncode is not None:
+                    logger.warning(f"进程已终止，不添加: PID={process.pid}, returncode={process.returncode}")
+                    return
+                    
+                # 使用psutil验证进程是否存在
+                if not psutil.pid_exists(process.pid):
+                    logger.warning(f"进程不存在于系统中，不添加: PID={process.pid}")
+                    return
+                    
+                # 获取进程信息
+                try:
+                    proc = psutil.Process(process.pid)
+                    proc_info = f"名称: {proc.name()}, 状态: {proc.status()}"
+                    logger.info(f"系统进程验证通过: PID={process.pid}, {proc_info}")
+                except psutil.NoSuchProcess:
+                    logger.warning(f"无法获取进程信息，但仍添加: PID={process.pid}")
+            except Exception as e:
+                logger.error(f"验证进程时出错: {e}")
+                    
+            # 添加新进程
             self.ffmpeg_processes.append(process)
             self._process_start_time[process.pid] = time.time()
-            logger.info(f"进程管理 - 添加新进程: PID={process.pid}, 当前进程数: {len(self.ffmpeg_processes)}")
+            
+            # 清理已经终止的进程
+            self._clean_terminated_processes()
+            
+            # 输出详细日志
+            active_count = len([p for p in self.ffmpeg_processes if p.returncode is None])
+            logger.info(f"进程管理 - 添加新进程: PID={process.pid}, 当前总进程数: {len(self.ffmpeg_processes)}, 活跃进程数: {active_count}")
+            logger.debug(f"当前所有进程PID列表: {[p.pid for p in self.ffmpeg_processes]}")
+
+    def _clean_terminated_processes(self):
+        """清理已终止的进程，但保留进程对象以便查询状态"""
+        terminated_pids = []
+        for process in self.ffmpeg_processes:
+            if process.returncode is not None:
+                terminated_pids.append(process.pid)
+        
+        if terminated_pids:
+            logger.debug(f"检测到已终止的进程: {terminated_pids}")
+            
+    async def _verify_processes(self):
+        """验证所有进程的状态"""
+        logger.debug("开始验证所有进程状态")
+        for process in self.ffmpeg_processes:
+            try:
+                # 检查进程状态
+                if process.returncode is None:
+                    # 检查系统中是否存在该进程
+                    if psutil.pid_exists(process.pid):
+                        try:
+                            proc = psutil.Process(process.pid)
+                            status = proc.status()
+                            logger.debug(f"进程状态验证: PID={process.pid}, 状态={status}")
+                        except psutil.NoSuchProcess:
+                            logger.warning(f"进程在系统中不存在，但在列表中标记为活跃: PID={process.pid}")
+                    else:
+                        logger.warning(f"进程不存在于系统中，但在列表中标记为活跃: PID={process.pid}")
+                        # 在打包环境中，可能需要手动更新进程状态
+                        if self._is_frozen:
+                            logger.info(f"在打包环境中，手动将进程标记为已终止: PID={process.pid}")
+                            # 注意：这里不直接修改process.returncode，因为它可能是只读的
+                            # 而是在后续的get_active_processes_count中特殊处理
+            except Exception as e:
+                logger.error(f"验证进程状态时出错: PID={process.pid}, 错误: {e}")
 
     async def cleanup(self):
         """清理所有进程，确保它们被正确终止"""
         async with self._lock:
             processes_to_clean = self.ffmpeg_processes.copy()
             self.ffmpeg_processes.clear()
+            logger.info(f"开始清理所有进程，总数: {len(processes_to_clean)}")
             
         cleanup_tasks = []
         for process in processes_to_clean:
@@ -173,18 +255,96 @@ class AsyncProcessManager:
         running_processes = []
         current_time = time.time()
         
+        # 先验证所有进程
+        await self._verify_processes()
+        
         async with self._lock:
+            # 检查每个进程的状态
+            for process in self.ffmpeg_processes:
+                try:
+                    # 检查进程是否仍在运行
+                    if process.returncode is None:
+                        # 在打包环境中额外验证
+                        if self._is_frozen and not psutil.pid_exists(process.pid):
+                            logger.debug(f"打包环境中检测到进程不存在，跳过: PID={process.pid}")
+                            continue
+                            
+                        pid = process.pid
+                        start_time = self._process_start_time.get(pid, current_time)
+                        running_time = current_time - start_time
+                        running_processes.append({
+                            "pid": pid,
+                            "running_time": running_time,
+                            "running_time_str": self._format_time(running_time)
+                        })
+                except Exception as e:
+                    logger.error(f"获取进程信息时出错: {e}")
+        
+        logger.debug(f"获取到运行中进程信息: {len(running_processes)} 个进程")
+        return running_processes
+    
+    async def get_active_processes_count(self):
+        """获取当前活跃进程数量"""
+        # 先验证所有进程
+        await self._verify_processes()
+        
+        async with self._lock:
+            # 检查每个进程的状态
+            active_processes = []
+            for p in self.ffmpeg_processes:
+                if p.returncode is None:
+                    # 在打包环境中额外验证
+                    if self._is_frozen and not psutil.pid_exists(p.pid):
+                        continue
+                    active_processes.append(p)
+                    
+            active_count = len(active_processes)
+            total_count = len(self.ffmpeg_processes)
+            
+            # 输出详细日志
+            if active_count > 0:
+                logger.debug(f"当前活跃进程数: {active_count}/{total_count}, 活跃进程PID: {[p.pid for p in active_processes]}")
+            else:
+                logger.debug(f"当前没有活跃进程, 总进程数: {total_count}")
+                
+            return active_count
+            
+    async def check_system_processes(self):
+        """检查系统中的所有进程，尝试找出FFmpeg相关进程"""
+        try:
+            logger.info("开始检查系统中的所有进程")
+            ffmpeg_processes = []
+            python_processes = []
+            
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                try:
+                    # 检查是否为FFmpeg进程
+                    if 'ffmpeg' in proc.info['name'].lower():
+                        ffmpeg_processes.append(proc.info)
+                        logger.info(f"发现FFmpeg进程: PID={proc.info['pid']}, 名称={proc.info['name']}")
+                        
+                    # 检查是否为Python进程
+                    if 'python' in proc.info['name'].lower():
+                        python_processes.append(proc.info)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+                    
+            logger.info(f"系统中发现 {len(ffmpeg_processes)} 个FFmpeg进程")
+            logger.info(f"系统中发现 {len(python_processes)} 个Python进程")
+            
+            # 检查我们的进程列表中的进程是否存在于系统中
             for process in self.ffmpeg_processes:
                 if process.returncode is None:
-                    start_time = self._process_start_time.get(process.pid, current_time)
-                    running_time = current_time - start_time
-                    running_processes.append({
-                        "pid": process.pid,
-                        "running_time": running_time,
-                        "running_time_str": self._format_time(running_time)
-                    })
-        
-        return running_processes
+                    pid_exists = psutil.pid_exists(process.pid)
+                    logger.info(f"我们的进程列表中PID={process.pid}, 系统中存在: {pid_exists}")
+                    
+            return {
+                'ffmpeg_processes': ffmpeg_processes,
+                'python_processes': python_processes
+            }
+        except Exception as e:
+            logger.error(f"检查系统进程时出错: {e}")
+            return {'error': str(e)}
     
     @staticmethod
     def _format_time(seconds):

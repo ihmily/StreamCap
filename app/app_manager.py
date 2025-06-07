@@ -141,8 +141,17 @@ class App:
             logger.error(f"清理过程中发生错误: {e}")
 
     async def add_ffmpeg_process(self, process):
+        if process is None:
+            logger.warning("尝试添加空的ffmpeg进程")
+            return
+            
+        logger.info(f"添加ffmpeg进程: PID={process.pid}")
         await self.process_manager.add_process(process)
         
+        # 添加后立即检查活跃进程数
+        active_count = await self.process_manager.get_active_processes_count()
+        logger.info(f"添加进程后，当前活跃进程数: {active_count}")
+
     async def _validate_configs(self):
         """验证配置项并修复无效的配置"""
         try:
@@ -217,15 +226,19 @@ class App:
                                   f"峰值内存使用率: {self._memory_stats['peak']:.1f}%")
                     # 记录详细的进程信息
                     running_processes = await self.process_manager.get_running_processes_info()
-                    logger.warning(f"当前运行进程数: {len(running_processes)}")
+                    active_processes_count = await self.process_manager.get_active_processes_count()
+                    logger.warning(f"当前运行进程数: {active_processes_count}")
                     for proc in running_processes:
                         logger.warning(f"进程 PID={proc['pid']} 运行时间: {proc['running_time_str']}")
                     
                     # 记录实例统计信息
                     instance_stats = PlatformHandler.get_instance_stats()
-                    logger.warning(f"平台处理器实例统计: 当前={instance_stats['current_count']}, "
-                                  f"不活跃={instance_stats['inactive_count']}, "
-                                  f"总创建={instance_stats['total_created']}")
+                    logger.warning(f"平台处理器实例统计: 当前={instance_stats.get('current_count', 0)}, "
+                                  f"不活跃={instance_stats.get('inactive_count', 0)}, "
+                                  f"总创建={instance_stats.get('total_created', 0)}, "
+                                  f"总访问={instance_stats.get('total_accessed', 0)}, "
+                                  f"使用时间记录数={instance_stats.get('usage_records', 0)}, "
+                                  f"强引用实例数={instance_stats.get('strong_refs', 0)}")
                     
             except Exception as e:
                 logger.error(f"定期清理任务出错: {e}")
@@ -246,8 +259,12 @@ class App:
                    f"减少: {before_count - after_count}, 垃圾回收对象数: {collected}")
         
         # 添加系统统计信息
+        active_processes = await self.process_manager.get_active_processes_count()
         logger.info(f"系统统计 - 录制任务数: {len(self.record_manager.recordings)}, "
-                   f"活跃进程数: {len(self.process_manager.ffmpeg_processes)}")
+                   f"活跃进程数: {active_processes}")
+                   
+        # 检查系统中的进程
+        await self.process_manager.check_system_processes()
     
     async def _perform_full_cleanup(self):
         """执行完整清理任务，包括清理平台处理器实例、进程和触发垃圾回收"""
@@ -282,6 +299,18 @@ class App:
         logger.info(f"内存使用详情 - 已使用: {after_memory['used_mb']:.1f}MB, "
                    f"总计: {after_memory['total_mb']:.1f}MB, "
                    f"可用: {after_memory['available_mb']:.1f}MB")
+        
+        # 添加进程和实例统计信息
+        active_processes = await self.process_manager.get_active_processes_count()
+        instance_stats = PlatformHandler.get_instance_stats()
+        logger.info(f"系统状态 - 录制任务数: {len(self.record_manager.recordings)}, "
+                   f"活跃进程数: {active_processes}, "
+                   f"实例数: {instance_stats.get('current_count', 0)}, "
+                   f"强引用实例数: {instance_stats.get('strong_refs', 0)}, "
+                   f"使用时间记录数: {instance_stats.get('usage_records', 0)}")
+                   
+        # 检查系统中的进程
+        await self.process_manager.check_system_processes()
     
     def _get_memory_usage(self):
         """获取当前进程的内存使用情况"""

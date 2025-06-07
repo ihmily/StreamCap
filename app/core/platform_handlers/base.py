@@ -22,6 +22,7 @@ class PlatformHandler(abc.ABC):
     _instance_creation_count = 0  # 跟踪创建的实例总数
     _instance_access_count = 0    # 跟踪访问实例的次数
     _INACTIVE_THRESHOLD = 300    # 5分钟不活跃的实例将被标记为可清理
+    _active_instances = {}       # 强引用字典，防止实例被过早回收
 
     def __init__(
         self,
@@ -105,7 +106,8 @@ class PlatformHandler(abc.ABC):
         """
         Get or create an instance of a platform handler based on the live URL and other parameters.
         """
-        cls._instance_access_count += 1
+        with cls._lock:
+            cls._instance_access_count += 1
         
         handler_class = cls._get_handler_class(live_url)
         if not handler_class:
@@ -122,6 +124,8 @@ class PlatformHandler(abc.ABC):
                 cls._instance_last_used[instance_key] = time.time()
                 instance = cls._instances[instance_key]
                 instance._last_accessed = time.time()
+                # 确保实例在强引用字典中
+                cls._active_instances[instance_key] = instance
         
         if not instance_exists:
             init_signature = inspect.signature(handler_class.__init__)
@@ -140,6 +144,8 @@ class PlatformHandler(abc.ABC):
                     cls._instance_creation_count += 1
                     instance = handler_class(**filtered_kwargs)
                     cls._instances[instance_key] = instance
+                    # 同时在强引用字典中保存一份
+                    cls._active_instances[instance_key] = instance
                     cls._instance_last_used[instance_key] = time.time()
                     logger.info(f"实例管理 - 创建新实例: {platform or 'unknown'}-{record_quality or 'default'}, "
                                f"总创建数: {cls._instance_creation_count}, 当前缓存数: {len(cls._instances)}")
@@ -163,18 +169,23 @@ class PlatformHandler(abc.ABC):
             
             for key in inactive_keys:
                 if key in cls._instances:
-                    logger.info(f"实例清理 - 移除长时间未使用的实例: {key}")
+                    logger.info(f"实例清理 - 移除长时间未使用的实例: {key[2]}-{key[3] or 'default'}")
                     # 从WeakValueDictionary中移除引用，允许GC回收
                     del cls._instances[key]
+                    # 同时从强引用字典中移除
+                    if key in cls._active_instances:
+                        del cls._active_instances[key]
                     
                 # 从使用时间记录中移除
                 if key in cls._instance_last_used:
                     del cls._instance_last_used[key]
             
             # 清理_instance_last_used中不存在于_instances的键
-            orphaned_keys = [key for key in cls._instance_last_used.keys() if key not in cls._instances]
+            orphaned_keys = [key for key in list(cls._instance_last_used.keys()) if key not in cls._instances]
             for key in orphaned_keys:
                 del cls._instance_last_used[key]
+                if key in cls._active_instances:
+                    del cls._active_instances[key]
             
             # 手动触发垃圾回收
             gc.collect()
@@ -184,7 +195,8 @@ class PlatformHandler(abc.ABC):
                        f"减少: {before_count - after_count}, 主动清理: {len(inactive_keys)}")
             logger.info(f"实例统计 - 总创建数: {cls._instance_creation_count}, "
                        f"总访问数: {cls._instance_access_count}, "
-                       f"使用时间记录数: {len(cls._instance_last_used)}")
+                       f"使用时间记录数: {len(cls._instance_last_used)}, "
+                       f"强引用实例数: {len(cls._active_instances)}")
             
     @classmethod
     def get_instances_count(cls) -> int:
@@ -211,5 +223,6 @@ class PlatformHandler(abc.ABC):
             "inactive_count": inactive_count,
             "total_created": cls._instance_creation_count,
             "total_accessed": cls._instance_access_count,
-            "usage_records": len(cls._instance_last_used)
+            "usage_records": len(cls._instance_last_used),
+            "strong_refs": len(cls._active_instances)
         }

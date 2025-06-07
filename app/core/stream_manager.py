@@ -370,6 +370,7 @@ class LiveStreamRecorder:
         try:
             save_file_path = ffmpeg_command[-1]
 
+            logger.info(f"准备启动FFmpeg进程: {ffmpeg_command[0]}")
             process = await asyncio.create_subprocess_exec(
                 *ffmpeg_command,
                 stdin=asyncio.subprocess.PIPE,
@@ -377,12 +378,30 @@ class LiveStreamRecorder:
                 stderr=asyncio.subprocess.PIPE,
                 startupinfo=self.subprocess_start_info
             )
+            
+            if process is None:
+                logger.error("FFmpeg进程创建失败，返回None")
+                return False
+                
+            logger.info(f"FFmpeg进程已创建: PID={process.pid}")
 
-            self.app.add_ffmpeg_process(process)
+            await self.app.add_ffmpeg_process(process)
             self.recording.status_info = RecordingStatus.RECORDING
             self.recording.record_url = record_url
             logger.info(f"Recording in Progress: {live_url}")
             logger.log("STREAM", f"Recording Stream URL: {record_url}")
+            
+            # 验证进程是否真正在运行
+            try:
+                import psutil
+                if psutil.pid_exists(process.pid):
+                    proc = psutil.Process(process.pid)
+                    logger.info(f"FFmpeg进程状态验证: PID={process.pid}, 名称={proc.name()}, 状态={proc.status()}")
+                else:
+                    logger.warning(f"FFmpeg进程不存在于系统中: PID={process.pid}")
+            except Exception as e:
+                logger.error(f"验证FFmpeg进程状态时出错: {e}")
+            
             while True:
                 if not self.recording.recording or not self.app.recording_enabled:
                     logger.info(f"Preparing to End Recording: {live_url}")
@@ -408,6 +427,15 @@ class LiveStreamRecorder:
                 if process.returncode is not None:
                     logger.info(f"Exit loop recording (normal 0 | abnormal 1): code={process.returncode}, {live_url}")
                     break
+
+                # 定期检查进程状态
+                try:
+                    import psutil
+                    if not psutil.pid_exists(process.pid):
+                        logger.warning(f"FFmpeg进程已不存在于系统中: PID={process.pid}")
+                        break
+                except Exception:
+                    pass
 
                 await asyncio.sleep(1)
 

@@ -1,6 +1,8 @@
 import asyncio
+import os
 import threading
 from datetime import datetime, timedelta
+from typing import Any, Callable
 
 from ..messages.message_pusher import MessagePusher
 from ..models.recording_model import Recording
@@ -489,7 +491,8 @@ class RecordingManager:
     async def check_free_space(self, output_dir: str | None = None):
         disk_space_limit = float(self.settings.user_config.get("recording_space_threshold"))
         output_dir = output_dir or self.settings.get_video_save_path()
-        if utils.check_disk_capacity(output_dir) < disk_space_limit:
+        free_space = utils.check_disk_capacity(output_dir)
+        if free_space < disk_space_limit:
             self.app.recording_enabled = False
             logger.error(
                 f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled"
@@ -500,9 +503,48 @@ class RecordingManager:
                 duration=86400,
                 show_close_icon=True
             )
-
+            
+            # 发送磁盘空间不足的消息推送
+            await self.send_disk_space_notification(disk_space_limit, free_space)
         else:
             self.app.recording_enabled = True
+
+    async def send_disk_space_notification(self, threshold: float, free_space: float):
+        """发送磁盘空间不足的消息推送"""
+        # 检查是否启用了消息推送
+        if not self.settings.user_config.get("stream_start_notification_enabled", False):
+            logger.info("消息推送未启用，跳过磁盘空间不足通知")
+            return
+            
+        # 检查是否有至少一个推送渠道被启用
+        user_config = self.settings.user_config
+        bark_enabled = user_config.get("bark_enabled", False)
+        wechat_enabled = user_config.get("wechat_enabled", False)
+        dingtalk_enabled = user_config.get("dingtalk_enabled", False)
+        ntfy_enabled = user_config.get("ntfy_enabled", False)
+        telegram_enabled = user_config.get("telegram_enabled", False)
+        email_enabled = user_config.get("email_enabled", False)
+        
+        any_channel_enabled = (
+            bark_enabled or wechat_enabled or dingtalk_enabled or 
+            ntfy_enabled or telegram_enabled or email_enabled
+        )
+        
+        if not any_channel_enabled:
+            logger.info("没有启用任何推送渠道，跳过磁盘空间不足通知")
+            return
+            
+        # 准备推送内容
+        msg_title = self._["disk_space_insufficient_title"]
+        push_content = self._["disk_space_insufficient_content"].replace("[threshold]", str(threshold))
+        
+        # 添加实际剩余空间信息
+        push_content += f" 当前剩余: {free_space:.2f}GB"
+        
+        logger.info(f"发送磁盘空间不足通知: {msg_title} - {push_content}")
+        msg_manager = MessagePusher(self.settings)
+        await msg_manager.push_messages(msg_title, push_content)
+        logger.info("磁盘空间不足通知已发送")
 
     @staticmethod
     async def get_scheduled_time_range(scheduled_start_time, monitor_hours) -> str | None:

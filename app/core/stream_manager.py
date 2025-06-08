@@ -7,6 +7,7 @@ import time
 from datetime import datetime
 from typing import Any
 
+from ..messages.message_pusher import MessagePusher
 from ..models.recording_status_model import RecordingStatus
 from ..models.video_quality_model import VideoQuality
 from ..process_manager import BackgroundService
@@ -69,12 +70,36 @@ class LiveStreamRecorder:
         """
         判断是否应该使用代理
         """
+        # 如果全局代理开关未启用，直接返回False
+        if not self.user_config.get("enable_proxy"):
+            logger.info(f"代理检查 - 全局代理开关未启用，平台 {self.platform_key} 不使用代理")
+            return False
+            
+        # 获取默认使用代理的平台列表
         default_proxy_platform = self.user_config.get("default_platform_with_proxy", "")
-        proxy_list = default_proxy_platform.replace("，", ",").replace(" ", "").split(",")
         
-        should_use = self.user_config.get("enable_proxy") and self.platform_key in proxy_list
+        # 如果平台列表为空，不使用代理
+        if not default_proxy_platform:
+            logger.info(f"代理检查 - 默认使用代理的平台列表为空，平台 {self.platform_key} 不使用代理")
+            return False
+            
+        # 处理平台列表，去除空项和多余空格
+        proxy_list = [
+            p.strip() for p in default_proxy_platform.replace("，", ",").split(",")
+            if p.strip()
+        ]
+        
+        # 如果处理后的列表为空，不使用代理
+        if not proxy_list:
+            logger.info(f"代理检查 - 处理后的代理平台列表为空，平台 {self.platform_key} 不使用代理")
+            return False
+        
+        # 检查当前平台是否在代理列表中
+        should_use = self.platform_key in proxy_list
+        
         logger.info(f"代理检查 - 平台: {self.platform_key}, 是否启用代理: {should_use}")
         logger.info(f"代理检查 - 代理平台列表: {proxy_list}")
+        
         return should_use
 
     def configure_proxy(self) -> str | None:
@@ -99,15 +124,69 @@ class LiveStreamRecorder:
         """
         验证代理地址是否有效
         """
+        # 检查空值
         if not proxy_address:
             logger.warning("代理验证 - 代理地址为空")
             return False
             
-        # 简单验证代理地址格式
-        proxy_pattern = re.compile(r'^(http|https|socks5)://[\w\-\.]+(\:\d+)?$')
-        is_valid = bool(proxy_pattern.match(proxy_address))
-        logger.info(f"代理验证 - 地址: {proxy_address}, 格式是否有效: {is_valid}")
+        # 去除首尾空格
+        proxy_address = proxy_address.strip()
         
+        # 检查是否为空字符串
+        if not proxy_address:
+            logger.warning("代理验证 - 代理地址为空白字符")
+            return False
+        
+        # 记录原始地址
+        original_address = proxy_address
+            
+        # 检查协议前缀
+        if not proxy_address.startswith('http://'):
+            # 记录警告但不修改用户输入
+            logger.warning(f"代理验证 - 代理地址缺少协议前缀: {proxy_address}")
+            logger.warning(f"代理验证 - 建议使用完整格式如：http://127.0.0.1:7890")
+        
+        # 完整的代理格式验证正则表达式
+        # 支持IPv4、域名和可选端口
+        proxy_pattern = re.compile(
+            r'^(http)://'  # 协议
+            r'(?:'  # 开始域名或IP地址组
+            r'(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|'  # 域名格式
+            r'(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'  # IPv4
+            r')'  # 结束域名或IP地址组
+            r'(?::\d{1,5})?$'  # 可选端口
+        )
+        
+        # 验证地址格式
+        # 如果用户没有提供协议前缀，使用宽松的验证规则
+        if not proxy_address.startswith('http://'):
+            # 使用简单的验证规则：主机名/IP + 端口
+            simple_pattern = re.compile(
+                r'^(?:'  # 开始域名或IP地址组
+                r'(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}|'  # 域名格式
+                r'(?:(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)'  # IPv4
+                r')'  # 结束域名或IP地址组
+                r'(?::\d{1,5})$'  # 必须有端口
+            )
+            is_valid = bool(simple_pattern.match(proxy_address))
+        else:
+            is_valid = bool(proxy_pattern.match(proxy_address))
+        
+        if not is_valid:
+            logger.warning(f"代理验证 - 地址格式无效: {proxy_address}")
+            
+            # 提供更具体的错误信息
+            if ':' not in proxy_address:
+                logger.warning(f"代理验证 - 缺少端口号，建议使用标准格式如: 127.0.0.1:7890")
+            elif not re.match(r'^(http)://', proxy_address) and ':' in proxy_address:
+                logger.warning(f"代理验证 - 缺少http://协议前缀，但IP和端口格式正确，将尝试使用")
+                # 如果只是缺少协议前缀但格式正确，仍然允许使用
+                is_valid = True
+            else:
+                logger.warning(f"代理验证 - 代理地址格式不正确，请检查IP地址或域名格式")
+        else:
+            logger.info(f"代理验证 - 地址格式有效: {proxy_address}")
+            
         return is_valid
         
     def validate_save_format(self, format_name: str | None) -> str:
@@ -290,36 +369,96 @@ class LiveStreamRecorder:
         
         if self.recording is not None:
             self.recording.use_proxy = bool(self.proxy)
+        
+        original_proxy = self.proxy
+        retry_without_proxy = False
+        
+        try:
+            # 第一次尝试（使用当前代理设置）
+            stream_info = await self._try_fetch_stream()
             
-        handler = platform_handlers.get_platform_handler(
-            live_url=self.live_url,
-            proxy=self.proxy,
-            cookies=self.cookies,
-            record_quality=self.quality,
-            platform=self.platform,
-            username=self.account_config.get(self.platform_key, {}).get("username"),
-            password=self.account_config.get(self.platform_key, {}).get("password"),
-            account_type=self.account_config.get(self.platform_key, {}).get("account_type")
-        )
-        if handler is None:
-            lang_code = getattr(self.app, "language_code", "zh_CN").lower()
-            logger.info(f"当前语言环境: {lang_code}")
-            if not lang_code or "zh" in lang_code:
-                msg = f"未找到适配的直播平台处理器: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
-            else:
-                msg = f"No suitable live platform handler found: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
-            logger.debug(msg)
+            # 如果使用代理失败且代理是启用的，则尝试不使用代理
+            if stream_info is None and original_proxy:
+                logger.warning(f"使用代理({original_proxy})获取直播信息失败，尝试不使用代理重试")
+                self.proxy = None
+                retry_without_proxy = True
+                stream_info = await self._try_fetch_stream()
+                
+                if stream_info:
+                    logger.info("不使用代理获取直播信息成功")
+                    # 这里可以添加代码来记住此平台不需要代理，或提醒用户移除此平台的代理设置
+                else:
+                    logger.warning("使用和不使用代理都无法获取直播信息")
+            
+            # 如果返回None，表示出现错误或直播已结束
+            if stream_info is None:
+                logger.warning(f"获取直播信息失败，可能是直播已结束: {self.live_url}")
+                # 创建一个表示下播状态的StreamData对象
+                stream_info = StreamData(
+                    is_live=False,
+                    anchor_name=self.recording.streamer_name or "未知主播",
+                    title="直播已结束",
+                    record_url=None,
+                    platform=self.platform
+                )
+                
+            return stream_info
+            
+        except Exception as e:
+            logger.error(f"获取直播信息时出现异常: {e}")
+            if self.recording is not None:
+                self.recording.is_checking = False
+            return None
+        finally:
+            # 恢复原始代理设置，以免影响后续操作
+            if retry_without_proxy:
+                self.proxy = original_proxy
             
             if self.recording is not None:
                 self.recording.is_checking = False
-                
-            return None
-        stream_info = await handler.get_stream_info(self.live_url)
-        
-        if self.recording is not None:
-            self.recording.is_checking = False
+
+    async def _try_fetch_stream(self) -> StreamData:
+        """尝试获取直播流信息的内部方法"""
+        try:
+            handler = platform_handlers.get_platform_handler(
+                live_url=self.live_url,
+                proxy=self.proxy,
+                cookies=self.cookies,
+                record_quality=self.quality,
+                platform=self.platform,
+                username=self.account_config.get(self.platform_key, {}).get("username"),
+                password=self.account_config.get(self.platform_key, {}).get("password"),
+                account_type=self.account_config.get(self.platform_key, {}).get("account_type")
+            )
             
-        return stream_info
+            if handler is None:
+                lang_code = getattr(self.app, "language_code", "zh_CN").lower()
+                logger.info(f"当前语言环境: {lang_code}")
+                if not lang_code or "zh" in lang_code:
+                    msg = f"未找到适配的直播平台处理器: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
+                else:
+                    msg = f"No suitable live platform handler found: live_url={self.live_url}, platform={self.platform}, platform_key={self.platform_key}"
+                logger.debug(msg)
+                return None
+            
+            # 添加超时设置，避免代理连接超时导致长时间等待
+            try:
+                # 设置10秒超时，避免代理问题导致长时间等待
+                stream_info = await asyncio.wait_for(
+                    handler.get_stream_info(self.live_url), 
+                    timeout=10.0
+                )
+                return stream_info
+            except asyncio.TimeoutError:
+                logger.error(f"获取直播信息超时，可能是代理连接问题: proxy={self.proxy}")
+                return None
+            except Exception as e:
+                logger.error(f"获取直播信息失败: {type(e).__name__}, {e}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"_try_fetch_stream异常: {e}")
+            return None
 
     async def start_recording(self, stream_info: StreamData):
         """
@@ -470,7 +609,25 @@ class LiveStreamRecorder:
                 else:
                     self.recording.recording = False
                     logger.success(f"Live recording completed: {record_name}")
+                    if (self.app.recording_enabled and self.settings.user_config["stream_end_notification_enabled"]
+                            and self.recording.enabled_message_push and not self.recording.manually_stopped):
+                        # 准备关播推送内容
+                        push_content = self._["push_content_end"]
+                        end_push_message_text = self.settings.user_config.get("custom_stream_end_content")
+                        if end_push_message_text:
+                            push_content = end_push_message_text
 
+                        push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
+                        push_content = push_content.replace("[room_name]", self.recording.streamer_name).replace(
+                            "[time]", push_at
+                        )
+                        msg_title = self.settings.user_config.get("custom_notification_title").strip()
+                        msg_title = msg_title or self._["status_notify"]
+
+                        # 使用队列方式处理消息推送
+                        logger.info(f"关播推送：{self.recording.streamer_name}，将消息加入推送队列")
+                        msg_manager = MessagePusher(self.settings)
+                        self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
                 try:
                     self.recording.update({"display_title": display_title})
                     await self.app.record_card_manager.update_card(self.recording)

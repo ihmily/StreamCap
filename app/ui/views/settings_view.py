@@ -235,7 +235,8 @@ class SettingsPage(PageBase):
 
         def get_selected_platforms_text():
             current_value = self.get_config_value("default_platform_with_proxy", "")
-            selected_keys = [k for k in current_value.replace("，", ",").split(",") if k]
+            # 增强处理，过滤掉空值
+            selected_keys = [k for k in current_value.replace("，", ",").split(",") if k and k.strip()]
             if not selected_keys:
                 return self._["none"] if "none" in self._ else "无"
             return ", ".join([get_platform_display_name_wrapper(k) for k in selected_keys])
@@ -268,10 +269,20 @@ class SettingsPage(PageBase):
             self.app.dialog_area.update()
 
         def save_selection(checkboxes, dialog):
-            selected = [cb.data for cb in checkboxes if cb.value]
+            # 过滤掉无效数据
+            selected = [cb.data for cb in checkboxes if cb.value and cb.data]
+            
+            # 记录选择变更
+            old_selected = self.get_config_value("default_platform_with_proxy", "").split(",")
+            new_selected = selected
+            logger.info(f"代理平台选择变更 - 旧选择: {old_selected}, 新选择: {new_selected}")
+            
+            # 保存到用户配置
             self.user_config["default_platform_with_proxy"] = ",".join(selected)
             self.page.run_task(self.delay_handler.start_task_timer, self.save_user_config_after_delay, None)
             self.has_unsaved_changes['user_config'] = True
+            
+            # 关闭对话框并更新UI
             dialog.open = False
             self.app.dialog_area.update()
             proxy_platform_text.value = get_selected_platforms_text()
@@ -393,6 +404,8 @@ class SettingsPage(PageBase):
                                 width=300,
                                 on_change=self.on_change,
                                 data="proxy_address",
+                                hint_text="如: http://IP:Port 或 IP:Port",
+                                helper_text="填写代理地址，如不带协议前缀，将自动添加",
                             ),
                         ),
                     ],
@@ -515,13 +528,25 @@ class SettingsPage(PageBase):
         )
 
     def create_push_settings_tab(self):
-        """Create UI elements for push configuration."""
+        """Create the push settings tab for notification settings."""
         return ft.Column(
             [
                 self.create_setting_group(
                     self._["push_notifications"],
                     self._["stream_start_notification_enabled"],
                     [
+                        ft.Container(
+                            content=ft.Text(
+                                self._["notification_both_required"],
+                                size=14,
+                                color=ft.colors.AMBER_700,
+                                italic=True,
+                            ),
+                            margin=ft.margin.only(bottom=10),
+                            padding=10,
+                            border_radius=5,
+                            bgcolor=ft.colors.AMBER_50,
+                        ),
                         self.create_setting_row(
                             self._["open_broadcast_push_enabled"],
                             ft.Switch(
@@ -838,17 +863,17 @@ class SettingsPage(PageBase):
             return ft.Row(
                 controls=controls,
                 alignment=ft.MainAxisAlignment.START,
-                spacing=12,
+                spacing=8,
             )
         else:
             return ft.Container(
                 content=ft.GridView(
                     controls=controls,
                     runs_count=3,
-                    max_extent=175,
-                    spacing=5,
-                    run_spacing=2,
-                    child_aspect_ratio=2.5,
+                    max_extent=180,
+                    spacing=8,
+                    run_spacing=8,
+                    child_aspect_ratio=3.0,
                 ),
                 expand=True,
             )
@@ -1057,15 +1082,28 @@ class SettingsPage(PageBase):
         return ft.Container(
             content=ft.Row(
                 [
-                    ft.Icon(icon, size=24, color=ft.Colors.GREY_700),
-                    ft.Text(channel_name, size=14),
-                    ft.Switch(value=self.get_config_value(key), label="", width=50, on_change=self.on_change, data=key),
+                    ft.Icon(icon, size=20, color=ft.Colors.GREY_700),
+                    ft.Container(width=2),
+                    ft.Text(channel_name, size=13, no_wrap=True),
+                    ft.Container(expand=True),
+                    ft.Switch(
+                        value=self.get_config_value(key), 
+                        label="", 
+                        width=40,
+                        scale=0.8,
+                        on_change=self.on_change, 
+                        data=key
+                    ),
                 ],
+                spacing=2,
                 alignment=ft.MainAxisAlignment.START,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                tight=True,
             ),
-            padding=5,
-            margin=5,
+            padding=ft.padding.only(left=6, right=6, top=5, bottom=5),
+            margin=3,
+            border_radius=6,
+            bgcolor=ft.colors.with_opacity(0.03, ft.colors.ON_SURFACE),
         )
 
     @staticmethod

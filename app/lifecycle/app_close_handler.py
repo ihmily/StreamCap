@@ -150,6 +150,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
             # 如果没有活动录制或是web模式，直接关闭窗口
             _safe_destroy_window(page)
 
+        # 使用await确保对话框关闭完成
         await close_dialog(e)
 
     async def close_dialog(_):

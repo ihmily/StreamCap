@@ -52,6 +52,10 @@ class App:
             horizontal_alignment=ft.CrossAxisAlignment.START,
         )
 
+        # 磁盘空间通知相关状态
+        self.disk_space_notification_sent = False
+        self.disk_space_last_notification_time = 0
+
         self.settings = SettingsPage(self)
         self.language_manager = LanguageManager(self)
         self.about = AboutPage(self)
@@ -351,3 +355,65 @@ class App:
                     await self.update_checker.show_update_dialog(update_info)
         except Exception as e:
             logger.error(f"Update check failed: {e}")
+            
+    async def show_disk_space_warning_dialog(self, threshold: float, free_space: float):
+        """显示磁盘空间不足警告对话框"""
+        from .ui.components.disk_space_dialog import DiskSpaceDialog
+        
+        try:
+            # 检查是否已经有一个磁盘空间警告弹窗在显示
+            existing_dialog = None
+            if (hasattr(self.dialog_area, "content") and 
+                self.dialog_area.content and 
+                isinstance(self.dialog_area.content, DiskSpaceDialog)):
+                existing_dialog = self.dialog_area.content
+            
+            # 确保dialog_area存在
+            if not hasattr(self, "dialog_area") or not self.dialog_area:
+                self.dialog_area = ft.Container()
+                self.page.overlay.append(self.dialog_area)
+                self.dialog_area.update()
+            
+            if existing_dialog and hasattr(existing_dialog, "open") and existing_dialog.open:
+                # 如果已有警告弹窗，更新其内容而不是创建新的
+                logger.info(f"已有磁盘空间不足警告弹窗，更新其内容: 阈值={threshold}GB, 剩余={free_space:.2f}GB")
+                existing_dialog.threshold = threshold
+                existing_dialog.free_space = free_space
+                existing_dialog.update_content()
+                return
+            
+            # 创建对话框
+            dialog = DiskSpaceDialog(self, threshold, free_space)
+            dialog.open = True
+            
+            # 设置内容并显示
+            self.dialog_area.content = dialog
+            self.dialog_area.visible = True
+            self.dialog_area.update()
+            self.page.update()
+            
+            logger.info(f"显示磁盘空间不足警告对话框: 阈值={threshold}GB, 剩余={free_space:.2f}GB")
+        except Exception as e:
+            logger.error(f"显示磁盘空间不足警告对话框时出错: {e}", exc_info=True)
+
+    async def test_disk_space_warning(self, threshold=None, free_space=None):
+        """测试磁盘空间不足警告对话框
+        
+        Args:
+            threshold: 可选，测试用的阈值
+            free_space: 可选，测试用的剩余空间
+        """
+        if threshold is None:
+            threshold = float(self.settings.user_config.get("recording_space_threshold", 2.0))
+        
+        if free_space is None:
+            # 使用比阈值小的值作为测试
+            free_space = threshold - 0.5
+            
+        logger.info(f"测试磁盘空间不足警告对话框: 阈值={threshold}GB, 模拟剩余={free_space}GB")
+        
+        # 重置通知状态，确保对话框能显示
+        self.disk_space_notification_sent = False
+        
+        # 直接显示对话框
+        await self.show_disk_space_warning_dialog(threshold, free_space)

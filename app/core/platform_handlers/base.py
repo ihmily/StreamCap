@@ -7,8 +7,16 @@ import gc
 import time
 from typing import Any, Optional, TypeVar
 
-from streamget import StreamData
+from streamget import StreamData as OriginalStreamData
 from ...utils.logger import logger
+
+# 扩展StreamData类，添加get方法以避免'str' object has no attribute 'get'错误
+class StreamData(OriginalStreamData):
+    def get(self, key, default=None):
+        """添加get方法以兼容处理字典类型数据"""
+        if hasattr(self, key):
+            return getattr(self, key)
+        return default
 
 T = TypeVar("T", bound="PlatformHandler")
 InstanceKey = tuple[str | None, tuple[tuple[str, str], ...] | None, str, str | None]

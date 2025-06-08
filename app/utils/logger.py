@@ -1,6 +1,7 @@
 import os
 import sys
 import re
+import logging
 
 from loguru import logger
 
@@ -71,6 +72,41 @@ def is_memory_cleanup_log(record):
 # 添加一个普通日志的过滤器
 def not_memory_cleanup_log(record):
     return not is_memory_cleanup_log(record)
+
+# 为测试脚本提供的日志设置函数
+def setup_logger(level=logging.INFO):
+    """为测试脚本设置日志
+    
+    Args:
+        level: 日志级别，默认为INFO
+    """
+    # 确保日志目录存在
+    os.makedirs(f"{script_path}/logs", exist_ok=True)
+    
+    # 清除所有已有的处理器
+    logger.remove()
+    
+    # 添加控制台输出
+    logger.add(
+        sys.stderr,
+        level=level,
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+        enqueue=True,
+    )
+    
+    # 添加测试日志文件处理器
+    logger.add(
+        f"{script_path}/logs/test.log",
+        level=level,
+        format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
+        serialize=False,
+        enqueue=True,
+        retention=1,
+        rotation="1 MB",
+        encoding="utf-8",
+    )
+    
+    return logger
 
 # 确保日志目录存在
 os.makedirs(f"{script_path}/logs", exist_ok=True)

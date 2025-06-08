@@ -294,6 +294,54 @@ async def main(page: ft.Page) -> None:
         logger.error(f"应用初始化过程中发生错误: {e}")
 
 
+def create_app(page: ft.Page) -> App:
+    """创建并返回一个App实例，用于测试或单独使用
+    
+    Args:
+        page: Flet页面对象
+        
+    Returns:
+        App: 应用实例
+    """
+    try:
+        app = App(page)
+        app.is_web_mode = False
+        
+        # 设置页面属性
+        page.title = "StreamCap"
+        page.window.min_width = MIN_WIDTH
+        page.window.min_height = MIN_HEIGHT
+        page.data = app
+        
+        # 使用用户配置设置窗口
+        setup_window(page, False, app.settings.user_config)
+        
+        # 设置主题
+        theme_mode = app.settings.user_config.get("theme_mode", "light")
+        if theme_mode == "dark":
+            page.theme_mode = ft.ThemeMode.DARK
+        else:
+            page.theme_mode = ft.ThemeMode.LIGHT
+            
+        # 添加必要的UI组件
+        page.add(app.complete_page)
+        
+        # 添加事件处理
+        save_progress_overlay = SaveProgressOverlay(app)
+        page.overlay.append(save_progress_overlay.overlay)
+        page.on_route_change = handle_route_change(page, app)
+        page.window.prevent_close = True
+        page.window.on_event = handle_window_event(page, app, save_progress_overlay)
+        
+        # 添加窗口大小调整事件处理
+        page.window.on_resize = handle_window_resize(page, app)
+        
+        return app
+    except Exception as e:
+        logger.error(f"创建App实例时发生错误: {e}", exc_info=True)
+        raise
+
+
 if __name__ == "__main__":
     load_dotenv()
     platform = os.getenv("PLATFORM")

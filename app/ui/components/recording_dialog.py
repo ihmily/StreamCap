@@ -132,7 +132,7 @@ class RecordingDialog:
         scheduled_recording = initial_values.get("scheduled_recording", False)
         scheduled_start_time = initial_values.get("scheduled_start_time")
         monitor_hours = initial_values.get("monitor_hours", 5)
-        message_push_enabled = initial_values.get('enabled_message_push', False)
+        message_push_enabled = initial_values.get('enabled_message_push', True)
 
         async def on_scheduled_setting_change(e):
             selected_value = e.control.value

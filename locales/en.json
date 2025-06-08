@@ -75,7 +75,16 @@
     "manual_record": "Manual Record"
   },
   "search_dialog": {
-    "search_keyword": "Enter search keyword"
+    "search_keyword": "Enter search keywords",
+    "search_title": "Search Live Rooms",
+    "search_description": "Search will be performed across all live rooms, ignoring current filters",
+    "search_support": "Supports searching: Streamer name, Live room URL, Live title, Platform name",
+    "no_results_found": "No matching live rooms found",
+    "search_results": "Search Results",
+    "result_count": "Found {count} results",
+    "click_to_view": "Click to view",
+    "empty_to_reset": "Clear search content to restore filters",
+    "search": "Search"
   },
   "recording_manager": {
     "monitor_stopped": "Stopped monitoring",
@@ -83,6 +92,7 @@
     "live_room": "Live Room",
     "recorded": "Recorded",
     "push_content": "Live room status update: [room_name] is live, time: [time]",
+    "push_content_end": "Live room status update: [room_name] is live completed, time: [time]",
     "status_notify": "Live room status update notification",
     "STOPPED_MONITORING": "Monitoring Stopped, Stop Recording",
     "MONITORING": "Monitoring In Progress",
@@ -97,7 +107,11 @@
     "not_disk_space_tip": "⚠️ Insufficient disk storage space, stop recording",
     "disk_space_insufficient_title": "Disk Space Warning",
     "disk_space_insufficient_content": "Disk space is insufficient, recording function has been disabled. Current free space is below the threshold of [threshold]GB, please free up disk space.",
-    "recording_in_progress_tip": "Tip: Cannot delete while recording is in progress"
+    "disk_space_warning_suggestion": "Please free up disk space and click the \"Processed\" button, or click \"Check Later\" to process it later.",
+    "check_later": "Check Later",
+    "processed": "Processed",
+    "current_free_space": "Current Free Space",
+    "recording_in_progress_tip": "Note: Some streams are being recorded and cannot be deleted"
   },
     "stream_manager": {
     "record_stream_error": "Live streaming source recording error"
@@ -152,7 +166,12 @@
     "vlc_not_set": "VLC path not set, cannot play",
     "play_failed": "Play failed, no stream or VLC path",
     "live_monitoring_not_recording": "Live (Not Recording)",
-    "manual_mode_monitor_required": "Monitoring must be enabled first in manual recording mode"
+    "manual_mode_monitor_required": "Please enable monitoring in manual mode",
+    "auto_mode_monitor_required": "Please enable monitoring in auto mode",
+    "tip_start_monitor_first": "Please enable monitoring first",
+    "tip_not_live": "Stream is offline, cannot record",
+    "tip_stop_recording": "Stop Recording",
+    "tip_start_recording": "Start Recording"
   },
   "settings_page": {
     "recording_settings": "Recording Settings",
@@ -184,7 +203,7 @@
     "advanced_config": "Advanced recording configuration",
     "video_record_format": "Video Recording Format",
     "recording_quality": "Recording Quality",
-    "loop_time": "Loop Time (Seconds)",
+    "loop_time": "Live Room Status Check Interval (Seconds)",
     "is_segmented_recording_enabled": "Enable Segmented Recording",
     "force_https": "Force HTTPS Recording",
     "space_threshold": "Remaining Space Threshold (GB) for Recording",
@@ -209,10 +228,11 @@
     "not_logged_in": "You are not logged in",
     "push_notifications": "Push Notifications",
     "stream_start_notification_enabled": "Live Status Notification",
-    "open_broadcast_push_enabled": "Broadcast Start Push",
-    "close_broadcast_push_enabled": "Broadcast End Push",
+    "stream_end_notification_enabled": "Live End Notification",
+    "open_broadcast_push_enabled": "Enable Stream Start Notification",
+    "close_broadcast_push_enabled": "Enable Stream End Notification",
     "only_notify_no_record": "Only notify without recording",
-    "notify_loop_time": "Only notify loop time",
+    "notify_loop_time": "Only notifications without recording push cycle time",
     "custom_push_settings": "Custom Push Settings",
     "personalized_notification_content_behavior": "Personalized notification content and behavior",
     "custom_push_title": "Custom Push Title",
@@ -318,7 +338,8 @@
     "platform_filter_style": "Platform Filter Style",
     "platform_filter_style_tile": "Tile",
     "platform_filter_style_dropdown": "Dropdown (Aggregated)",
-    "platform_filter_style_tip": "Set the display style of the platform filter on the main page. Tile is a button group, Dropdown is a dropdown box."
+    "platform_filter_style_tip": "Set the display style of the platform filter on the main page. Tile is a button group, Dropdown is a dropdown box.",
+    "notification_both_required": "Sending notifications requires both global settings and individual live room message push switches to be enabled"
   },
   "about_page": {
     "about_project": "About This Application",
@@ -386,19 +407,22 @@
   "storage_page": {
     "storage_path": "Storage Path",
     "current_path": "Current Path",
-    "empty_recording_folder": "Empty Recording Folder",
+    "empty_recording_folder": "The recording folder is empty, no live videos recorded yet",
     "go_back": "Go Back",
     "previewing": "Previewing",
     "unsupported_file_type":"⚠️ Unsupported file type",
     "no_video_file":"⚠️ No video file found",
-    "no_recording_folder":"⚠️ No recording folder found",
+    "no_recording_folder":"⚠️ Recording directory does not exist",
     "copy_stream_url": "Copy Stream URL",
-    "stream_url_copied": "Stream URL copied!",
-    "please_start_monitor": "Please start monitoring this room first!",
-    "no_stream_url": "No stream URL found",
+    "stream_url_copied": "Stream URL has been copied!",
+    "please_start_monitor": "Please start monitoring this live room first!",
+    "no_stream_url": "Failed to get stream URL",
     "copy_video_url": "Copy Video URL",
-    "copy_success": "Copy Success",
-    "video_api_server_not_set": "⚠️ Video play server address not set"
+    "copy_success": "Copy successful",
+    "video_api_server_not_set": "⚠️ Video API server is not set",
+    "folders": "Folders",
+    "files": "Files",
+    "file_list_update_error": "Failed to update file list"
   },
   "video_player": {
     "open_live_room_page": "Open Live Room Page",

@@ -75,7 +75,16 @@
     "manual_record": "手动录制"
   },
   "search_dialog": {
-    "search_keyword": "输入搜索关键词"
+    "search_keyword": "输入搜索关键词",
+    "search_title": "搜索直播间",
+    "search_description": "搜索将在所有直播间中进行，忽略当前筛选条件",
+    "search_support": "支持搜索：主播名称、直播间地址、直播标题、平台名称",
+    "no_results_found": "未找到匹配的直播间",
+    "search_results": "搜索结果",
+    "result_count": "找到 {count} 个结果",
+    "click_to_view": "点击查看",
+    "empty_to_reset": "清空搜索内容将恢复筛选条件",
+    "search": "搜索"
   },
   "recording_manager": {
     "monitor_stopped": "停止监控中",
@@ -83,6 +92,7 @@
     "live_room": "直播间",
     "recorded": "已录制",
     "push_content": "直播间状态更新：[room_name] 正在直播中，时间：[time]",
+    "push_content_end": "直播间状态更新：[room_name] 直播已结束，时间：[time]",
     "status_notify": "直播间状态更新通知",
     "platform_not_supported_tip": "暂不支持该平台录制",
     "STOPPED_MONITORING": "直播间已停止监控，停止录制",
@@ -98,6 +108,10 @@
     "not_disk_space_tip": "⚠️ 磁盘存储空间不足, 停止录制",
     "disk_space_insufficient_title": "磁盘空间不足警告",
     "disk_space_insufficient_content": "磁盘空间不足，录制功能已停用。当前剩余空间低于设定阈值[threshold]GB，请及时清理磁盘空间。",
+    "disk_space_warning_suggestion": "请清理磁盘空间后点击\"已处理\"按钮，或者点击\"稍后处理\"按钮稍后再处理。",
+    "check_later": "稍后处理",
+    "processed": "已处理",
+    "current_free_space": "当前剩余空间",
     "recording_in_progress_tip": "提示：有直播间正在录制中，无法删除"
   },
   "stream_manager": {
@@ -153,7 +167,12 @@
     "vlc_not_set": "未配置VLC路径，无法播放",
     "play_failed": "播放失败，未获取到直播源或VLC路径",
     "live_monitoring_not_recording": "直播中（未录制）",
-    "manual_mode_monitor_required": "手动录制模式下需先开启监控"
+    "manual_mode_monitor_required": "手动录制模式下需先开启监控",
+    "auto_mode_monitor_required": "自动录制模式下需先开启监控",
+    "tip_start_monitor_first": "请先开启监控",
+    "tip_not_live": "未开播，无法录制",
+    "tip_stop_recording": "停止录制",
+    "tip_start_recording": "开始录制"
   },
   "settings_page": {
     "recording_settings": "录制设置",
@@ -185,7 +204,7 @@
     "advanced_config": "配置录制高级选项",
     "video_record_format": "视频录制格式",
     "recording_quality": "录制清晰度",
-    "loop_time": "循环时间(秒)",
+    "loop_time": "直播间状态检查时间间隔(秒)",
     "is_segmented_recording_enabled": "分段录制是否开启",
     "force_https": "强制启用https录制",
     "space_threshold": "录制空间剩余阈值(gb)",
@@ -210,10 +229,11 @@
     "not_logged_in": "您尚未登录",
     "push_notifications": "推送通知",
     "stream_start_notification_enabled": "直播状态推送开关",
+    "stream_end_notification_enabled": "直播结束推送开关",
     "open_broadcast_push_enabled": "开播推送开启",
     "close_broadcast_push_enabled": "关播推送开启",
     "only_notify_no_record": "仅通知不录制",
-    "notify_loop_time": "只推送循环时间",
+    "notify_loop_time": "仅通知不录制推送循环时间",
     "custom_push_settings": "自定义推送设置",
     "personalized_notification_content_behavior": "个性化通知内容及行为",
     "custom_push_title": "自定义推送标题",
@@ -322,7 +342,8 @@
     "platform_filter_style": "直播平台筛选风格",
     "platform_filter_style_tile": "平铺",
     "platform_filter_style_dropdown": "聚合（下拉框）",
-    "platform_filter_style_tip": "设置主界面直播平台筛选的展示风格。平铺为按钮组，聚合为下拉框。"
+    "platform_filter_style_tip": "设置主界面直播平台筛选的展示风格。平铺为按钮组，聚合为下拉框。",
+    "notification_both_required": "发送通知需同时满足全局设置和单独直播间的消息推送开关"
   },
   "about_page": {
     "about_project": "关于本程序",
@@ -402,7 +423,10 @@
     "no_stream_url": "未获取到直播源地址",
     "copy_video_url": "复制视频地址",
     "copy_success": "复制成功",
-    "video_api_server_not_set": "⚠️ 未设置视频播放服务器地址"
+    "video_api_server_not_set": "⚠️ 未设置视频播放服务器地址",
+    "folders": "文件夹",
+    "files": "文件",
+    "file_list_update_error": "获取文件列表失败"
   },
   "video_player": {
     "open_live_room_page": "打开直播间页面",

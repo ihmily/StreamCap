@@ -30,6 +30,22 @@ class MockProcess:
     @property
     def running_time(self):
         return time.time() - self._start_time
+        
+    def terminate(self):
+        """模拟进程终止"""
+        logger.debug(f"模拟终止进程 PID={self.pid}")
+        self.returncode = 0
+        
+    def kill(self):
+        """模拟强制终止进程"""
+        logger.debug(f"模拟强制终止进程 PID={self.pid}")
+        self.returncode = 9
+        
+    async def wait(self):
+        """模拟等待进程结束"""
+        logger.debug(f"模拟等待进程 PID={self.pid} 结束")
+        await asyncio.sleep(0.1)
+        return self.returncode
 
 
 async def create_mock_ffmpeg_process():
@@ -74,6 +90,8 @@ async def test_app_close_cleanup():
     class MockWindow:
         def __init__(self):
             self.destroy_called = False
+            self.width = 1280
+            self.height = 720
             
         def destroy(self):
             self.destroy_called = True
@@ -85,12 +103,24 @@ async def test_app_close_cleanup():
             self.recording_enabled = True
             self.dialog_area = MockDialogArea()
             self.language_manager = MockLanguageManager()
+            self.is_web_mode = False
+            self.settings = MockSettings()
+            self.config_manager = MockConfigManager()
             
         async def _perform_full_cleanup(self):
             logger.info("执行完整清理...")
             # 模拟清理延迟
             await asyncio.sleep(0.5)
             logger.info("完整清理完成")
+    
+    class MockSettings:
+        def __init__(self):
+            self.user_config = {}
+    
+    class MockConfigManager:
+        async def save_user_config(self, config):
+            logger.info(f"保存用户配置: {config}")
+            return True
     
     class MockDialogArea:
         def __init__(self):
@@ -152,6 +182,7 @@ async def test_app_close_cleanup():
     if confirm_button and hasattr(confirm_button, 'on_click'):
         # 模拟点击确认按钮
         mock_event = type('obj', (object,), {})
+        # 使用await调用on_click方法，因为它可能是一个异步函数
         await confirm_button.on_click(mock_event)
         logger.info("模拟点击确认按钮完成")
     else:

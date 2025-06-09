@@ -31,7 +31,7 @@ class HomePage(PageBase):
 
     def load_language(self):
         language = self.app.language_manager.language
-        for key in ("home_page", "video_quality", "base"):
+        for key in ("home_page", "video_quality", "base", "recording_manager"):
             self._.update(language.get(key, {}))
 
     def init(self):
@@ -186,7 +186,7 @@ class HomePage(PageBase):
             platform_buttons = [
                 ft.ElevatedButton(
                     self._["filter_all_platforms"],
-                    on_click=self.filter_all_platforms_on_click,
+                    on_click=lambda e: self.page.run_task(self.filter_all_platforms_on_click, e),
                     bgcolor=ft.colors.BLUE if self.current_platform_filter == "all" else None,
                     color=ft.colors.WHITE if self.current_platform_filter == "all" else None,
                     style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
@@ -197,7 +197,7 @@ class HomePage(PageBase):
                 platform_buttons.append(
                     ft.ElevatedButton(
                         get_display_name(key),
-                        on_click=lambda e, k=key: self.on_platform_button_click(k),
+                        on_click=lambda e, k=key: self.page.run_task(self.on_platform_button_click, k),
                         bgcolor=ft.colors.BLUE if selected else None,
                         color=ft.colors.WHITE if selected else None,
                         style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
@@ -343,6 +343,8 @@ class HomePage(PageBase):
 
     @staticmethod
     def should_show_recording(filter_type, recording, platform_filter="all"):
+        """检查录制项是否应该显示在当前筛选条件下"""
+        # 先检查平台筛选
         if platform_filter != "all":
             _, platform_key = get_platform_info(recording.url)
             if platform_key != platform_filter:
@@ -362,27 +364,62 @@ class HomePage(PageBase):
             return not recording.monitor_status
         return True
 
-    async def filter_recordings(self, query):
+    async def filter_recordings(self, query="", use_current_filter=True):
+        """
+        过滤录制卡片显示
+        
+        参数:
+            query: 搜索关键词
+            use_current_filter: 是否使用当前筛选条件。如果为False，将忽略当前筛选，在所有直播间中搜索
+        """
         cards_obj = self.app.record_card_manager.cards_obj
         recordings = self.app.record_manager.recordings
+        
+        # 首先重置所有卡片可见性
+        if not use_current_filter:
+            await self.reset_cards_visibility()
         
         for recording in recordings:
             card_info = cards_obj.get(recording.rec_id)
             if not card_info:
                 continue
                 
-            match_query = (
-                query.lower() in recording.streamer_name.lower()
-                or query.lower() in recording.url.lower()
-                or (recording.live_title and query.lower() in recording.live_title.lower())
-            )
-            
-            match_platform = True
-            if self.current_platform_filter != "all":
-                _, platform_key = get_platform_info(recording.url)
-                match_platform = (platform_key == self.current_platform_filter)
+            # 搜索匹配
+            match_query = True
+            if query:
+                query_lower = query.lower()
+                match_query = (
+                    query_lower in recording.streamer_name.lower()
+                    or query_lower in recording.url.lower()
+                    or (recording.live_title and query_lower in recording.live_title.lower())
+                )
                 
-            visible = match_query and match_platform
+                # 添加平台名称搜索支持
+                try:
+                    from app.core.platform_handlers import get_platform_info
+                    from app.core.platform_handlers.platform_map import get_platform_display_name
+                    _, platform_key = get_platform_info(recording.url)
+                    lang = getattr(self.app, 'language_code', 'zh_CN')
+                    platform_name = get_platform_display_name(platform_key, lang)
+                    # 支持中英文平台名称匹配，忽略大小写
+                    if platform_name and query_lower in platform_name.lower():
+                        match_query = True
+                except:
+                    pass
+                
+            # 筛选条件匹配
+            match_filter = True
+            if use_current_filter:
+                match_platform = True
+                if self.current_platform_filter != "all":
+                    _, platform_key = get_platform_info(recording.url)
+                    match_platform = (platform_key == self.current_platform_filter)
+                    
+                match_status = self.should_show_recording(self.current_filter, recording)
+                match_filter = match_platform and match_status
+                
+            # 确定最终可见性
+            visible = match_query and (not use_current_filter or match_filter)
             card_info["card"].visible = visible
         
         self.recording_card_area.content.update()
@@ -498,7 +535,7 @@ class HomePage(PageBase):
                     scheduled_start_time=user_config.get("scheduled_start_time"),
                     monitor_hours=user_config.get("monitor_hours"),
                     recording_dir=None,
-                    enabled_message_push=False,
+                    enabled_message_push=True,
                     record_mode=recording_info.get("record_mode", "auto")
                 )
             recording.live_title = live_title
@@ -580,9 +617,12 @@ class HomePage(PageBase):
         await self.app.snack_bar.show_snack_bar(self._["refresh_success_tip"], bgcolor=ft.Colors.GREEN)
 
     async def start_monitor_recordings_on_click(self, _):
-        await self.app.record_manager.check_free_space()
-        if self.app.recording_enabled:
-            await self.app.record_manager.start_monitor_recordings()
+        # 直接尝试开始监控，start_monitor_recordings方法内部会检查磁盘空间
+        # 无论是否已经显示过警告，每次点击按钮都会重新检查磁盘空间并可能显示警告
+        result = await self.app.record_manager.start_monitor_recordings()
+        
+        # 只有在成功启动监控时才显示成功提示
+        if result:
             await self.app.snack_bar.show_snack_bar(self._["start_recording_success_tip"], bgcolor=ft.Colors.GREEN)
 
     async def stop_monitor_recordings_on_click(self, _):
@@ -591,6 +631,28 @@ class HomePage(PageBase):
 
     async def delete_monitor_recordings_on_click(self, _):
         selected_recordings = await self.app.record_manager.get_selected_recordings()
+        
+        # 检查是否有正在录制的项
+        has_recording_items = False
+        if selected_recordings:
+            for recording in selected_recordings:
+                if recording.recording:
+                    has_recording_items = True
+                    break
+        else:
+            # 如果没有选中项，则检查所有录制项
+            for recording in self.app.record_manager.recordings:
+                if recording.recording:
+                    has_recording_items = True
+                    break
+        
+        # 如果有正在录制的项，则提示无法删除
+        if has_recording_items:
+            await self.app.snack_bar.show_snack_bar(
+                self._["recording_in_progress_tip"], bgcolor=ft.Colors.RED
+            )
+            return
+        
         tips = self._["batch_delete_confirm_tip"] if selected_recordings else self._["clear_all_confirm_tip"]
 
         async def confirm_dlg(_):
@@ -697,10 +759,10 @@ class HomePage(PageBase):
             elif e.alt and e.key == "D":
                 self.page.run_task(self.delete_monitor_recordings_on_click, e)
 
-    def filter_all_platforms_on_click(self, _):
+    async def filter_all_platforms_on_click(self, _):
         self.current_platform_filter = "all"
-        self.page.run_task(self.apply_filter)
+        await self.apply_filter()
 
-    def on_platform_button_click(self, key):
+    async def on_platform_button_click(self, key):
         self.current_platform_filter = key
-        self.page.run_task(self.apply_filter)
+        await self.apply_filter()

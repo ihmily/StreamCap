@@ -132,7 +132,7 @@ class RecordingDialog:
         scheduled_recording = initial_values.get("scheduled_recording", False)
         scheduled_start_time = initial_values.get("scheduled_start_time")
         monitor_hours = initial_values.get("monitor_hours", 5)
-        message_push_enabled = initial_values.get('enabled_message_push', False)
+        message_push_enabled = initial_values.get('enabled_message_push', True)
 
         async def on_scheduled_setting_change(e):
             selected_value = e.control.value
@@ -216,10 +216,10 @@ class RecordingDialog:
         )
 
         record_mode_dropdown = ft.Dropdown(
-            label=self._.get("record_mode", "录制模式"),
+            label=self._["record_mode"],
             options=[
-                ft.dropdown.Option("auto", self._.get("auto_record", "自动录制")),
-                ft.dropdown.Option("manual", self._.get("manual_record", "手动录制"))
+                ft.dropdown.Option("auto", self._["auto_record"]),
+                ft.dropdown.Option("manual", self._["manual_record"])
             ],
             value=initial_values.get("record_mode", "auto"),
             width=500,

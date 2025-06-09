@@ -18,6 +18,7 @@ class ConfigManager:
         self.about_config_path = os.path.join(self.config_path, "version.json")
         self.recordings_config_path = os.path.join(self.config_path, "recordings.json")
         self.accounts_config_path = os.path.join(self.config_path, "accounts.json")
+        self.web_auth_config_path = os.path.join(self.config_path, "web_auth.json")
 
         os.makedirs(os.path.dirname(self.default_config_path), exist_ok=True)
         self.init()
@@ -28,6 +29,7 @@ class ConfigManager:
         self.init_cookies_config()
         self.init_accounts_config()
         self.init_recordings_config()
+        self.init_web_auth_config()
 
     @staticmethod
     def _init_config(config_path, default_config=None):
@@ -62,6 +64,10 @@ class ConfigManager:
     def init_recordings_config(self):
         cookies_config = {}
         self._init_config(self.recordings_config_path, cookies_config)
+
+    def init_web_auth_config(self):
+        cookies_config = {}
+        self._init_config(self.web_auth_config_path, cookies_config)
 
     @staticmethod
     def _load_config(config_path, error_message):
@@ -104,6 +110,9 @@ class ConfigManager:
         """Load i18n configuration from a JSON file."""
         return self._load_config(path, "An error occurred while loading i18n config")
 
+    def load_web_auth_config(self):
+        return self._load_config(self.web_auth_config_path, "An error occurred while loading web auth config")
+
     @staticmethod
     async def _save_config(config_path, config, success_message, error_message):
         """Save configuration to a JSON file."""
@@ -128,6 +137,14 @@ class ConfigManager:
             config,
             success_message="Accounts configuration saved.",
             error_message="An error occurred while saving accounts config",
+        )
+
+    async def save_web_auth_config(self, config):
+        await self._save_config(
+            self.web_auth_config_path,
+            config,
+            success_message="Web auth configuration saved.",
+            error_message="An error occurred while saving web auth config",
         )
 
     async def save_user_config(self, config):

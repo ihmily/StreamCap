@@ -63,21 +63,24 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                     else:
                         app.settings.user_config["window_width"] = width
                         app.settings.user_config["window_height"] = height
-                        logger.info(f"已保存窗口大小: {width}x{height}")
+                        logger.info(f"程序关闭时保存窗口大小: {width}x{height}")
                 except (ImportError, IndexError):
                     # 如果无法获取屏幕信息，直接保存
                     app.settings.user_config["window_width"] = width
                     app.settings.user_config["window_height"] = height
-                    logger.info(f"已保存窗口大小: {width}x{height}")
+                    logger.info(f"程序关闭时保存窗口大小: {width}x{height}")
                 
                 # 立即保存配置
+                logger.info("执行窗口大小保存操作（仅在程序关闭时执行一次）")
                 await app.config_manager.save_user_config(app.settings.user_config)
         except Exception as ex:
             logger.error(f"保存窗口大小时出错: {ex}")
         
         # 立即执行一次完整的资源清理
         try:
-            await app._perform_full_cleanup()
+            # 在web模式下不执行资源清理
+            if not app.is_web_mode:
+                await app._perform_full_cleanup()
         except Exception as ex:
             logger.error(f"关闭前清理资源时出错: {ex}")
 
@@ -85,7 +88,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
         active_recordings = [p for p in app.process_manager.ffmpeg_processes if p.returncode is None]
         active_recordings_count = len(active_recordings)
 
-        if active_recordings_count > 0:
+        if active_recordings_count > 0 and not app.is_web_mode:
             # 创建事件用于通知进程清理完成
             cleanup_completed = threading.Event()
             
@@ -145,9 +148,10 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
             # 在单独的线程中运行关闭逻辑
             threading.Thread(target=close_app, daemon=True).start()
         else:
-            # 如果没有活动录制，直接关闭窗口
+            # 如果没有活动录制或是web模式，直接关闭窗口
             _safe_destroy_window(page)
 
+        # 使用await确保对话框关闭完成
         await close_dialog(e)
 
     async def close_dialog(_):

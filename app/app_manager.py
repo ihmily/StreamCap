@@ -42,12 +42,19 @@ class App:
         self.assets_dir = os.path.join(execute_dir, "assets")
         self.process_manager = AsyncProcessManager()
         self.config_manager = ConfigManager(self.run_path)
+        self.is_web_mode = False
+        self.auth_manager = None
+        self.current_username = None
         self.content_area = ft.Column(
             controls=[],
             expand=True,
             alignment=ft.MainAxisAlignment.START,
             horizontal_alignment=ft.CrossAxisAlignment.START,
         )
+
+        # 磁盘空间通知相关状态
+        self.disk_space_notification_sent = False
+        self.disk_space_last_notification_time = 0
 
         self.settings = SettingsPage(self)
         self.language_manager = LanguageManager(self)
@@ -70,7 +77,6 @@ class App:
                 self.page.snack_bar_area,
             ]
         )
-        self.page.add(self.complete_page)
         self.snack_bar = ShowSnackBar(self.page)
         self.subprocess_start_up_info = utils.get_startup_info()
         self.record_card_manager = RecordingCardManager(self)
@@ -87,7 +93,11 @@ class App:
         self.page.run_task(self.install_manager.check_env)
         self.page.run_task(self.record_manager.check_free_space)
         self.page.run_task(self._check_for_updates)
-        self.page.run_task(self._setup_periodic_cleanup)
+        
+        # 只有在非web模式下才启动内存清理任务
+        if not self.is_web_mode:
+            self.page.run_task(self._setup_periodic_cleanup)
+            
         self.page.run_task(self._validate_configs)
 
     def initialize_pages(self):
@@ -120,6 +130,11 @@ class App:
         self.content_area.update()
 
     async def cleanup(self):
+        # 在web模式下不执行清理
+        if self.is_web_mode:
+            logger.info("Web模式下不执行清理")
+            return
+            
         try:
             await self.process_manager.cleanup()
             # 执行更完整的清理
@@ -130,8 +145,17 @@ class App:
             logger.error(f"清理过程中发生错误: {e}")
 
     async def add_ffmpeg_process(self, process):
+        if process is None:
+            logger.warning("尝试添加空的ffmpeg进程")
+            return
+            
+        logger.info(f"添加ffmpeg进程: PID={process.pid}")
         await self.process_manager.add_process(process)
         
+        # 添加后立即检查活跃进程数
+        active_count = await self.process_manager.get_active_processes_count()
+        logger.info(f"添加进程后，当前活跃进程数: {active_count}")
+
     async def _validate_configs(self):
         """验证配置项并修复无效的配置"""
         try:
@@ -160,6 +184,11 @@ class App:
 
     async def _setup_periodic_cleanup(self):
         """设置定期清理任务，管理内存使用并清理未使用的资源"""
+        # 在web模式下不执行内存清理
+        if self.is_web_mode:
+            logger.info("Web模式下不执行内存清理")
+            return
+            
         # 初始化最后清理时间
         self._last_light_cleanup = time.time()
         self._last_full_cleanup = time.time()
@@ -201,15 +230,19 @@ class App:
                                   f"峰值内存使用率: {self._memory_stats['peak']:.1f}%")
                     # 记录详细的进程信息
                     running_processes = await self.process_manager.get_running_processes_info()
-                    logger.warning(f"当前运行进程数: {len(running_processes)}")
+                    active_processes_count = await self.process_manager.get_active_processes_count()
+                    logger.warning(f"当前运行进程数: {active_processes_count}")
                     for proc in running_processes:
                         logger.warning(f"进程 PID={proc['pid']} 运行时间: {proc['running_time_str']}")
                     
                     # 记录实例统计信息
                     instance_stats = PlatformHandler.get_instance_stats()
-                    logger.warning(f"平台处理器实例统计: 当前={instance_stats['current_count']}, "
-                                  f"不活跃={instance_stats['inactive_count']}, "
-                                  f"总创建={instance_stats['total_created']}")
+                    logger.warning(f"平台处理器实例统计: 当前={instance_stats.get('current_count', 0)}, "
+                                  f"不活跃={instance_stats.get('inactive_count', 0)}, "
+                                  f"总创建={instance_stats.get('total_created', 0)}, "
+                                  f"总访问={instance_stats.get('total_accessed', 0)}, "
+                                  f"使用时间记录数={instance_stats.get('usage_records', 0)}, "
+                                  f"强引用实例数={instance_stats.get('strong_refs', 0)}")
                     
             except Exception as e:
                 logger.error(f"定期清理任务出错: {e}")
@@ -230,8 +263,12 @@ class App:
                    f"减少: {before_count - after_count}, 垃圾回收对象数: {collected}")
         
         # 添加系统统计信息
+        active_processes = await self.process_manager.get_active_processes_count()
         logger.info(f"系统统计 - 录制任务数: {len(self.record_manager.recordings)}, "
-                   f"活跃进程数: {len(self.process_manager.ffmpeg_processes)}")
+                   f"活跃进程数: {active_processes}")
+                   
+        # 检查系统中的进程
+        await self.process_manager.check_system_processes()
     
     async def _perform_full_cleanup(self):
         """执行完整清理任务，包括清理平台处理器实例、进程和触发垃圾回收"""
@@ -266,6 +303,18 @@ class App:
         logger.info(f"内存使用详情 - 已使用: {after_memory['used_mb']:.1f}MB, "
                    f"总计: {after_memory['total_mb']:.1f}MB, "
                    f"可用: {after_memory['available_mb']:.1f}MB")
+        
+        # 添加进程和实例统计信息
+        active_processes = await self.process_manager.get_active_processes_count()
+        instance_stats = PlatformHandler.get_instance_stats()
+        logger.info(f"系统状态 - 录制任务数: {len(self.record_manager.recordings)}, "
+                   f"活跃进程数: {active_processes}, "
+                   f"实例数: {instance_stats.get('current_count', 0)}, "
+                   f"强引用实例数: {instance_stats.get('strong_refs', 0)}, "
+                   f"使用时间记录数: {instance_stats.get('usage_records', 0)}")
+                   
+        # 检查系统中的进程
+        await self.process_manager.check_system_processes()
     
     def _get_memory_usage(self):
         """获取当前进程的内存使用情况"""
@@ -306,3 +355,65 @@ class App:
                     await self.update_checker.show_update_dialog(update_info)
         except Exception as e:
             logger.error(f"Update check failed: {e}")
+            
+    async def show_disk_space_warning_dialog(self, threshold: float, free_space: float):
+        """显示磁盘空间不足警告对话框"""
+        from .ui.components.disk_space_dialog import DiskSpaceDialog
+        
+        try:
+            # 检查是否已经有一个磁盘空间警告弹窗在显示
+            existing_dialog = None
+            if (hasattr(self.dialog_area, "content") and 
+                self.dialog_area.content and 
+                isinstance(self.dialog_area.content, DiskSpaceDialog)):
+                existing_dialog = self.dialog_area.content
+            
+            # 确保dialog_area存在
+            if not hasattr(self, "dialog_area") or not self.dialog_area:
+                self.dialog_area = ft.Container()
+                self.page.overlay.append(self.dialog_area)
+                self.dialog_area.update()
+            
+            if existing_dialog and hasattr(existing_dialog, "open") and existing_dialog.open:
+                # 如果已有警告弹窗，更新其内容而不是创建新的
+                logger.info(f"已有磁盘空间不足警告弹窗，更新其内容: 阈值={threshold}GB, 剩余={free_space:.2f}GB")
+                existing_dialog.threshold = threshold
+                existing_dialog.free_space = free_space
+                existing_dialog.update_content()
+                return
+            
+            # 创建对话框
+            dialog = DiskSpaceDialog(self, threshold, free_space)
+            dialog.open = True
+            
+            # 设置内容并显示
+            self.dialog_area.content = dialog
+            self.dialog_area.visible = True
+            self.dialog_area.update()
+            self.page.update()
+            
+            logger.info(f"显示磁盘空间不足警告对话框: 阈值={threshold}GB, 剩余={free_space:.2f}GB")
+        except Exception as e:
+            logger.error(f"显示磁盘空间不足警告对话框时出错: {e}", exc_info=True)
+
+    async def test_disk_space_warning(self, threshold=None, free_space=None):
+        """测试磁盘空间不足警告对话框
+        
+        Args:
+            threshold: 可选，测试用的阈值
+            free_space: 可选，测试用的剩余空间
+        """
+        if threshold is None:
+            threshold = float(self.settings.user_config.get("recording_space_threshold", 2.0))
+        
+        if free_space is None:
+            # 使用比阈值小的值作为测试
+            free_space = threshold - 0.5
+            
+        logger.info(f"测试磁盘空间不足警告对话框: 阈值={threshold}GB, 模拟剩余={free_space}GB")
+        
+        # 重置通知状态，确保对话框能显示
+        self.disk_space_notification_sent = False
+        
+        # 直接显示对话框
+        await self.show_disk_space_warning_dialog(threshold, free_space)

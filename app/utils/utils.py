@@ -44,11 +44,86 @@ def trace_error_decorator(func: callable) -> callable:
             return await func(*args, **kwargs)
         except execjs.ProgramError:
             logger.warning("Failed to execute JS code. Please check if the Node.js environment")
+            return None
+        except json.JSONDecodeError as e:
+            # 专门处理JSON解析错误
+            error_line = traceback.extract_tb(e.__traceback__)[-1].lineno
+            error_info = f"Type: {type(e).__name__}, {e} in function {func.__name__} at line: {error_line}"
+            
+            # 函数名用于判断错误上下文
+            function_name = func.__name__
+            
+            # 记录详细错误日志
+            logger.error(error_info)
+            
+            # 针对不同错误位置的处理
+            json_error_position = str(e)
+            
+            # 检查是否涉及代理错误
+            proxy_error = False
+            for arg in args:
+                if hasattr(arg, 'proxy') and arg.proxy and arg.proxy.startswith('http://'):
+                    proxy_error = True
+                    logger.warning(f"JSON解析错误: 可能与代理有关，当前使用的代理: {arg.proxy}")
+                    break
+            
+            # 如果是空响应导致的错误（line 1 column 1 (char 0)）
+            if "line 1 column 1 (char 0)" in json_error_position:
+                if proxy_error:
+                    logger.warning(f"JSON解析错误: 收到空响应，可能是代理连接问题")
+                else:
+                    logger.warning(f"JSON解析错误: 收到空响应，可能是网络连接问题或API暂时不可用")
+            # 如果是JSON格式错误（如只有 { 或 [）
+            elif "line 1 column 2 (char 1)" in json_error_position:
+                logger.warning(f"JSON解析错误: 收到不完整或损坏的JSON响应，只有开始字符")
+            else:
+                logger.warning(f"JSON解析错误: 位置 {json_error_position}, 可能是API返回了非JSON格式的数据")
+            
+            # 如果是直播源获取函数，创建默认的StreamData对象
+            if function_name == "get_stream_info":
+                try:
+                    # 导入StreamData类
+                    from app.core.platform_handlers.base import StreamData
+                    
+                    # 根据参数获取平台信息（如果可用）
+                    platform = "unknown"
+                    anchor_name = "未知主播"
+                    
+                    # 尝试从参数中提取平台和主播信息
+                    if len(args) > 0 and hasattr(args[0], 'platform'):
+                        platform = args[0].platform
+                    if len(args) > 0 and hasattr(args[0], 'anchor_name'):
+                        anchor_name = args[0].anchor_name
+                    
+                    # 创建表示未开播状态的StreamData对象
+                    stream_data = StreamData(
+                        platform=platform,
+                        anchor_name=anchor_name,
+                        is_live=False,
+                        title="获取直播信息失败",
+                        quality=None,
+                        m3u8_url=None,
+                        flv_url=None,
+                        record_url=None,
+                        new_cookies=None,
+                        new_token=None,
+                        extra=None
+                    )
+                    
+                    logger.info(f"为函数 {function_name} 创建了默认的StreamData对象，标记为未开播状态")
+                    return stream_data
+                except Exception as inner_e:
+                    logger.error(f"创建默认StreamData对象时出错: {inner_e}")
+                    return None
+            
+            # 其他函数返回None
+            return None
         except Exception as e:
             error_line = traceback.extract_tb(e.__traceback__)[-1].lineno
             error_info = f"Type: {type(e).__name__}, {e} in function {func.__name__} at line: {error_line}"
             logger.error(error_info)
-            return []
+            # 返回None而不是空列表，以便调用者知道这是一个错误状态
+            return None
 
     return wrapper
 
@@ -109,11 +184,13 @@ def check_disk_capacity(file_path: str | Path, show: bool = False) -> float:
 
 def handle_proxy_addr(proxy_addr):
     if proxy_addr:
-        if not proxy_addr.startswith("http"):
-            proxy_addr = "http://" + proxy_addr
+        proxy_addr = proxy_addr.strip()
+        # 如果代理地址不以协议前缀开头，添加http://前缀
+        if not proxy_addr.startswith(('http://')):
+            proxy_addr = f"http://{proxy_addr}"
+        return proxy_addr
     else:
-        proxy_addr = None
-    return proxy_addr
+        return None
 
 
 def generate_random_string(length: int) -> str:

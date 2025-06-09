@@ -56,10 +56,14 @@ class RecordingCardManager:
         speed = recording.speed
         duration_text_label = ft.Text(self.app.record_manager.get_duration(recording), size=12)
 
+        # 修改：判断是否禁用录制按钮的条件，包括手动模式和自动模式
+        is_record_button_disabled = not recording.monitor_status or (recording.monitor_status and not recording.is_live)
+        
         record_button = ft.IconButton(
             icon=self.get_icon_for_recording_state(recording),
             tooltip=self.get_tip_for_recording_state(recording),
             on_click=partial(self.recording_button_on_click, recording=recording),
+            disabled=is_record_button_disabled,  # 未监控或未开播时禁用录制按钮
         )
 
         edit_button = ft.IconButton(
@@ -87,18 +91,16 @@ class RecordingCardManager:
         )
 
         # 判断当前语言环境
-        is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
-        disabled_tip = "请开启监控或点击刷新按钮" if is_zh else "Please enable monitor or click the refresh button"
         get_stream_button = ft.IconButton(
             icon=ft.Icons.LINK,
-            tooltip=(self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip),
+            tooltip=(self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]),
             on_click=partial(self.get_stream_url_on_click, recording=recording),
             disabled=not (recording.monitor_status and (recording.is_live or recording.recording)),
         )
 
         play_button = ft.IconButton(
             icon=ft.Icons.PLAY_ARROW,
-            tooltip=(self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip),
+            tooltip=(self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]),
             on_click=partial(self.play_stream_on_click, recording=recording),
             disabled=not (recording.monitor_status and (recording.is_live or recording.recording)),
         )
@@ -253,7 +255,7 @@ class RecordingCardManager:
         elif recording.is_live and recording.monitor_status and not recording.recording:
             # 显示"直播中（未录制）"状态标签
             return ft.Container(
-                content=ft.Text(self._.get("live_monitoring_not_recording", "直播中（未录制）"), color=ft.colors.WHITE, size=12, weight=ft.FontWeight.BOLD),
+                content=ft.Text(self._["live_monitoring_not_recording"], color=ft.colors.WHITE, size=12, weight=ft.FontWeight.BOLD),
                 bgcolor=ft.colors.CYAN,
                 border_radius=5,
                 padding=5,
@@ -264,84 +266,85 @@ class RecordingCardManager:
         return None
 
     async def update_card(self, recording):
-        """Update only the recordings cards in the scrollable content area."""
-        if recording.rec_id in self.cards_obj:
-            try:
-                recording_card = self.cards_obj[recording.rec_id]
+        """Update the card display based on the recording's state."""
+        try:
+            recording_card = self.cards_obj.get(recording.rec_id)
+            if not recording_card:
+                return
+
+            new_status_label = self.create_status_label(recording)
+            
+            if recording_card["card"] and recording_card["card"].content and recording_card["card"].content.content:
+                title_row = recording_card["card"].content.content.controls[0]
+                title_row.alignment = ft.MainAxisAlignment.START
+                title_row.spacing = 5
+                title_row.tight = True
                 
+                title_row_controls = title_row.controls
+                if len(title_row_controls) > 1:
+                    if new_status_label:
+                        title_row_controls[1] = new_status_label
+                    else:
+                        title_row_controls.pop(1)
+                elif new_status_label:
+                    title_row_controls.append(new_status_label)
+            
+            recording_card["status_label"] = new_status_label
+            
+            # 还原显示标题前缀的逻辑
+            if recording_card.get("display_title_label"):
                 status_prefix = ""
                 if not recording.monitor_status:
                     status_prefix = f"[{self._['monitor_stopped']}] "
                 
                 display_title = f"{status_prefix}{recording.title}"
-                if recording_card.get("display_title_label"):
-                    recording_card["display_title_label"].value = display_title
-                    title_label_weight = ft.FontWeight.BOLD if recording.recording or recording.is_live else None
-                    recording_card["display_title_label"].weight = title_label_weight
-                
-                new_status_label = self.create_status_label(recording)
-                
-                if recording_card["card"] and recording_card["card"].content and recording_card["card"].content.content:
-                    title_row = recording_card["card"].content.content.controls[0]
-                    title_row.alignment = ft.MainAxisAlignment.START
-                    title_row.spacing = 5
-                    title_row.tight = True
-                    
-                    title_row_controls = title_row.controls
-                    if len(title_row_controls) > 1:
-                        if new_status_label:
-                            title_row_controls[1] = new_status_label
-                        else:
-                            title_row_controls.pop(1)
-                    elif new_status_label:
-                        title_row_controls.append(new_status_label)
-                
-                recording_card["status_label"] = new_status_label
-                
-                if recording_card.get("duration_label"):
-                    recording_card["duration_label"].value = self.app.record_manager.get_duration(recording)
-                
-                if recording_card.get("speed_label"):
-                    recording_card["speed_label"].value = recording.speed
-                
-                # 动态获取当前语言，定义disabled_tip
-                is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
-                disabled_tip = "请开启监控或点击刷新按钮" if is_zh else "Please enable monitor or click the refresh button"
+                recording_card["display_title_label"].value = display_title
+                title_label_weight = ft.FontWeight.BOLD if recording.recording or recording.is_live else None
+                recording_card["display_title_label"].weight = title_label_weight
+            
+            if recording_card.get("duration_label"):
+                recording_card["duration_label"].value = self.app.record_manager.get_duration(recording)
+            
+            if recording_card.get("speed_label"):
+                recording_card["speed_label"].value = recording.speed
+            
+            # 全面刷新所有按钮和文本的国际化内容
+            if recording_card.get("record_button"):
+                recording_card["record_button"].icon = self.get_icon_for_recording_state(recording)
+                recording_card["record_button"].tooltip = self.get_tip_for_recording_state(recording)
+                # 更新录制按钮的禁用状态：未监控或未开播时禁用
+                is_record_button_disabled = not recording.monitor_status or (recording.monitor_status and not recording.is_live)
+                recording_card["record_button"].disabled = is_record_button_disabled
+            if recording_card.get("edit_button"):
+                recording_card["edit_button"].tooltip = self._["edit_record_config"]
+            if recording_card.get("preview_button"):
+                recording_card["preview_button"].tooltip = self._["preview_video"]
+            if recording_card.get("monitor_button"):
+                recording_card["monitor_button"].icon = self.get_icon_for_monitor_state(recording)
+                recording_card["monitor_button"].tooltip = self.get_tip_for_monitor_state(recording)
+            if recording_card.get("delete_button"):
+                recording_card["delete_button"].tooltip = self._["delete_monitor"]
+            if recording_card.get("get_stream_button"):
+                recording_card["get_stream_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
+                recording_card["get_stream_button"].tooltip = (
+                    self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]
+                )
+            if recording_card.get("play_button"):
+                recording_card["play_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
+                recording_card["play_button"].tooltip = (
+                    self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]
+                )
+            if recording_card.get("open_folder_button"):
+                recording_card["open_folder_button"].tooltip = self._["open_folder"]
+            if recording_card.get("recording_info_button"):
+                recording_card["recording_info_button"].tooltip = self._["recording_info"]
 
-                # 全面刷新所有按钮和文本的国际化内容
-                if recording_card.get("record_button"):
-                    recording_card["record_button"].icon = self.get_icon_for_recording_state(recording)
-                    recording_card["record_button"].tooltip = self.get_tip_for_recording_state(recording)
-                if recording_card.get("edit_button"):
-                    recording_card["edit_button"].tooltip = self._["edit_record_config"]
-                if recording_card.get("preview_button"):
-                    recording_card["preview_button"].tooltip = self._["preview_video"]
-                if recording_card.get("monitor_button"):
-                    recording_card["monitor_button"].icon = self.get_icon_for_monitor_state(recording)
-                    recording_card["monitor_button"].tooltip = self.get_tip_for_monitor_state(recording)
-                if recording_card.get("delete_button"):
-                    recording_card["delete_button"].tooltip = self._["delete_monitor"]
-                if recording_card.get("get_stream_button"):
-                    recording_card["get_stream_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
-                    recording_card["get_stream_button"].tooltip = (
-                        self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
-                    )
-                if recording_card.get("play_button"):
-                    recording_card["play_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
-                    recording_card["play_button"].tooltip = (
-                        self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
-                    )
-                if recording_card.get("open_folder_button"):
-                    recording_card["open_folder_button"].tooltip = self._["open_folder"]
-                if recording_card.get("recording_info_button"):
-                    recording_card["recording_info_button"].tooltip = self._["recording_info"]
-
-                if recording_card["card"] and recording_card["card"].content:
-                    recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
-                    recording_card["card"].content.border = ft.border.all(2, self.get_card_border_color(recording))
-                    recording_card["card"].update()
-            except Exception as e:
-                print(f"Error updating card: {e}")
+            if recording_card["card"] and recording_card["card"].content:
+                recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
+                recording_card["card"].content.border = ft.border.all(2, self.get_card_border_color(recording))
+                recording_card["card"].update()
+        except Exception as e:
+            print(f"Error updating card: {e}")
 
     async def update_monitor_state(self, recording: Recording):
         """Update the monitor button state based on the current monitoring status."""
@@ -354,17 +357,26 @@ class RecordingCardManager:
                     "display_title": f"[{self._['monitor_stopped']}] {recording.title}",
                 }
             )
-            self.app.record_manager.stop_recording(recording)
+            self.app.record_manager.stop_recording(recording, manually_stopped=True)
             
             # 手动停止监控时，重置通知状态和was_recording标志
             # 这样下次开始监控时可以再次发送通知
             recording.notification_sent = False
+            recording.end_notification_sent = False
             if hasattr(recording, 'was_recording'):
                 recording.was_recording = False
             logger.info(f"手动停止监控，重置通知状态: {recording.streamer_name}")
             
             self.app.page.run_task(self.app.snack_bar.show_snack_bar, self._["stop_monitor_tip"])
         else:
+            # 开始监控前检查磁盘空间是否足够
+            # 每次点击开始监控按钮都会检查空间并可能显示警告
+            if not await self.app.record_manager.check_free_space():
+                # 如果磁盘空间不足，不执行开始监控的操作，并返回
+                logger.error("磁盘空间不足，无法开始监控")
+                return
+                
+            # 磁盘空间足够，执行正常的开始监控操作
             recording.update(
                 {
                     "monitor_status": not recording.monitor_status,
@@ -378,6 +390,14 @@ class RecordingCardManager:
         await self.update_card(recording)
         self.app.page.pubsub.send_others_on_topic("update", recording)
         self.app.page.run_task(self.app.record_manager.persist_recordings)
+
+        # 无论是哪种录制模式，都更新录制按钮的状态
+        recording_card = self.cards_obj.get(recording.rec_id)
+        if recording_card and recording_card.get("record_button"):
+            # 修复：根据监控状态和直播状态综合判断是否禁用录制按钮
+            is_record_button_disabled = not recording.monitor_status or (recording.monitor_status and not recording.is_live)
+            recording_card["record_button"].disabled = is_record_button_disabled
+            recording_card["record_button"].update()
 
     async def show_recording_info_dialog(self, recording: Recording):
         """Display a dialog with detailed information about the recording."""
@@ -406,19 +426,27 @@ class RecordingCardManager:
         self.app.page.pubsub.send_others_on_topic("update", recording_dict)
 
     async def on_toggle_recording(self, recording: Recording):
-        """Toggle the recording state for a specific recording."""
-        if recording and self.app.recording_enabled:
+        """Toggle recording state."""
+        if recording:
+            # 如果已经在录制，则停止录制
             if recording.recording:
-                self.app.record_manager.stop_recording(recording)
+                self.app.record_manager.stop_recording(recording, manually_stopped=True)
                 await self.app.snack_bar.show_snack_bar(self._["stop_record_tip"])
             else:
+                # 每次点击开始录制按钮都检查磁盘空间并可能显示警告
+                if not await self.app.record_manager.check_free_space():
+                    # 如果磁盘空间不足，不执行开始录制的操作，并返回
+                    logger.error("磁盘空间不足，无法开始录制")
+                    return
+                
                 # 复用自动录制参数构建方式，保证平台识别一致
                 platform, platform_key = get_platform_info(recording.url)
                 if not platform or not platform_key:
                     await self.app.snack_bar.show_snack_bar(
-                        self._["platform_not_supported_tip"] if "platform_not_supported_tip" in self._ else "不支持的平台或链接", bgcolor=ft.Colors.RED
+                        self._["platform_not_supported_tip"], bgcolor=ft.Colors.RED
                     )
                     return
+                    
                 output_dir = self.app.record_manager.settings.get_video_save_path()
                 recording_info = {
                     "platform": platform,
@@ -453,8 +481,9 @@ class RecordingCardManager:
                             
                             logger.info(f"全局推送设置: {global_push_enabled}, 单独推送设置: {item_push_enabled}")
                             
-                            # 只有当全局直播状态推送开关打开或该录制项单独启用了消息推送时，才进行推送
-                            if global_push_enabled or item_push_enabled:
+                            # 修改：只有当全局直播状态推送开关打开AND该录制项启用了消息推送时，才进行推送
+                            # 从OR条件改为AND条件，与自动模式保持一致
+                            if global_push_enabled and item_push_enabled:
                                 # 检查是否有至少一个推送渠道被启用
                                 bark_enabled = user_config.get("bark_enabled", False)
                                 wechat_enabled = user_config.get("wechat_enabled", False)
@@ -462,10 +491,12 @@ class RecordingCardManager:
                                 ntfy_enabled = user_config.get("ntfy_enabled", False)
                                 telegram_enabled = user_config.get("telegram_enabled", False)
                                 email_enabled = user_config.get("email_enabled", False)
+                                serverchan_enabled = user_config.get("serverchan_enabled", False)
                                 
                                 any_channel_enabled = (
                                     bark_enabled or wechat_enabled or dingtalk_enabled or 
-                                    ntfy_enabled or telegram_enabled or email_enabled
+                                    ntfy_enabled or telegram_enabled or email_enabled or
+                                    serverchan_enabled
                                 )
                                 
                                 logger.info(f"推送渠道状态: bark={bark_enabled}, wechat={wechat_enabled}, "
@@ -494,8 +525,8 @@ class RecordingCardManager:
                                     # 创建消息推送器并发送消息
                                     msg_manager = MessagePusher(self.app.settings)
                                     # 直接在当前任务中执行推送，不使用run_task
-                                    push_tasks = await msg_manager.push_messages(msg_title, push_content)
-                                    logger.info(f"已创建 {len(push_tasks)} 个推送任务")
+                                    self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                                    logger.info(f"已创建消息推送任务")
                                     # 设置通知已发送标志
                                     recording.notification_sent = True
                                 elif recording.notification_sent:
@@ -503,7 +534,7 @@ class RecordingCardManager:
                                 else:
                                     logger.info("没有启用任何推送渠道，跳过消息推送")
                             else:
-                                logger.info("全局推送开关和单独推送设置均未启用，跳过消息推送")
+                                logger.info("全局推送开关和单独推送设置必须同时启用，跳过消息推送")
                         except Exception as e:
                             logger.error(f"手动录制模式下消息推送失败: {str(e)}")
                     
@@ -514,19 +545,13 @@ class RecordingCardManager:
                     # 这样在停止录制返回"直播中（未录制）"状态时不会重复发送通知
                     logger.info(f"开始录制，保持通知状态: {recording.streamer_name}")
                 else:
-                    await self.app.snack_bar.show_snack_bar(
-                        self._["is_not_live_tip"] if "is_not_live_tip" in self._ else "未开播，无法录制", bgcolor=ft.Colors.RED
-                    )
+                    pass
             await self.update_card(recording)
             self.app.page.pubsub.send_others_on_topic("update", recording)
 
     async def on_delete_recording(self, recording: Recording):
         """Delete a recording from the list and update UI."""
         if recording:
-            if recording.recording:
-                await self.app.snack_bar.show_snack_bar(self._["please_stop_monitor_tip"])
-                return
-                
             # 在删除前检查是否需要切换平台视图
             home_page = self.app.current_page
             need_switch_to_all = False
@@ -557,16 +582,8 @@ class RecordingCardManager:
             # 如果需要切换到全部平台视图
             if need_switch_to_all and hasattr(home_page, "current_platform_filter"):
                 home_page.current_platform_filter = "all"
+                home_page.page.run_task(home_page.apply_filter)
             
-            # 更新筛选区域
-            if hasattr(home_page, "create_filter_area") and hasattr(home_page, "content_area"):
-                home_page.content_area.controls[1] = home_page.create_filter_area()
-                home_page.content_area.update()
-                
-                # 应用筛选
-                if hasattr(home_page, "apply_filter"):
-                    await home_page.apply_filter()
-                
             await self.app.snack_bar.show_snack_bar(
                 self._["delete_recording_success_tip"], bgcolor=ft.Colors.GREEN, duration=2000
             )
@@ -634,7 +651,15 @@ class RecordingCardManager:
         return ft.Icons.PLAY_CIRCLE if not recording.recording else ft.Icons.STOP_CIRCLE
 
     def get_tip_for_recording_state(self, recording: Recording):
-        return self._["stop_record"] if recording.recording else self._["start_record"]
+        # 修改：无论哪种模式，停止监控状态下都显示需要开启监控的提示
+        if not recording.monitor_status:
+            return self._["tip_start_monitor_first"]
+        # 添加未开播状态的提示
+        elif recording.monitor_status and not recording.is_live:
+            return self._["tip_not_live"]
+        elif recording.recording:
+            return self._["tip_stop_recording"]
+        return self._["tip_start_recording"]
 
     @staticmethod
     def get_icon_for_monitor_state(recording: Recording):
@@ -691,6 +716,13 @@ class RecordingCardManager:
         ).show_dialog()
 
     async def recording_delete_button_click(self, _, recording: Recording):
+        # 检查是否正在录制，如果是则直接提示
+        if recording.recording:
+            await self.app.snack_bar.show_snack_bar(
+                self._["recording_in_progress_tip"], bgcolor=ft.Colors.RED
+            )
+            return
+
         async def confirm_dlg(_):
             self.app.page.run_task(self.on_delete_recording, recording)
             await close_dialog(None)

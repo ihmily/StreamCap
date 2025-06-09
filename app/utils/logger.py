@@ -116,7 +116,7 @@ class LogCleanupScheduler:
         """计算下次清理时间（凌晨3点）"""
         now = datetime.datetime.now()
         # 今天凌晨3点
-        today_3am = now.replace(hour=23, minute=43, second=0, microsecond=0)
+        today_3am = now.replace(hour=3, minute=0, second=0, microsecond=0)
         
         # 如果当前时间已经过了今天凌晨3点，则设置为明天凌晨3点
         if now > today_3am:
@@ -186,7 +186,7 @@ class LogCleanupScheduler:
                     logger.info(f"下次日志清理时间: {self.next_cleanup_time.strftime('%Y-%m-%d %H:%M:%S')}")
                 
                 # 每小时检查一次
-                time.sleep(15)
+                time.sleep(3600)
             except Exception as e:
                 logger.error(f"日志定时清理任务出错: {e}")
                 # 出错后等待10分钟再继续

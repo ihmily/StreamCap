@@ -116,7 +116,7 @@ class LogCleanupScheduler:
         """计算下次清理时间（凌晨3点）"""
         now = datetime.datetime.now()
         # 今天凌晨3点
-        today_3am = now.replace(hour=16, minute=55, second=0, microsecond=0)
+        today_3am = now.replace(hour=3, minute=0, second=0, microsecond=0)
         
         # 如果当前时间已经过了今天凌晨3点，则设置为明天凌晨3点
         if now > today_3am:

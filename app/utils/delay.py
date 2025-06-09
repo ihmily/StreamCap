@@ -2,7 +2,7 @@ import asyncio
 from app.utils.logger import logger
 
 class DelayedTaskExecutor:
-    def __init__(self, app, settings, delay=3):
+    def __init__(self, app, settings, delay=3): 
         self.app = app
         self.settings = settings
         self.save_timers = {}

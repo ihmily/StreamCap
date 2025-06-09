@@ -216,10 +216,10 @@ class RecordingDialog:
         )
 
         record_mode_dropdown = ft.Dropdown(
-            label=self._.get("record_mode", "录制模式"),
+            label=self._["record_mode"],
             options=[
-                ft.dropdown.Option("auto", self._.get("auto_record", "自动录制")),
-                ft.dropdown.Option("manual", self._.get("manual_record", "手动录制"))
+                ft.dropdown.Option("auto", self._["auto_record"]),
+                ft.dropdown.Option("manual", self._["manual_record"])
             ],
             value=initial_values.get("record_mode", "auto"),
             width=500,

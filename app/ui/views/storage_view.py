@@ -189,7 +189,7 @@ class StoragePage(BasePage):
             self.file_list.controls.append(
                 ft.Container(
                     content=ft.Text(
-                        "📁 " + (self._["folders"] if "folders" in self._ else "文件夹"),
+                        "📁 " + self._["folders"],
                         size=14,
                         weight=ft.FontWeight.BOLD,
                         color=ft.colors.BLUE_700,
@@ -204,7 +204,7 @@ class StoragePage(BasePage):
             self.file_list.controls.append(
                 ft.Container(
                     content=ft.Text(
-                        "🎬 " + (self._["files"] if "files" in self._ else "视频文件"),
+                        "🎬 " + self._["files"],
                         size=14,
                         weight=ft.FontWeight.BOLD,
                         color=ft.colors.BLUE_700,

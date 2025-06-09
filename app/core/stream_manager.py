@@ -609,8 +609,12 @@ class LiveStreamRecorder:
                 else:
                     self.recording.recording = False
                     logger.success(f"Live recording completed: {record_name}")
-                    if (self.app.recording_enabled and self.settings.user_config["stream_end_notification_enabled"]
-                            and self.recording.enabled_message_push and not self.recording.manually_stopped):
+                    # 添加检查，避免重复发送关闭通知
+                    # 检查是否已经发送过关闭通知，这可能在record_manager.py的check_if_live方法中已经发送过
+                    end_notification_sent = getattr(self.recording, "end_notification_sent", False)
+                    if (not end_notification_sent and self.app.recording_enabled and 
+                            self.settings.user_config["stream_end_notification_enabled"] and 
+                            self.recording.enabled_message_push and not self.recording.manually_stopped):
                         # 准备关播推送内容
                         push_content = self._["push_content_end"]
                         end_push_message_text = self.settings.user_config.get("custom_stream_end_content")
@@ -628,6 +632,8 @@ class LiveStreamRecorder:
                         logger.info(f"关播推送：{self.recording.streamer_name}，将消息加入推送队列")
                         msg_manager = MessagePusher(self.settings)
                         self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                        # 标记已发送关闭通知，避免重复发送
+                        self.recording.end_notification_sent = True
                 try:
                     self.recording.update({"display_title": display_title})
                     await self.app.record_card_manager.update_card(self.recording)

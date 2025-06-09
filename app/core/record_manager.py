@@ -141,6 +141,7 @@ class RecordingManager:
             # 手动停止监控时，重置通知状态和was_recording标志
             # 这样下次开始监控时可以再次发送通知
             recording.notification_sent = False
+            recording.end_notification_sent = False
             if hasattr(recording, 'was_recording'):
                 recording.was_recording = False
             logger.info(f"手动停止监控，重置通知状态: {recording.streamer_name}")
@@ -214,7 +215,7 @@ class RecordingManager:
                 if not recording.detection_time or is_exceeded:
                     self.app.page.run_task(self.check_if_live, recording)
 
-    async def setup_periodic_live_check(self, interval: int = 60): # 60秒检查一次磁盘空间
+    async def setup_periodic_live_check(self, interval: int = 300): # 5分钟检查一次磁盘空间
         """Set up a periodic task to check live status."""
 
         async def periodic_check():
@@ -328,38 +329,45 @@ class RecordingManager:
                 # 修改：无论是否之前处于录制状态，只要状态从"直播中"变为"未开播"，就发送直播结束通知
                 # 这样可以确保从"直播中（未录制）"状态变为"未开播"状态时也会发送通知
                 if self.settings.user_config.get("stream_end_notification_enabled", False) and recording.enabled_message_push:
-                    # 检查是否有至少一个推送渠道被启用
-                    user_config = self.settings.user_config
-                    bark_enabled = user_config.get("bark_enabled", False)
-                    wechat_enabled = user_config.get("wechat_enabled", False)
-                    dingtalk_enabled = user_config.get("dingtalk_enabled", False)
-                    ntfy_enabled = user_config.get("ntfy_enabled", False)
-                    telegram_enabled = user_config.get("telegram_enabled", False)
-                    email_enabled = user_config.get("email_enabled", False)
-                    serverchan_enabled = user_config.get("serverchan_enabled", False)
-                    
-                    any_channel_enabled = (
-                        bark_enabled or wechat_enabled or dingtalk_enabled or 
-                        ntfy_enabled or telegram_enabled or email_enabled or
-                        serverchan_enabled
-                    )
-                    
-                    if any_channel_enabled:
-                        push_content = self._["push_content_end"]
-                        end_push_message_text = self.settings.user_config.get("custom_stream_end_content")
-                        if end_push_message_text:
-                            push_content = end_push_message_text
-
-                        push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
-                        push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
-                            "[time]", push_at
+                    # 检查是否已经发送过关闭通知
+                    end_notification_sent = getattr(recording, "end_notification_sent", False)
+                    if not end_notification_sent:
+                        # 检查是否有至少一个推送渠道被启用
+                        user_config = self.settings.user_config
+                        bark_enabled = user_config.get("bark_enabled", False)
+                        wechat_enabled = user_config.get("wechat_enabled", False)
+                        dingtalk_enabled = user_config.get("dingtalk_enabled", False)
+                        ntfy_enabled = user_config.get("ntfy_enabled", False)
+                        telegram_enabled = user_config.get("telegram_enabled", False)
+                        email_enabled = user_config.get("email_enabled", False)
+                        serverchan_enabled = user_config.get("serverchan_enabled", False)
+                        
+                        any_channel_enabled = (
+                            bark_enabled or wechat_enabled or dingtalk_enabled or 
+                            ntfy_enabled or telegram_enabled or email_enabled or
+                            serverchan_enabled
                         )
-                        msg_title = self.settings.user_config.get("custom_notification_title", "").strip()
-                        msg_title = msg_title or self._["status_notify"]
+                        
+                        if any_channel_enabled:
+                            push_content = self._["push_content_end"]
+                            end_push_message_text = self.settings.user_config.get("custom_stream_end_content")
+                            if end_push_message_text:
+                                push_content = end_push_message_text
 
-                        logger.info(f"直播结束通知: {msg_title} - {push_content}")
-                        msg_manager = MessagePusher(self.settings)
-                        self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                            push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
+                            push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
+                                "[time]", push_at
+                            )
+                            msg_title = self.settings.user_config.get("custom_notification_title", "").strip()
+                            msg_title = msg_title or self._["status_notify"]
+
+                            logger.info(f"直播结束通知: {msg_title} - {push_content}")
+                            msg_manager = MessagePusher(self.settings)
+                            self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+                            # 设置已发送关闭通知标志，避免重复发送
+                            recording.end_notification_sent = True
+                        else:
+                            logger.info(f"已经发送过关播通知，跳过重复发送: {recording.streamer_name}")
                 
                 # 由于已经处理了状态更新和UI刷新，如果当前检测是正确的（直播已结束），
                 # 可以在这里提前结束check_if_live函数，以避免后面的不必要处理
@@ -543,6 +551,8 @@ class RecordingManager:
             # 这样下次直播开始时可以再次发送通知
             if not recording.is_live:
                 recording.notification_sent = False
+                # 同时重置end_notification_sent标志，以便下次直播结束时可以再次发送通知
+                recording.end_notification_sent = False
                 logger.info(f"直播已结束，重置通知状态: {recording.streamer_name}")
             else:
                 # 如果直播仍在进行中，设置was_recording标志
@@ -552,6 +562,8 @@ class RecordingManager:
         # 无论是否正在录制，如果直播已经结束，都确保重置通知状态
         elif not recording.is_live and hasattr(recording, 'notification_sent') and recording.notification_sent:
             recording.notification_sent = False
+            # 同时重置end_notification_sent标志
+            recording.end_notification_sent = False
             logger.info(f"从\"直播中（未录制）\"变为\"未开播\"状态，重置通知状态: {recording.streamer_name}")
 
     def get_duration(self, recording: Recording):

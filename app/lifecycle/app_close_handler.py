@@ -63,14 +63,15 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                     else:
                         app.settings.user_config["window_width"] = width
                         app.settings.user_config["window_height"] = height
-                        logger.info(f"已保存窗口大小: {width}x{height}")
+                        logger.info(f"程序关闭时保存窗口大小: {width}x{height}")
                 except (ImportError, IndexError):
                     # 如果无法获取屏幕信息，直接保存
                     app.settings.user_config["window_width"] = width
                     app.settings.user_config["window_height"] = height
-                    logger.info(f"已保存窗口大小: {width}x{height}")
+                    logger.info(f"程序关闭时保存窗口大小: {width}x{height}")
                 
                 # 立即保存配置
+                logger.info("执行窗口大小保存操作（仅在程序关闭时执行一次）")
                 await app.config_manager.save_user_config(app.settings.user_config)
         except Exception as ex:
             logger.error(f"保存窗口大小时出错: {ex}")

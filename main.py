@@ -170,37 +170,26 @@ def handle_disconnect(page: ft.Page) -> callable:
 
 
 def handle_window_resize(page: ft.Page, app: App) -> callable:
-    """处理窗口大小调整事件，保存窗口大小到用户配置"""
+    """处理窗口大小调整事件，更新窗口大小到用户配置但不保存"""
     
     def on_window_resize(e: ft.ControlEvent) -> None:
         # 获取当前窗口大小
         width = page.window.width
         height = page.window.height
         
-        # 只有当窗口大小有效且发生变化时才保存
+        # 只有当窗口大小有效且发生变化时才更新配置
         if (width and height and 
             width >= MIN_WIDTH and
             height >= MIN_HEIGHT and
             (width != app.settings.user_config.get("window_width") or 
              height != app.settings.user_config.get("window_height"))):
             
-            # 更新用户配置
+            # 更新用户配置，但不保存
             app.settings.user_config["window_width"] = width
             app.settings.user_config["window_height"] = height
             
             # 记录窗口大小变更
-            logger.debug(f"窗口大小已调整为: {width}x{height}")
-            
-            # 保存配置（使用延迟保存以避免频繁写入）
-            if hasattr(app.settings, "delay_handler"):
-                page.run_task(
-                    app.settings.delay_handler.start_task_timer, 
-                    app.settings.save_user_config_after_delay, 
-                    None
-                )
-            else:
-                # 如果没有延迟处理器，直接保存
-                page.run_task(app.config_manager.save_user_config, app.settings.user_config)
+            logger.debug(f"窗口大小已调整为: {width}x{height}（将在程序关闭时保存）")
     
     return on_window_resize
 

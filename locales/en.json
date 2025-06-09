@@ -121,7 +121,6 @@
     "start_monitor_tip": "Live monitoring has been started",
     "please_stop_monitor_tip": "Please stop live monitoring first️",
     "please_start_monitor_tip": "Please start live monitoring first",
-    "is_not_live_tip": "The live room is not broadcasting",
     "pre_record_tip": "Preparing to start recording",
     "stop_record_tip": "Live room recording has been stopped",
     "no_folder_tip": "The live room folder does not exist",
@@ -166,12 +165,12 @@
     "vlc_not_set": "VLC path not set, cannot play",
     "play_failed": "Play failed, no stream or VLC path",
     "live_monitoring_not_recording": "Live (Not Recording)",
-    "manual_mode_monitor_required": "Please enable monitoring in manual mode",
     "auto_mode_monitor_required": "Please enable monitoring in auto mode",
     "tip_start_monitor_first": "Please enable monitoring first",
     "tip_not_live": "Stream is offline, cannot record",
     "tip_stop_recording": "Stop Recording",
-    "tip_start_recording": "Start Recording"
+    "tip_start_recording": "Start Recording",
+    "no_stream_source": "No stream source available, cannot use"
   },
   "settings_page": {
     "recording_settings": "Recording Settings",
@@ -203,13 +202,13 @@
     "advanced_config": "Advanced recording configuration",
     "video_record_format": "Video Recording Format",
     "recording_quality": "Recording Quality",
-    "loop_time": "Live Room Status Check Interval (Seconds)",
+    "loop_time": "Loop Time",
     "is_segmented_recording_enabled": "Enable Segmented Recording",
     "force_https": "Force HTTPS Recording",
     "space_threshold": "Remaining Space Threshold (GB) for Recording",
     "segment_time": "Video Segment Time (Seconds)",
     "convert_mp4": "Convert to MP4 After Recording",
-    "delete_original": "Delete Original File After Appending Format",
+    "delete_original": "Delete Original File After Converting Format",
     "generate_timestamps_subtitle": "Generate Timestamp Subtitle",
     "custom_script": "Execute Custom Script After Recording",
     "script_command": "Custom Script Execution Command",
@@ -339,7 +338,9 @@
     "platform_filter_style_tile": "Tile",
     "platform_filter_style_dropdown": "Dropdown (Aggregated)",
     "platform_filter_style_tip": "Set the display style of the platform filter on the main page. Tile is a button group, Dropdown is a dropdown box.",
-    "notification_both_required": "Sending notifications requires both global settings and individual live room message push switches to be enabled"
+    "notification_both_required": "Sending notifications requires both global settings and individual live room message push switches to be enabled",
+    "auto_clean_logs": "Auto Clean Expired Logs",
+    "log_retention_days": "Log Retention Days"
   },
   "about_page": {
     "about_project": "About This Application",

@@ -91,18 +91,16 @@ class RecordingCardManager:
         )
 
         # 判断当前语言环境
-        is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
-        disabled_tip = "未获取到直播源，不可使用" if is_zh else "No stream source available, cannot use"
         get_stream_button = ft.IconButton(
             icon=ft.Icons.LINK,
-            tooltip=(self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip),
+            tooltip=(self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]),
             on_click=partial(self.get_stream_url_on_click, recording=recording),
             disabled=not (recording.monitor_status and (recording.is_live or recording.recording)),
         )
 
         play_button = ft.IconButton(
             icon=ft.Icons.PLAY_ARROW,
-            tooltip=(self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip),
+            tooltip=(self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]),
             on_click=partial(self.play_stream_on_click, recording=recording),
             disabled=not (recording.monitor_status and (recording.is_live or recording.recording)),
         )
@@ -257,7 +255,7 @@ class RecordingCardManager:
         elif recording.is_live and recording.monitor_status and not recording.recording:
             # 显示"直播中（未录制）"状态标签
             return ft.Container(
-                content=ft.Text(self._.get("live_monitoring_not_recording", "直播中（未录制）"), color=ft.colors.WHITE, size=12, weight=ft.FontWeight.BOLD),
+                content=ft.Text(self._["live_monitoring_not_recording"], color=ft.colors.WHITE, size=12, weight=ft.FontWeight.BOLD),
                 bgcolor=ft.colors.CYAN,
                 border_radius=5,
                 padding=5,
@@ -310,10 +308,6 @@ class RecordingCardManager:
             if recording_card.get("speed_label"):
                 recording_card["speed_label"].value = recording.speed
             
-            # 动态获取当前语言，定义disabled_tip
-            is_zh = getattr(self.app, "language_code", "zh_CN").startswith("zh")
-            disabled_tip = "未获取到直播源，不可使用" if is_zh else "No stream source available, cannot use"
-
             # 全面刷新所有按钮和文本的国际化内容
             if recording_card.get("record_button"):
                 recording_card["record_button"].icon = self.get_icon_for_recording_state(recording)
@@ -333,12 +327,12 @@ class RecordingCardManager:
             if recording_card.get("get_stream_button"):
                 recording_card["get_stream_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
                 recording_card["get_stream_button"].tooltip = (
-                    self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
+                    self._["copy_stream_url"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]
                 )
             if recording_card.get("play_button"):
                 recording_card["play_button"].disabled = not (recording.monitor_status and (recording.is_live or recording.recording))
                 recording_card["play_button"].tooltip = (
-                    self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else disabled_tip
+                    self._["play_stream"] if (recording.monitor_status and (recording.is_live or recording.recording)) else self._["no_stream_source"]
                 )
             if recording_card.get("open_folder_button"):
                 recording_card["open_folder_button"].tooltip = self._["open_folder"]
@@ -368,6 +362,7 @@ class RecordingCardManager:
             # 手动停止监控时，重置通知状态和was_recording标志
             # 这样下次开始监控时可以再次发送通知
             recording.notification_sent = False
+            recording.end_notification_sent = False
             if hasattr(recording, 'was_recording'):
                 recording.was_recording = False
             logger.info(f"手动停止监控，重置通知状态: {recording.streamer_name}")
@@ -431,51 +426,24 @@ class RecordingCardManager:
         self.app.page.pubsub.send_others_on_topic("update", recording_dict)
 
     async def on_toggle_recording(self, recording: Recording):
-        """Toggle the recording state for a specific recording."""
+        """Toggle recording state."""
         if recording:
             # 如果已经在录制，则停止录制
             if recording.recording:
                 self.app.record_manager.stop_recording(recording, manually_stopped=True)
                 await self.app.snack_bar.show_snack_bar(self._["stop_record_tip"])
             else:
-                # 检查是否开启监控
-                if not recording.monitor_status:
-                    await self.app.snack_bar.show_snack_bar(
-                        self._["tip_start_monitor_first"] if "tip_start_monitor_first" in self._ else "请先开启监控", 
-                        bgcolor=ft.Colors.AMBER, 
-                        duration=3000
-                    )
-                    return
-                
-                # 检查是否正在直播
-                if not recording.is_live:
-                    await self.app.snack_bar.show_snack_bar(
-                        self._["is_not_live_tip"] if "is_not_live_tip" in self._ else "未开播，无法录制", 
-                        bgcolor=ft.Colors.RED,
-                        duration=3000
-                    )
-                    return
-                
                 # 每次点击开始录制按钮都检查磁盘空间并可能显示警告
                 if not await self.app.record_manager.check_free_space():
                     # 如果磁盘空间不足，不执行开始录制的操作，并返回
                     logger.error("磁盘空间不足，无法开始录制")
                     return
                 
-                # 手动录制模式下，检查监控状态
-                if recording.record_mode == "manual" and not recording.monitor_status:
-                    await self.app.snack_bar.show_snack_bar(
-                        self._["manual_mode_monitor_required"], 
-                        bgcolor=ft.Colors.AMBER, 
-                        duration=3000
-                    )
-                    return
-                
                 # 复用自动录制参数构建方式，保证平台识别一致
                 platform, platform_key = get_platform_info(recording.url)
                 if not platform or not platform_key:
                     await self.app.snack_bar.show_snack_bar(
-                        self._["platform_not_supported_tip"] if "platform_not_supported_tip" in self._ else "不支持的平台或链接", bgcolor=ft.Colors.RED
+                        self._["platform_not_supported_tip"], bgcolor=ft.Colors.RED
                     )
                     return
                     
@@ -577,9 +545,7 @@ class RecordingCardManager:
                     # 这样在停止录制返回"直播中（未录制）"状态时不会重复发送通知
                     logger.info(f"开始录制，保持通知状态: {recording.streamer_name}")
                 else:
-                    await self.app.snack_bar.show_snack_bar(
-                        self._["is_not_live_tip"] if "is_not_live_tip" in self._ else "未开播，无法录制", bgcolor=ft.Colors.RED
-                    )
+                    pass
             await self.update_card(recording)
             self.app.page.pubsub.send_others_on_topic("update", recording)
 
@@ -687,13 +653,13 @@ class RecordingCardManager:
     def get_tip_for_recording_state(self, recording: Recording):
         # 修改：无论哪种模式，停止监控状态下都显示需要开启监控的提示
         if not recording.monitor_status:
-            return self._["tip_start_monitor_first"] if "tip_start_monitor_first" in self._ else "请先开启监控"
+            return self._["tip_start_monitor_first"]
         # 添加未开播状态的提示
         elif recording.monitor_status and not recording.is_live:
-            return self._["tip_not_live"] if "tip_not_live" in self._ else "未开播，无法录制"
+            return self._["tip_not_live"]
         elif recording.recording:
-            return self._["tip_stop_recording"] if "tip_stop_recording" in self._ else "停止录制"
-        return self._["tip_start_recording"] if "tip_start_recording" in self._ else "开始录制"
+            return self._["tip_stop_recording"]
+        return self._["tip_start_recording"]
 
     @staticmethod
     def get_icon_for_monitor_state(recording: Recording):

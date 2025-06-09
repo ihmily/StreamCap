@@ -122,7 +122,6 @@
     "start_monitor_tip": "已开启直播监控",
     "please_stop_monitor_tip": "请先停止直播监控",
     "please_start_monitor_tip": "请先开启直播监控",
-    "is_not_live_tip": "该直播间未开播",
     "pre_record_tip": "准备开始录制",
     "stop_record_tip": "已停止直播间录制️",
     "no_folder_tip": "该直播间文件夹不存在",
@@ -167,12 +166,12 @@
     "vlc_not_set": "未配置VLC路径，无法播放",
     "play_failed": "播放失败，未获取到直播源或VLC路径",
     "live_monitoring_not_recording": "直播中（未录制）",
-    "manual_mode_monitor_required": "手动录制模式下需先开启监控",
     "auto_mode_monitor_required": "自动录制模式下需先开启监控",
     "tip_start_monitor_first": "请先开启监控",
     "tip_not_live": "未开播，无法录制",
     "tip_stop_recording": "停止录制",
-    "tip_start_recording": "开始录制"
+    "tip_start_recording": "开始录制",
+    "no_stream_source": "未获取到直播源，不可使用"
   },
   "settings_page": {
     "recording_settings": "录制设置",
@@ -204,13 +203,13 @@
     "advanced_config": "配置录制高级选项",
     "video_record_format": "视频录制格式",
     "recording_quality": "录制清晰度",
-    "loop_time": "直播间状态检查时间间隔(秒)",
+    "loop_time": "循环时间(秒)",
     "is_segmented_recording_enabled": "分段录制是否开启",
     "force_https": "强制启用https录制",
     "space_threshold": "录制空间剩余阈值(gb)",
     "segment_time": "视频分段时间(秒)",
     "convert_mp4": "录制完成后转为mp4格式",
-    "delete_original": "追加格式后删除原文件",
+    "delete_original": "转换格式后删除原文件",
     "generate_timestamps_subtitle": "生成时间字幕文件",
     "custom_script": "录制完成后执行自定义脚本",
     "script_command": "自定义脚本执行命令",
@@ -343,7 +342,9 @@
     "platform_filter_style_tile": "平铺",
     "platform_filter_style_dropdown": "聚合（下拉框）",
     "platform_filter_style_tip": "设置主界面直播平台筛选的展示风格。平铺为按钮组，聚合为下拉框。",
-    "notification_both_required": "发送通知需同时满足全局设置和单独直播间的消息推送开关"
+    "notification_both_required": "发送通知需同时满足全局设置和单独直播间的消息推送开关",
+    "auto_clean_logs": "自动清理日志",
+    "log_retention_days": "日志保留天数"
   },
   "about_page": {
     "about_project": "关于本程序",

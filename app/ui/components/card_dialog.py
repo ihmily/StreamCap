@@ -37,21 +37,22 @@ class CardDialog(ft.AlertDialog):
         scheduled_recording_status = self._["enabled"] if recording.scheduled_recording else self._["disabled"]
         scheduled_time_range = recording.scheduled_time_range or self._["none"]
         save_path = recording.recording_dir or self._["no_recording_dir_tip"]
-        # 录制状态信息同步UI逻辑，优先显示录制中
+        # 获取录制状态信息
         if recording.recording:
-            recording_status_info = self._.get("recording", "录制中")
+            recording_status_info = self._["recording"]
         elif recording.is_live and recording.monitor_status and not recording.recording:
-            recording_status_info = self._.get("live_monitoring_not_recording", "直播中（未录制）")
+            recording_status_info = self._["live_monitoring_not_recording"]
         else:
-            recording_status_info = self._[recording.status_info]
+            recording_status_info = self._["offline"]
         # 优先用final_push_enabled
         if self.final_push_enabled is not None:
             message_push = self._["enabled"] if self.final_push_enabled else self._["disabled"]
         else:
             message_push = self._["enabled"] if recording.enabled_message_push else self._["disabled"]
-        record_mode_text = (
-            self._.get("auto_record", "自动录制") if getattr(recording, "record_mode", "auto") == "auto"
-            else self._.get("manual_record", "手动录制")
+        # 获取录制模式信息
+        record_mode_info = (
+            self._["auto_record"] if getattr(recording, "record_mode", "auto") == "auto"
+            else self._["manual_record"]
         )
 
         dialog_content = ft.Column(
@@ -70,7 +71,7 @@ class CardDialog(ft.AlertDialog):
                 ft.Text(f"{self._['message_push']}: {message_push}", size=14),
                 ft.Text(f"{self._['save_path']}: {save_path}", size=14, selectable=True),
                 ft.Text(f"{self._['recording_status']}: {recording_status_info}", size=14),
-                ft.Text(f"{self._.get('record_mode', '录制模式')}: {record_mode_text}", size=14),
+                ft.Text(f"{self._['record_mode']}: {record_mode_info}", size=14),
             ],
             spacing=8,
             scroll=ft.ScrollMode.AUTO,

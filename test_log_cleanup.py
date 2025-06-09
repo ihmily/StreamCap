@@ -140,7 +140,15 @@ def main():
         if 1 <= choice <= len(days_list):
             retention_days = days_list[choice-1]
         else:
-            retention_days = int(input("请输入自定义的日志保留天数: "))
+            try:
+                retention_days = int(input("请输入自定义的日志保留天数: "))
+                # 确保是正整数
+                if retention_days <= 0:
+                    print(f"输入的天数 {retention_days} 无效（必须大于0），使用默认值7天")
+                    retention_days = 7
+            except ValueError:
+                print("输入无效，使用默认值7天")
+                retention_days = 7
     except ValueError:
         print("输入无效，使用默认值7天")
         retention_days = 7

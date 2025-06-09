@@ -154,7 +154,15 @@ def test_config_cleanup():
             if 1 <= choice <= len(days_list):
                 retention_days = days_list[choice-1]
             else:
-                retention_days = int(input("请输入自定义的日志保留天数: "))
+                try:
+                    retention_days = int(input("请输入自定义的日志保留天数: "))
+                    # 确保是正整数
+                    if retention_days <= 0:
+                        print(f"输入的天数 {retention_days} 无效（必须大于0），使用默认值7天")
+                        retention_days = 7
+                except ValueError:
+                    print("输入无效，使用默认值7天")
+                    retention_days = 7
         except ValueError:
             print("输入无效，使用默认值7天")
             retention_days = 7
@@ -186,7 +194,15 @@ def test_config_cleanup():
             
             if user_config.get("auto_clean_logs", False):
                 if "log_retention_days" in user_config:
-                    retention_days = int(user_config["log_retention_days"])
+                    try:
+                        retention_days = int(user_config["log_retention_days"])
+                        # 确保是正整数
+                        if retention_days <= 0:
+                            print(f"警告: 日志保留天数 {retention_days} 无效（必须大于0），使用默认值: 7天")
+                            retention_days = 7
+                    except (ValueError, TypeError) as e:
+                        print(f"警告: 日志保留天数格式无效: {e}，使用默认值: 7天")
+                        retention_days = 7
                     print(f"使用配置: log_retention_days={retention_days}, auto_clean_logs=True")
                     cleanup_old_logs(days=retention_days, log_dir=log_dir)
                 else:
@@ -261,7 +277,15 @@ def test_config_cleanup():
             
             if user_config.get("auto_clean_logs", False):
                 if "log_retention_days" in user_config:
-                    retention_days = int(user_config["log_retention_days"])
+                    try:
+                        retention_days = int(user_config["log_retention_days"])
+                        # 确保是正整数
+                        if retention_days <= 0:
+                            print(f"警告: 日志保留天数 {retention_days} 无效（必须大于0），使用默认值: 7天")
+                            retention_days = 7
+                    except (ValueError, TypeError) as e:
+                        print(f"警告: 日志保留天数格式无效: {e}，使用默认值: 7天")
+                        retention_days = 7
                     print(f"使用配置: log_retention_days={retention_days}, auto_clean_logs=True")
                     cleanup_old_logs(days=retention_days, log_dir=log_dir)
                 else:
@@ -272,7 +296,21 @@ def test_config_cleanup():
             # 再次测试，但这次强制执行清理（忽略auto_clean_logs设置）
             print("\n测试强制执行清理（忽略auto_clean_logs设置）...")
             if "log_retention_days" in user_config:
-                retention_days = int(user_config["log_retention_days"])
+                try:
+                    retention_days_value = user_config["log_retention_days"]
+                    # 检查是否为空字符串
+                    if retention_days_value == "":
+                        print("警告: 日志保留天数设置为空，使用默认值: 7天")
+                        retention_days = 7
+                    else:
+                        retention_days = int(retention_days_value)
+                        # 确保是正整数
+                        if retention_days <= 0:
+                            print(f"警告: 日志保留天数 {retention_days} 无效（必须大于0），使用默认值: 7天")
+                            retention_days = 7
+                except (ValueError, TypeError) as e:
+                    print(f"警告: 日志保留天数格式无效: {e}，使用默认值: 7天")
+                    retention_days = 7
                 print(f"使用配置中的保留天数: {retention_days}天")
                 cleanup_old_logs(days=retention_days, log_dir=log_dir)
             
@@ -347,7 +385,15 @@ def test_direct_cleanup():
             if 1 <= choice <= len(days_list):
                 retention_days = days_list[choice-1]
             else:
-                retention_days = int(input("请输入自定义的日志保留天数: "))
+                try:
+                    retention_days = int(input("请输入自定义的日志保留天数: "))
+                    # 确保是正整数
+                    if retention_days <= 0:
+                        print(f"输入的天数 {retention_days} 无效（必须大于0），使用默认值7天")
+                        retention_days = 7
+                except ValueError:
+                    print("输入无效，使用默认值7天")
+                    retention_days = 7
         except ValueError:
             print("输入无效，使用默认值7天")
             retention_days = 7

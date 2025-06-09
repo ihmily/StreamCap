@@ -70,12 +70,12 @@ def trace_error_decorator(func: callable) -> callable:
             # 如果是空响应导致的错误（line 1 column 1 (char 0)）
             if "line 1 column 1 (char 0)" in json_error_position:
                 if proxy_error:
-                    logger.warning(f"JSON解析错误: 收到空响应，可能是代理连接问题")
+                    logger.warning("JSON解析错误: 收到空响应，可能是代理连接问题")
                 else:
-                    logger.warning(f"JSON解析错误: 收到空响应，可能是网络连接问题或API暂时不可用")
+                    logger.warning("JSON解析错误: 收到空响应，可能是网络连接问题或API暂时不可用")
             # 如果是JSON格式错误（如只有 { 或 [）
             elif "line 1 column 2 (char 1)" in json_error_position:
-                logger.warning(f"JSON解析错误: 收到不完整或损坏的JSON响应，只有开始字符")
+                logger.warning("JSON解析错误: 收到不完整或损坏的JSON响应，只有开始字符")
             else:
                 logger.warning(f"JSON解析错误: 位置 {json_error_position}, 可能是API返回了非JSON格式的数据")
             
@@ -186,7 +186,7 @@ def handle_proxy_addr(proxy_addr):
     if proxy_addr:
         proxy_addr = proxy_addr.strip()
         # 如果代理地址不以协议前缀开头，添加http://前缀
-        if not proxy_addr.startswith(('http://')):
+        if not proxy_addr.startswith('http://'):
             proxy_addr = f"http://{proxy_addr}"
         return proxy_addr
     else:

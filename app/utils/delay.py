@@ -13,7 +13,7 @@ class DelayedTaskExecutor:
         """使用防抖动机制启动定时器，相同类型的任务只会保留最新的一个"""
         task_name = task.__name__
         
-        if task_name in self.save_timers and self.save_timers[task_name]:
+        if self.save_timers.get(task_name):
             self.save_timers[task_name].cancel()
             
         self.pending_tasks[task_name] = task

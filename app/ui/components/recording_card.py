@@ -526,7 +526,7 @@ class RecordingCardManager:
                                     msg_manager = MessagePusher(self.app.settings)
                                     # 直接在当前任务中执行推送，不使用run_task
                                     self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
-                                    logger.info(f"已创建消息推送任务")
+                                    logger.info("已创建消息推送任务")
                                     # 设置通知已发送标志
                                     recording.notification_sent = True
                                 elif recording.notification_sent:

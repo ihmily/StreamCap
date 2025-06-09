@@ -159,19 +159,31 @@ class SaveProgressOverlay:
             
         self.is_cancellable = cancellable
         
-        if cancellable:
-            self.is_simple_mode = False
-            self.overlay.controls[0].content = self.content_container
-            self.cancel_button.visible = True
-            self.warning_text.visible = True
-        else:
-            self.is_simple_mode = True
-            self.overlay.controls[0].content = self.simple_container
-            self.cancel_button.visible = False
-            self.warning_text.visible = False
+        try:
+            if cancellable:
+                self.is_simple_mode = False
+                self.overlay.controls[0].content = self.content_container
+                self.cancel_button.visible = True
+                self.warning_text.visible = True
+            else:
+                self.is_simple_mode = True
+                self.overlay.controls[0].content = self.simple_container
+                self.cancel_button.visible = False
+                self.warning_text.visible = False
+                
+            # 确保覆盖层在页面上可见
+            self.overlay.visible = True
             
-        self.overlay.visible = True
-        self.overlay.update()
+            # 确保覆盖层在页面最上层
+            if self.overlay not in self.app.page.overlay:
+                self.app.page.overlay.append(self.overlay)
+                
+            # 立即更新页面以显示覆盖层
+            self.overlay.update()
+            self.app.page.update()
+        except Exception as e:
+            from ...utils.logger import logger
+            logger.error(f"显示保存进度覆盖层时出错: {e}")
 
     def update_message(self, message):
         if self._initialized:

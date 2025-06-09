@@ -92,6 +92,17 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
             # 创建事件用于通知进程清理完成
             cleanup_completed = threading.Event()
             
+            # 确保在显示保存进度覆盖层之前先切换到主页面，避免在非主界面时显示不正常
+            try:
+                # 如果当前不在主页面，先切换到主页面
+                if app.current_page and app.current_page.__class__.__name__ != "HomePage":
+                    logger.info("在非主界面关闭程序，先切换到主页面以确保正常显示保存进度")
+                    await app.switch_page("home")
+                    # 给UI一点时间更新
+                    await asyncio.sleep(0.2)
+            except Exception as ex:
+                logger.error(f"切换到主页面时出错: {ex}")
+            
             save_progress_overlay.show(_["saving_recordings"].format(active_recordings_count=active_recordings_count), 
                                        cancellable=True)
             page.update()

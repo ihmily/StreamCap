@@ -262,7 +262,7 @@ class StoragePage(BasePage):
                         ),
                         ft.IconButton(
                             icon=ft.icons.PLAY_CIRCLE,
-                            tooltip=self._["previewing"],
+                            tooltip=self._["preview_video"],
                             icon_color=ft.colors.BLUE,
                             icon_size=20,
                             on_click=lambda e, path=full_path: self.app.page.run_task(self.preview_file, path),

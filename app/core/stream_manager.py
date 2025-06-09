@@ -144,7 +144,7 @@ class LiveStreamRecorder:
         if not proxy_address.startswith('http://'):
             # 记录警告但不修改用户输入
             logger.warning(f"代理验证 - 代理地址缺少协议前缀: {proxy_address}")
-            logger.warning(f"代理验证 - 建议使用完整格式如：http://127.0.0.1:7890")
+            logger.warning("代理验证 - 建议使用完整格式如：http://127.0.0.1:7890")
         
         # 完整的代理格式验证正则表达式
         # 支持IPv4、域名和可选端口
@@ -177,13 +177,13 @@ class LiveStreamRecorder:
             
             # 提供更具体的错误信息
             if ':' not in proxy_address:
-                logger.warning(f"代理验证 - 缺少端口号，建议使用标准格式如: 127.0.0.1:7890")
+                logger.warning("代理验证 - 缺少端口号，建议使用标准格式如: 127.0.0.1:7890")
             elif not re.match(r'^(http)://', proxy_address) and ':' in proxy_address:
-                logger.warning(f"代理验证 - 缺少http://协议前缀，但IP和端口格式正确，将尝试使用")
+                logger.warning("代理验证 - 缺少http://协议前缀，但IP和端口格式正确，将尝试使用")
                 # 如果只是缺少协议前缀但格式正确，仍然允许使用
                 is_valid = True
             else:
-                logger.warning(f"代理验证 - 代理地址格式不正确，请检查IP地址或域名格式")
+                logger.warning("代理验证 - 代理地址格式不正确，请检查IP地址或域名格式")
         else:
             logger.info(f"代理验证 - 地址格式有效: {proxy_address}")
             

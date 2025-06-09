@@ -208,7 +208,7 @@ def cleanup_old_logs(days=7, log_dir=None):
             logger.warning(f"日志保留天数 {days} 无效（必须大于0），使用默认值: 7天")
             days = 7
     except (ValueError, TypeError):
-        logger.warning(f"日志保留天数格式无效，使用默认值: 7天")
+        logger.warning("日志保留天数格式无效，使用默认值: 7天")
         days = 7
         
     logger.info(f"开始清理日志文件，保留最近 {days} 天的日志")

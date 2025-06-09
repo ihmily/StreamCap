@@ -415,6 +415,7 @@
     "empty_recording_folder": "录制文件夹为空，暂无录制的直播视频",
     "go_back": "返回上一级",
     "previewing": "正在预览",
+    "preview_video": "预览视频",
     "unsupported_file_type":"⚠️ 不支持的文件类型",
     "no_video_file":"⚠️ 未找到视频文件",
     "no_recording_folder":"⚠️ 录制目录不存在",

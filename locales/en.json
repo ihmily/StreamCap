@@ -408,9 +408,10 @@
   "storage_page": {
     "storage_path": "Storage Path",
     "current_path": "Current Path",
-    "empty_recording_folder": "The recording folder is empty, no live videos recorded yet",
+    "empty_recording_folder": "Recording folder is empty, no recorded live videos yet",
     "go_back": "Go Back",
     "previewing": "Previewing",
+    "preview_video": "Preview Video",
     "unsupported_file_type":"⚠️ Unsupported file type",
     "no_video_file":"⚠️ No video file found",
     "no_recording_folder":"⚠️ Recording directory does not exist",

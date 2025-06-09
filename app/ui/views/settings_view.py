@@ -238,7 +238,7 @@ class SettingsPage(PageBase):
             # 增强处理，过滤掉空值
             selected_keys = [k for k in current_value.replace("，", ",").split(",") if k and k.strip()]
             if not selected_keys:
-                return self._["none"] if "none" in self._ else "无"
+                return self._["none"]
             return ", ".join([get_platform_display_name_wrapper(k) for k in selected_keys])
 
         proxy_platform_text = ft.Text(get_selected_platforms_text(), width=220)
@@ -354,7 +354,7 @@ class SettingsPage(PageBase):
                                 width=380,
                                 on_change=self.on_change,
                                 data="vlc_path",
-                                hint_text=self._["vlc_path_hint"] if "vlc_path_hint" in self._ else "",
+                                hint_text=self._["vlc_path_hint"],
                             ),
                         ),
                         self.create_setting_row(
@@ -381,6 +381,24 @@ class SettingsPage(PageBase):
                                 on_change=self.on_change,
                                 data="platform_filter_style",
                                 tooltip=self._["platform_filter_style_tip"],
+                            ),
+                        ),
+                        # 添加日志设置部分
+                        self.create_setting_row(
+                            self._["auto_clean_logs"],
+                            ft.Switch(
+                                value=self.get_config_value("auto_clean_logs", True),
+                                data="auto_clean_logs",
+                                on_change=self.on_change,
+                            ),
+                        ),
+                        self.create_setting_row(
+                            self._["log_retention_days"],
+                            ft.TextField(
+                                value=str(self.get_config_value("log_retention_days", 7)),
+                                width=100,
+                                data="log_retention_days",
+                                on_change=self.on_change,
                             ),
                         ),
                     ],

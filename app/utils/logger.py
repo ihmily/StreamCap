@@ -2,6 +2,12 @@ import os
 import sys
 import re
 import logging
+import time
+import datetime
+import glob
+import shutil
+import asyncio
+import threading
 
 from loguru import logger
 
@@ -72,6 +78,203 @@ def is_memory_cleanup_log(record):
 # 添加一个普通日志的过滤器
 def not_memory_cleanup_log(record):
     return not is_memory_cleanup_log(record)
+
+# 日志定时清理任务类
+class LogCleanupScheduler:
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls):
+        if cls._instance is None:
+            cls._instance = LogCleanupScheduler()
+        return cls._instance
+    
+    def __init__(self):
+        self.is_running = False
+        self.scheduler_thread = None
+        self.next_cleanup_time = None
+        self._lock = threading.Lock()
+    
+    def start(self, config_manager=None):
+        """启动定时清理任务"""
+        with self._lock:
+            if self.is_running:
+                return
+            
+            self.is_running = True
+            self.config_manager = config_manager
+            
+            # 先计算下次清理时间，确保self.next_cleanup_time不为None
+            self._calculate_next_cleanup_time()
+            
+            self.scheduler_thread = threading.Thread(target=self._scheduler_loop, daemon=True)
+            self.scheduler_thread.start()
+            logger.info("日志定时清理任务已启动")
+            logger.info(f"下次日志清理时间: {self.next_cleanup_time.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    def _calculate_next_cleanup_time(self):
+        """计算下次清理时间（凌晨3点）"""
+        now = datetime.datetime.now()
+        # 今天凌晨3点
+        today_3am = now.replace(hour=16, minute=55, second=0, microsecond=0)
+        
+        # 如果当前时间已经过了今天凌晨3点，则设置为明天凌晨3点
+        if now > today_3am:
+            self.next_cleanup_time = today_3am + datetime.timedelta(days=1)
+        else:
+            self.next_cleanup_time = today_3am
+    
+    def _scheduler_loop(self):
+        """定时器循环，检查是否到达清理时间"""
+        while self.is_running:
+            try:
+                now = datetime.datetime.now()
+                
+                # 确保next_cleanup_time不为None
+                if self.next_cleanup_time is None:
+                    self._calculate_next_cleanup_time()
+                    logger.info(f"重新计算清理时间: {self.next_cleanup_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # 检查是否到达清理时间
+                if now >= self.next_cleanup_time:
+                    logger.info("开始执行定时日志清理")
+                    
+                    # 从配置中获取日志保留天数和是否启用自动清理
+                    retention_days = None  # 不设置默认值，使用cleanup_old_logs函数中的默认逻辑
+                    auto_clean_enabled = False  # 默认不启用
+                    
+                    # 如果有配置管理器，从配置中获取保留天数和是否启用自动清理
+                    if self.config_manager:
+                        try:
+                            user_config = self.config_manager.load_user_config()
+                            auto_clean_enabled = user_config.get("auto_clean_logs", False)
+                            if "log_retention_days" in user_config:
+                                retention_days = int(user_config["log_retention_days"])
+                                logger.info(f"从配置中获取日志保留天数: {retention_days}")
+                            else:
+                                logger.info("配置中未设置日志保留天数，将使用默认值")
+                        except Exception as e:
+                            logger.error(f"加载用户配置时出错: {e}")
+                    
+                    # 如果启用了自动清理，执行清理
+                    if auto_clean_enabled:
+                        if retention_days is not None:
+                            logger.info(f"执行定时日志清理，保留 {retention_days} 天")
+                            cleanup_old_logs(days=retention_days)
+                        else:
+                            # 使用cleanup_old_logs函数的默认逻辑
+                            logger.info("执行定时日志清理，使用默认保留天数")
+                            cleanup_old_logs(days=7)  # 默认保留7天
+                    else:
+                        logger.info("日志自动清理功能未开启，跳过清理")
+                    
+                    # 计算下次清理时间
+                    self._calculate_next_cleanup_time()
+                    logger.info(f"下次日志清理时间: {self.next_cleanup_time.strftime('%Y-%m-%d %H:%M:%S')}")
+                
+                # 每小时检查一次
+                time.sleep(60)
+            except Exception as e:
+                logger.error(f"日志定时清理任务出错: {e}")
+                # 出错后等待10分钟再继续
+                time.sleep(600)
+
+# 清理旧日志文件
+def cleanup_old_logs(days, log_dir=None):
+    """
+    清理指定天数之前的日志文件，但每种日志类型至少保留一个最新文件
+    
+    Args:
+        days: 保留的天数
+        log_dir: 日志目录，默认为None，使用script_path/logs
+    """
+    if log_dir is None:
+        log_dir = os.path.join(script_path, "logs")
+    
+    if not os.path.exists(log_dir):
+        return
+    
+    # 计算截止时间
+    cutoff_time = time.time() - (days * 24 * 60 * 60)
+    cutoff_date = datetime.datetime.fromtimestamp(cutoff_time)
+    
+    # 获取所有日志文件
+    log_files = glob.glob(os.path.join(log_dir, "*.*"))
+    
+    # 按日志类型分组文件
+    log_types = {}
+    for log_file in log_files:
+        base_name = os.path.basename(log_file)
+        
+        # 处理新格式的日志文件名: [类型].[年-月-日_时-分-秒_微秒].log
+        if '.' in base_name:
+            parts = base_name.split('.')
+            if len(parts) >= 2:
+                # 第一部分是日志类型
+                log_type = parts[0]
+                
+                # 检查是否是我们关心的三种日志类型之一或其他日志文件
+                if log_type not in log_types:
+                    log_types[log_type] = []
+                log_types[log_type].append(log_file)
+                continue
+        
+        # 处理旧格式的日志文件
+        if "_days_ago" in base_name:
+            # 测试文件格式: test_log_X_days_ago.log
+            if base_name.startswith("test_log_"):
+                log_type = "test_log"  # 所有测试日志视为同一类型
+            else:
+                # 其他测试文件如app_X_days_ago.log，使用前缀作为类型
+                log_type = base_name.split('_')[0]
+        else:
+            # 正常日志文件，使用完整基本名称作为类型
+            log_type = base_name.split('.log')[0]
+        
+        if log_type not in log_types:
+            log_types[log_type] = []
+        log_types[log_type].append(log_file)
+    
+    deleted_count = 0
+    preserved_files = []
+    
+    for log_type, files in log_types.items():
+        # 按修改时间排序文件（最新的在前）
+        try:
+            sorted_files = sorted(files, key=os.path.getmtime, reverse=True)
+            
+            # 保留每种类型的最新文件
+            if sorted_files:
+                newest_file = sorted_files[0]
+                # 记录最新文件信息
+                file_mtime = os.path.getmtime(newest_file)
+                file_date = datetime.datetime.fromtimestamp(file_mtime)
+                # 如果最新文件也超过了截止日期，记录它被保留的信息
+                if file_date < cutoff_date:
+                    preserved_files.append(f"{os.path.basename(newest_file)} ({file_date.strftime('%Y-%m-%d %H:%M:%S')})")
+                
+                # 检查其余文件是否过期
+                files_to_check = sorted_files[1:]
+                for log_file in files_to_check:
+                    try:
+                        # 获取文件修改时间
+                        file_mtime = os.path.getmtime(log_file)
+                        file_date = datetime.datetime.fromtimestamp(file_mtime)
+                        
+                        # 如果文件修改时间早于截止时间，则删除
+                        if file_date < cutoff_date:
+                            os.remove(log_file)
+                            deleted_count += 1
+                    except Exception as e:
+                        logger.error(f"清理日志文件 {log_file} 时出错: {e}")
+        except Exception as e:
+            logger.error(f"处理日志类型 {log_type} 时出错: {e}")
+    
+    if deleted_count > 0:
+        logger.info(f"已清理 {deleted_count} 个超过 {days} 天的旧日志文件")
+    
+    if preserved_files:
+        logger.info(f"为保留历史记录，以下{len(preserved_files)}个超过保留期限的日志文件被保留: {', '.join(preserved_files)}")
 
 # 为测试脚本提供的日志设置函数
 def setup_logger(level=logging.INFO):
@@ -168,4 +371,39 @@ logger.add(
     retention=1,
     rotation="500 KB",
     encoding="utf-8",
-) 
+)
+
+# 尝试清理旧日志文件
+try:
+    # 尝试从配置管理器中获取用户配置
+    config_manager = None
+    try:
+        from ..core.config_manager import ConfigManager
+        config_manager = ConfigManager(script_path)
+        user_config = config_manager.load_user_config()
+        
+        # 检查是否启用自动清理日志，默认为False（不清理）
+        if user_config.get("auto_clean_logs", False):
+            # 获取日志保留天数，必须从用户配置中获取
+            if "log_retention_days" in user_config:
+                retention_days = int(user_config["log_retention_days"])
+                logger.info(f"开始清理 {retention_days} 天前的日志文件")
+                cleanup_old_logs(days=retention_days)
+            else:
+                logger.info("未找到日志保留天数设置，跳过清理")
+        else:
+            logger.info("日志自动清理功能未开启，跳过清理")
+            
+        # 启动定时清理任务
+        log_cleanup_scheduler = LogCleanupScheduler.get_instance()
+        log_cleanup_scheduler.start(config_manager)
+        
+    except ImportError:
+        # 如果无法导入ConfigManager，则不执行清理
+        logger.info("无法导入配置管理器，跳过日志清理")
+        
+        # 仍然启动定时清理任务，但不传入配置管理器
+        log_cleanup_scheduler = LogCleanupScheduler.get_instance()
+        log_cleanup_scheduler.start()
+except Exception as e:
+    logger.error(f"清理旧日志文件时出错: {e}") 

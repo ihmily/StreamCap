@@ -58,5 +58,7 @@
     "theme_mode": "light",
     "vlc_path": "",
     "window_width": null,
-    "window_height": null
+    "window_height": null,
+    "log_retention_days": 7,
+    "auto_clean_logs": false
 }

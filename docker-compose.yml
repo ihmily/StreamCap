@@ -28,7 +28,7 @@ services:
         - "${VIDEO_API_PORT:-6007}:${VIDEO_API_PORT:-6007}"
       environment:
         - TZ=${TZ:-Asia/Shanghai}
-        - CUSTOM_VIDEO_ROOT_DIR=${CUSTOM_VIDEO_ROOT_DIR:-./downloads}
+        - CUSTOM_VIDEO_ROOT_DIR=${CUSTOM_VIDEO_ROOT_DIR:-/app/downloads}
       volumes:
         - ./downloads:/app/downloads
         - ./.env:/app/.env

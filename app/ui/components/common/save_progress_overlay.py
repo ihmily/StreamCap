@@ -197,4 +197,4 @@ class SaveProgressOverlay:
 
     @property
     def visible(self):
-        return self.overlay.visible
+        return self.overlay.visible 

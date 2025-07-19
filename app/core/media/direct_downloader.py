@@ -5,7 +5,7 @@ from typing import Optional
 
 import httpx
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 class DirectStreamDownloader:

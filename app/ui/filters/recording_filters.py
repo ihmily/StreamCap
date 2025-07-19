@@ -1,5 +1,5 @@
-from ...models.recording_status_model import RecordingStatus
-from ..components.recording_card_state import RecordingCardState
+from ...models.recording.recording_status_model import RecordingStatus
+from ..components.state.recording_card_state import RecordingCardState
 
 
 class RecordingFilters:

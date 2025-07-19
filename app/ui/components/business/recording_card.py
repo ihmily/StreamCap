@@ -3,13 +3,13 @@ import os.path
 
 import flet as ft
 
-from ...models.recording_model import Recording
-from ...models.recording_status_model import RecordingStatus
-from ...utils import utils
-from ...utils.logger import logger
-from ..views.storage_view import StoragePage
-from .card_dialog import CardDialog
-from .recording_card_state import RecordingCardState
+from ....models.recording.recording_model import Recording
+from ....models.recording.recording_status_model import RecordingStatus
+from ....utils import utils
+from ....utils.logger import logger
+from ...views.storage_view import StoragePage
+from ..dialogs.card_dialog import CardDialog
+from ..state.recording_card_state import RecordingCardState
 from .recording_dialog import RecordingDialog
 from .video_player import VideoPlayer
 

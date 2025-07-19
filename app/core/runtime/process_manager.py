@@ -2,7 +2,7 @@ import asyncio
 import os
 import threading
 
-from .utils.logger import logger
+from ...utils.logger import logger
 
 
 class BackgroundService:

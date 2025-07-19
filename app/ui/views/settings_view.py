@@ -3,13 +3,13 @@ import os
 
 import flet as ft
 
-from ...models.audio_format_model import AudioFormat
-from ...models.video_format_model import VideoFormat
-from ...models.video_quality_model import VideoQuality
+from ...models.media.audio_format_model import AudioFormat
+from ...models.media.video_format_model import VideoFormat
+from ...models.media.video_quality_model import VideoQuality
 from ...utils.delay import DelayedTaskExecutor
 from ...utils.logger import logger
 from ..base_page import PageBase
-from ..components.help_dialog import HelpDialog
+from ..components.dialogs.help_dialog import HelpDialog
 
 
 class SettingsPage(PageBase):

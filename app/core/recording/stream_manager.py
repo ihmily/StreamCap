@@ -6,15 +6,16 @@ import time
 from datetime import datetime
 from typing import Any
 
-from ..messages.message_pusher import MessagePusher
-from ..models.recording_status_model import RecordingStatus
-from ..models.video_quality_model import VideoQuality
-from ..process_manager import BackgroundService
-from ..utils import utils
-from ..utils.logger import logger
-from . import ffmpeg_builders, platform_handlers
-from .direct_downloader import DirectStreamDownloader
-from .platform_handlers import StreamData
+from ...messages.message_pusher import MessagePusher
+from ...models.media.video_quality_model import VideoQuality
+from ...models.recording.recording_status_model import RecordingStatus
+from ...utils import utils
+from ...utils.logger import logger
+from ..media import ffmpeg_builders
+from ..media.direct_downloader import DirectStreamDownloader
+from ..platforms import platform_handlers
+from ..platforms.platform_handlers import StreamData
+from ..runtime.process_manager import BackgroundService
 
 
 class LiveStreamRecorder:
@@ -523,7 +524,7 @@ class LiveStreamRecorder:
             split_video_by_time: bool,
             converts_to_mp4: bool
     ):
-        from ..process_manager import BackgroundService
+        from ..runtime.process_manager import BackgroundService
 
         if "python" in script_command:
             params = [

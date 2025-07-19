@@ -1,8 +1,8 @@
 import flet as ft
 
-from .scripts.ffmpeg_install import check_ffmpeg_installed, install_ffmpeg
-from .scripts.node_install import check_nodejs_installed, install_nodejs
-from .utils.logger import logger
+from ..scripts.ffmpeg_install import check_ffmpeg_installed, install_ffmpeg
+from ..scripts.node_install import check_nodejs_installed, install_nodejs
+from ..utils.logger import logger
 
 
 class InstallationManager:
@@ -183,7 +183,7 @@ class InstallationManager:
                 logger.info(f"Missing components: {[i['name'] for i in self.components_to_install]}")
                 self.page.run_task(self.show_install_dialog)
         else:
-            from .scripts import ffmpeg_install, node_install
+            from ..scripts import ffmpeg_install, node_install
             ffmpeg_install.update_env_path()
             node_install.update_env_path()
             

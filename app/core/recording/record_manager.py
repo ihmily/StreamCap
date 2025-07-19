@@ -3,12 +3,12 @@ import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
 
-from ..messages.message_pusher import MessagePusher
-from ..models.recording_model import Recording
-from ..models.recording_status_model import RecordingStatus
-from ..utils import utils
-from ..utils.logger import logger
-from .platform_handlers import get_platform_info
+from ...messages.message_pusher import MessagePusher
+from ...models.recording.recording_model import Recording
+from ...models.recording.recording_status_model import RecordingStatus
+from ...utils import utils
+from ...utils.logger import logger
+from ..platforms.platform_handlers import get_platform_info
 from .stream_manager import LiveStreamRecorder
 
 

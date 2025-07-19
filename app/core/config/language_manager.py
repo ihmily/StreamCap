@@ -1,6 +1,6 @@
 import os
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 from .config_manager import ConfigManager
 
 

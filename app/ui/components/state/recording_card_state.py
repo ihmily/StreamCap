@@ -1,7 +1,7 @@
 import flet as ft
 
-from ...models.recording_model import Recording
-from ...models.recording_status_model import CardStateType, RecordingStatus
+from ....models.recording.recording_model import Recording
+from ....models.recording.recording_status_model import CardStateType, RecordingStatus
 
 
 class RecordingCardState:
@@ -87,4 +87,4 @@ class RecordingCardState:
     
     @staticmethod
     def get_monitor_icon(recording: Recording) -> ft.Icons:
-        return ft.Icons.VISIBILITY if recording.monitor_status else ft.Icons.VISIBILITY_OFF 
+        return ft.Icons.VISIBILITY if recording.monitor_status else ft.Icons.VISIBILITY_OFF

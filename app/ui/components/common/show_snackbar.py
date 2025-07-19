@@ -52,4 +52,4 @@ class ShowSnackBar:
 
         snack_bar.open = True
         self.app.snack_bar_area.content = snack_bar
-        self.app.page.update()
+        self.app.page.update() 

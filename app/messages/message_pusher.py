@@ -1,7 +1,7 @@
 from asyncio import create_task
 from typing import Optional
 
-from ..models.recording_model import Recording
+from ..models.recording.recording_model import Recording
 from ..ui.views.settings_view import SettingsPage
 from ..utils.logger import logger
 from .notification_service import NotificationService

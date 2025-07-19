@@ -39,4 +39,4 @@ class HelpDialog(ft.AlertDialog):
 
     def close_panel(self, _):
         self.open = False
-        self.update()
+        self.update() 

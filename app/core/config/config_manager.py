@@ -5,7 +5,7 @@ from typing import Any
 
 import aiofiles
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 class ConfigManager:

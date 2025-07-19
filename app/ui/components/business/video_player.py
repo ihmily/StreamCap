@@ -4,8 +4,8 @@ from urllib.parse import parse_qs, urlparse
 
 import flet as ft
 
-from ...utils import utils
-from ...utils.logger import logger
+from ....utils import utils
+from ....utils.logger import logger
 
 
 class VideoPlayer:
@@ -142,4 +142,4 @@ class VideoPlayer:
                     return
             else:
                 title = self._["view_stream_source_now"]
-        await self.create_video_dialog(title, source, is_file_path, room_url)
+        await self.create_video_dialog(title, source, is_file_path, room_url) 

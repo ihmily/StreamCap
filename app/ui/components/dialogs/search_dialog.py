@@ -78,4 +78,4 @@ class SearchDialog(ft.AlertDialog):
     async def submit_query(self, e):
         query = self.query.value.strip()
         await self.recordings_page.filter_recordings(query)
-        await self.close_dlg(e)
+        await self.close_dlg(e) 

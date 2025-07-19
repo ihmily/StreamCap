@@ -10,7 +10,7 @@ from app.app_manager import App, execute_dir
 from app.auth.auth_manager import AuthManager
 from app.lifecycle.app_close_handler import handle_app_close
 from app.lifecycle.tray_manager import TrayManager
-from app.ui.components.save_progress_overlay import SaveProgressOverlay
+from app.ui.components.common.save_progress_overlay import SaveProgressOverlay
 from app.ui.layout.responsive_layout import setup_responsive_layout
 from app.ui.views.login_view import LoginPage
 from app.utils.logger import logger

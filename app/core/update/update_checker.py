@@ -6,7 +6,7 @@ from typing import Any
 import flet as ft
 import httpx
 
-from ..utils.logger import logger
+from ...utils.logger import logger
 
 
 class UpdateChecker:

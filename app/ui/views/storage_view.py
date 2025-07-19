@@ -174,7 +174,7 @@ class StoragePage(BasePage):
     async def preview_file(self, file_path, room_url=None):
         import urllib.parse
 
-        from ..components.video_player import VideoPlayer
+        from ..components.business.video_player import VideoPlayer
 
         video_player = VideoPlayer(self.app)
 

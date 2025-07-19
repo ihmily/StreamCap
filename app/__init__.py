@@ -1,7 +1,7 @@
 import os
 import sys
 
-from .installation_manager import InstallationManager
+from .initialization.installation_manager import InstallationManager
 
 execute_dir = os.path.split(os.path.realpath(sys.argv[0]))[0]
 

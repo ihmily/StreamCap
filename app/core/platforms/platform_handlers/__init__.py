@@ -1,4 +1,4 @@
-from ...utils.logger import logger
+from ....utils.logger import logger
 from .base import PlatformHandler, StreamData
 from .handlers import (
     AcfunHandler,

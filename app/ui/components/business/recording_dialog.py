@@ -1,11 +1,11 @@
 import flet as ft
 
-from ...core.platform_handlers import get_platform_info
-from ...models.audio_format_model import AudioFormat
-from ...models.video_format_model import VideoFormat
-from ...models.video_quality_model import VideoQuality
-from ...utils import utils
-from ...utils.logger import logger
+from ....core.platforms.platform_handlers import get_platform_info
+from ....models.media.audio_format_model import AudioFormat
+from ....models.media.video_format_model import VideoFormat
+from ....models.media.video_quality_model import VideoQuality
+from ....utils import utils
+from ....utils.logger import logger
 
 
 class RecordingDialog:

@@ -3,14 +3,15 @@ import time
 
 import flet as ft
 
-from . import InstallationManager, execute_dir
-from .core.config_manager import ConfigManager
-from .core.language_manager import LanguageManager
-from .core.record_manager import RecordingManager
-from .core.update_checker import UpdateChecker
-from .process_manager import AsyncProcessManager
-from .ui.components.recording_card import RecordingCardManager
-from .ui.components.show_snackbar import ShowSnackBar
+from . import execute_dir
+from .core.config.config_manager import ConfigManager
+from .core.config.language_manager import LanguageManager
+from .core.recording.record_manager import RecordingManager
+from .core.runtime.process_manager import AsyncProcessManager
+from .core.update.update_checker import UpdateChecker
+from .initialization.installation_manager import InstallationManager
+from .ui.components.business.recording_card import RecordingCardManager
+from .ui.components.common.show_snackbar import ShowSnackBar
 from .ui.navigation.sidebar import LeftNavigationMenu, NavigationSidebar
 from .ui.views.about_view import AboutPage
 from .ui.views.home_view import HomePage

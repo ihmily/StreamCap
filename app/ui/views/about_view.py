@@ -1,7 +1,7 @@
 import flet as ft
 
 from ..base_page import PageBase
-from ..components.help_dialog import HelpDialog
+from ..components.dialogs.help_dialog import HelpDialog
 
 
 class AboutPage(PageBase):

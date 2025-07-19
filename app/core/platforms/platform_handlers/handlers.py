@@ -1,6 +1,6 @@
 import streamget
 
-from ...utils.utils import trace_error_decorator
+from ....utils.utils import trace_error_decorator
 from .base import PlatformHandler, StreamData
 
 

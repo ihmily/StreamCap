@@ -1,5 +1,7 @@
 import flet as ft
 
+from ....messages.message_pusher import MessagePusher
+
 
 class CardDialog(ft.AlertDialog):
     def __init__(self, app, recording):
@@ -37,7 +39,6 @@ class CardDialog(ft.AlertDialog):
         scheduled_time_range = recording.scheduled_time_range or self._["none"]
         save_path = recording.recording_dir or self._["no_recording_dir_tip"]
         recording_status_info = self._[recording.status_info]
-        from ...messages.message_pusher import MessagePusher
         should_push_message = MessagePusher.should_push_message(self.app.settings, recording)
         message_push = self._["enabled"] if should_push_message else self._["disabled"]
         only_notify_no_record = self._["enabled"] if recording.only_notify_no_record else self._["disabled"]

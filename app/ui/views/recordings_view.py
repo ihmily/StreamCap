@@ -3,13 +3,13 @@ import uuid
 
 import flet as ft
 
-from ...core.platform_handlers import get_platform_info
-from ...models.recording_model import Recording
+from ...core.platforms.platform_handlers import get_platform_info
+from ...models.recording.recording_model import Recording
 from ...utils.logger import logger
 from ..base_page import PageBase
-from ..components.help_dialog import HelpDialog
-from ..components.recording_dialog import RecordingDialog
-from ..components.search_dialog import SearchDialog
+from ..components.business.recording_dialog import RecordingDialog
+from ..components.dialogs.help_dialog import HelpDialog
+from ..components.dialogs.search_dialog import SearchDialog
 from ..filters import RecordingFilters
 
 

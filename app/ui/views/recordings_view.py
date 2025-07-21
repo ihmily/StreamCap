@@ -508,7 +508,8 @@ class RecordingsPage(PageBase):
                     monitor_hours=recording_info["monitor_hours"],
                     recording_dir=recording_info["recording_dir"],
                     enabled_message_push=recording_info["enabled_message_push"],
-                    only_notify_no_record=recording_info["only_notify_no_record"]
+                    only_notify_no_record=recording_info["only_notify_no_record"],
+                    flv_use_direct_download=recording_info["flv_use_direct_download"],
                 )
             else:
                 recording = Recording(
@@ -526,6 +527,7 @@ class RecordingsPage(PageBase):
                     recording_dir=None,
                     enabled_message_push=False,
                     only_notify_no_record=user_config.get("only_notify_no_record"),
+                    flv_use_direct_download=user_config.get("flv_use_direct_download"),
                 )
 
             platform, platform_key = get_platform_info(recording.url)

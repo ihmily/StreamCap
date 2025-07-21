@@ -36,6 +36,8 @@ class RecordingDialog:
         segment_record = initial_values.get("segment_record", segmented_recording_enabled)
         segment_time = initial_values.get("segment_time", video_segment_time)
         only_notify_no_record = initial_values.get("only_notify_no_record", False)
+        flv_use_direct_download = initial_values.get(
+            "flv_use_direct_download", user_config.get("flv_use_direct_download", False))
 
         async def on_url_change(_):
             """Enable or disable the submit button based on whether the URL field is filled."""
@@ -59,14 +61,7 @@ class RecordingDialog:
             value=initial_values.get("url"),
             on_change=on_url_change,
         )
-        quality_dropdown = ft.Dropdown(
-            label=self._["select_resolution"],
-            options=[ft.dropdown.Option(i, text=self._[i]) for i in VideoQuality.get_qualities()],
-            border_radius=5,
-            filled=False,
-            value=default_record_quality,
-            width=500,
-        )
+
         streamer_name_field = ft.TextField(
             label=self._["input_anchor_name"],
             hint_text=self._["default_input"],
@@ -94,12 +89,38 @@ class RecordingDialog:
             menu_height=200
         )
 
+        quality_dropdown = ft.Dropdown(
+            label=self._["select_resolution"],
+            options=[ft.dropdown.Option(i, text=self._[i]) for i in VideoQuality.get_qualities()],
+            border_radius=5,
+            filled=False,
+            value=default_record_quality,
+            width=245,
+        )
+
+        flv_use_direct_download_dropdown = ft.Dropdown(
+            label=self._["flv_use_direct_download"],
+            options=[
+                ft.dropdown.Option("true", self._["yes"]),
+                ft.dropdown.Option("false", self._["no"]),
+            ],
+            border_radius=5,
+            filled=False,
+            value="true" if flv_use_direct_download else "false",
+            width=245,
+            tooltip=self._["flv_use_direct_download_tip"]
+        )
+
         if self.app.is_mobile:
             media_type_dropdown.width = 500
             record_format_field.width = 500
+            flv_use_direct_download_dropdown.width = 500
+            quality_dropdown.width = 500
             format_row = ft.Column([media_type_dropdown, record_format_field], expand=True)
+            quality_row = ft.Column([quality_dropdown, flv_use_direct_download_dropdown], expand=True)
         else:
             format_row = ft.Row([media_type_dropdown, record_format_field], expand=True)
+            quality_row = ft.Row([quality_dropdown, flv_use_direct_download_dropdown], expand=True)
 
         recording_dir_field = ft.TextField(
             label=self._["input_save_path"],
@@ -272,9 +293,8 @@ class RecordingDialog:
                                 ft.Container(margin=ft.margin.only(top=10)),
                                 url_field,
                                 streamer_name_field,
-                                # record_format_field,
                                 format_row,
-                                quality_dropdown,
+                                quality_row,
                                 recording_dir_field,
                                 segment_setting_dropdown,
                                 segment_input,
@@ -339,7 +359,8 @@ class RecordingDialog:
                         "monitor_hours": monitor_hours_input.value,
                         "recording_dir": recording_dir_field.value,
                         "enabled_message_push": message_push_dropdown.value == "true",
-                        "only_notify_no_record": no_record_dropdown.value == "true"
+                        "only_notify_no_record": no_record_dropdown.value == "true",
+                        "flv_use_direct_download": flv_use_direct_download_dropdown.value == "true",
                     }
                 ]
                 await self.on_confirm_callback(recordings_info)

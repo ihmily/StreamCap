@@ -376,6 +376,15 @@ class SettingsPage(PageBase):
                             ),
                         ),
                         self.create_setting_row(
+                            self._["flv_use_direct_download"],
+                            ft.Switch(
+                                value=self.get_config_value("flv_use_direct_download"),
+                                data="flv_use_direct_download",
+                                on_change=self.on_change,
+                                tooltip=self._["flv_use_direct_download_tip"],
+                            ),
+                        ),
+                        self.create_setting_row(
                             self._["space_threshold"],
                             ft.TextField(
                                 value=self.get_config_value("recording_space_threshold"),

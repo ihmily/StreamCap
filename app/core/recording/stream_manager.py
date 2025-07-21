@@ -169,15 +169,16 @@ class LiveStreamRecorder:
 
     def _get_record_format(self, stream_info: StreamData):
         use_flv_record = ["shopee"]
-        if self.platform_key in use_flv_record:
-            self.save_format = "flv"
-            self.recording.record_format = self.save_format
-            self.recording.segment_record = False
-            return self.save_format, True
+        if stream_info.flv_url:
+            if self.platform_key in use_flv_record or self.recording.flv_use_direct_download:
+                self.save_format = "flv"
+                self.recording.record_format = self.save_format
+                self.recording.segment_record = False
+                return self.save_format, True
 
-        elif self.save_format == "flv" and stream_info.flv_url.rsplit("&codec=", maxsplit=1)[-1] == 'h265':
-            logger.warning("FLV is not supported for h265 codec, use TS format instead")
-            self.save_format = "ts"
+            elif self.save_format == "flv" and stream_info.flv_url.rsplit("&codec=", maxsplit=1)[-1] == 'h265':
+                logger.warning("FLV is not supported for h265 codec, use TS format instead")
+                self.save_format = "ts"
 
         return self.save_format, False
 

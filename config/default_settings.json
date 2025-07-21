@@ -15,6 +15,7 @@
     "segmented_recording_enabled": true,
     "force_https_recording": true,
     "default_live_source": "FLV",
+    "flv_use_direct_download": false,
     "recording_space_threshold": "2.0",
     "video_segment_time": "1800",
     "convert_to_mp4": true,

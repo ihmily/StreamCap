@@ -1,7 +1,14 @@
 from typing import Any
 
 from .audio import AACCommandBuilder, M4ACommandBuilder, MP3CommandBuilder, WAVCommandBuilder, WMACommandBuilder
-from .video import FLVCommandBuilder, MKVCommandBuilder, MOVCommandBuilder, MP4CommandBuilder, TSCommandBuilder, NUTCommandBuilder
+from .video import (
+        FLVCommandBuilder,
+        MKVCommandBuilder,
+        MOVCommandBuilder,
+        MP4CommandBuilder,
+        NUTCommandBuilder,
+        TSCommandBuilder
+)
 
 
 def create_builder(format_type: str, *args: Any, **kwargs: Any) -> Any:

@@ -4,6 +4,7 @@ class VideoFormat:
     FLV = "FLV"
     MKV = "MKV"
     MOV = "MOV"
+    NUT = "NUT"
 
     @classmethod
     def get_formats(cls):

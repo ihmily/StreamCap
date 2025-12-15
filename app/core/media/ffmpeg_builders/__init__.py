@@ -2,12 +2,12 @@ from typing import Any
 
 from .audio import AACCommandBuilder, M4ACommandBuilder, MP3CommandBuilder, WAVCommandBuilder, WMACommandBuilder
 from .video import (
-        FLVCommandBuilder,
-        MKVCommandBuilder,
-        MOVCommandBuilder,
-        MP4CommandBuilder,
-        NUTCommandBuilder,
-        TSCommandBuilder
+    FLVCommandBuilder,
+    MKVCommandBuilder,
+    MOVCommandBuilder,
+    MP4CommandBuilder,
+    NUTCommandBuilder,
+    TSCommandBuilder,
 )
 
 

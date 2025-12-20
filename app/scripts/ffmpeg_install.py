@@ -6,6 +6,7 @@ import subprocess
 import sys
 import zipfile
 from pathlib import Path
+import shutil
 
 import httpx
 
@@ -50,7 +51,10 @@ async def get_lanzou_download_link(url: str, password: str | None = None, header
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(url, headers=headers)
             html_str = response.text
-            sign = re.search("var \\w+ = '([A-Za-z0-9_\\-+/]{80,})';", html_str).group(1)
+            sign_match = re.search("var \\w+ = '([A-Za-z0-9_\\-+/]{80,})';", html_str)
+            if not sign_match:
+                return None
+            sign = sign_match.group(1)
 
             data = {
                 "action": "downprocess",
@@ -72,64 +76,134 @@ async def get_lanzou_download_link(url: str, password: str | None = None, header
         logger.error(f"Failed to obtain ffmpeg download address. {e}")
 
 
+def _iter_possible_ffmpeg_bin_dirs(root_dir: Path) -> list[Path]:
+    candidates: list[Path] = []
+    for child in root_dir.iterdir():
+        if not child.is_dir():
+            continue
+        bin_dir = child / "bin"
+        if (bin_dir / "ffmpeg.exe").exists():
+            candidates.append(bin_dir)
+    return candidates
+
+
+def _normalize_windows_ffmpeg_layout(root_dir: Path) -> bool:
+    ffmpeg_dir = root_dir / "ffmpeg"
+    if (ffmpeg_dir / "ffmpeg.exe").exists():
+        return True
+
+    if (ffmpeg_dir / "bin" / "ffmpeg.exe").exists():
+        bin_dir = ffmpeg_dir / "bin"
+        for item in bin_dir.iterdir():
+            if item.is_file():
+                shutil.copy2(item, ffmpeg_dir / item.name)
+        return (ffmpeg_dir / "ffmpeg.exe").exists()
+
+    candidates = _iter_possible_ffmpeg_bin_dirs(root_dir)
+    if not candidates:
+        return False
+
+    bin_dir = candidates[0]
+    if ffmpeg_dir.exists():
+        shutil.rmtree(ffmpeg_dir, ignore_errors=True)
+    ffmpeg_dir.mkdir(parents=True, exist_ok=True)
+    for item in bin_dir.iterdir():
+        if item.is_file():
+            shutil.copy2(item, ffmpeg_dir / item.name)
+    return (ffmpeg_dir / "ffmpeg.exe").exists()
+
+
+async def _download_file(url: str, dest_path: Path, headers: dict | None, update_progress) -> None:
+    async with httpx.AsyncClient(follow_redirects=True, timeout=120.0) as client:
+        async with client.stream("GET", url, headers=headers) as resp:
+            if resp.status_code != 200:
+                raise RuntimeError(f"Download failed: {resp.status_code}")
+
+            total_size = int(resp.headers.get("Content-Length") or 0)
+            downloaded = 0
+            with open(dest_path, "wb") as f:
+                async for chunk in resp.aiter_bytes():
+                    if not chunk:
+                        continue
+                    f.write(chunk)
+                    downloaded += len(chunk)
+                    if total_size > 0:
+                        progress = 0.2 + 0.6 * (downloaded / total_size)
+                        await update_progress(
+                            round(progress, 2),
+                            f"Downloading... {downloaded // 1024}KB/{total_size // 1024}KB",
+                        )
+                    else:
+                        await update_progress(0.5, f"Downloading... {downloaded // 1024}KB")
+
+
 async def install_ffmpeg_windows(update_progress):
     try:
         logger.warning("ffmpeg is not installed.")
         logger.debug("Installing the latest version of ffmpeg for Windows...")
         await update_progress(0.1, "Get FFmpeg installation resources")
+
         headers = {
-            'content-type': 'application/x-www-form-urlencoded',
-            'accept-language': 'zh-CN,zh;q=0.9',
-            'origin': 'https://wweb.lanzoum.com',
-            'referer': 'https://wweb.lanzoum.com/iHAc22ly3r3g',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
-                          ' Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
-            'x-requested-with': 'XMLHttpRequest',
+            "user-agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0"
+            )
         }
-        ffmpeg_url = await get_lanzou_download_link("https://wweb.lanzoum.com/iHAc22ly3r3g", "eots", headers)
-        if ffmpeg_url:
-            full_file_name = "ffmpeg_latest_build_20250124.zip"
-            version = "v20250124"
-            zip_file_path = Path(execute_dir) / full_file_name
-            if Path(zip_file_path).exists():
-                await update_progress(0.8, "FFmpeg installation file already exists")
-                logger.debug("ffmpeg installation file already exists, start install...")
-            else:
-                await update_progress(0.2, "Start downloading FFmpeg installation package")
-                logger.debug(f"FFmpeg Download ({version}): {ffmpeg_url}")
-                async with (httpx.AsyncClient(follow_redirects=True) as client,
-                            client.stream("GET", ffmpeg_url, headers=headers) as resp):
 
-                    total_size = int(resp.headers.get("Content-Length", 0))
-                    if resp.status_code != 200 and total_size != 0:
-                        logger.error("FFmpeg package resources cannot be accessed")
-                        raise Exception("The resource address cannot be accessed")
+        download_candidates = [
+            ("gyan", "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip"),
+            ("btbn", "https://github.com/BtbN/FFmpeg-Builds/releases/latest/download/ffmpeg-master-latest-win64-gpl.zip"),
+        ]
 
-                    downloaded = 0
-                    with open(zip_file_path, "wb") as f:
-                        async for chunk in resp.aiter_bytes():
-                            f.write(chunk)
-                            downloaded += len(chunk)
+        ffmpeg_url = None
+        async with httpx.AsyncClient(follow_redirects=True, timeout=30.0) as client:
+            for _name, url in download_candidates:
+                try:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        ffmpeg_url = str(resp.url)
+                        break
+                except Exception:
+                    continue
 
-                            progress = 0.2 + 0.6 * (downloaded / total_size)
-                            await update_progress(
-                                round(progress, 2), f"Downloading... {downloaded // 1024}KB/{total_size // 1024}KB"
-                            )
+        if not ffmpeg_url:
+            lanzou_headers = {
+                "content-type": "application/x-www-form-urlencoded",
+                "accept-language": "zh-CN,zh;q=0.9",
+                "origin": "https://wweb.lanzoum.com",
+                "referer": "https://wweb.lanzoum.com/iHAc22ly3r3g",
+                "user-agent": headers["user-agent"],
+                "x-requested-with": "XMLHttpRequest",
+            }
+            ffmpeg_url = await get_lanzou_download_link("https://wweb.lanzoum.com/iHAc22ly3r3g", "eots", lanzou_headers)
+            headers = lanzou_headers
 
-            await update_progress(0.8, "Extracting and cleaning installation files")
-            await unzip_file(zip_file_path, execute_dir)
-            await update_progress(0.9, "Configuring FFmpeg environment variables")
-            os.environ["PATH"] = ffmpeg_path + os.pathsep + os.environ.get("PATH")
-            result = subprocess.run(["ffmpeg", "-version"], capture_output=True, startupinfo=startupinfo)
-            if result.returncode == 0:
-                logger.success("FFmpeg installation was successful")
-                return True
-            else:
-                logger.error("ffmpeg installation failed. Please manually install ffmpeg by yourself")
-                raise Exception("Please restart the program")
-        else:
+        if not ffmpeg_url:
             logger.error("Please manually install ffmpeg by yourself")
             raise Exception("Failed to obtain the FFmpeg download address")
+
+        zip_file_path = Path(execute_dir) / "ffmpeg_latest_build.zip"
+        if zip_file_path.exists():
+            await update_progress(0.2, "FFmpeg installation file already exists")
+        else:
+            await update_progress(0.2, "Start downloading FFmpeg installation package")
+            logger.debug(f"FFmpeg Download: {ffmpeg_url}")
+            await _download_file(ffmpeg_url, zip_file_path, headers, update_progress)
+
+        await update_progress(0.8, "Extracting and cleaning installation files")
+        await unzip_file(zip_file_path, execute_dir)
+        if not _normalize_windows_ffmpeg_layout(Path(execute_dir)):
+            raise Exception("FFmpeg files extracted but layout is unexpected")
+
+        await update_progress(0.9, "Configuring FFmpeg environment variables")
+        update_env_path()
+        result = subprocess.run(["ffmpeg", "-version"], capture_output=True, startupinfo=startupinfo)
+        if result.returncode == 0:
+            logger.success("FFmpeg installation was successful")
+            return True
+
+        logger.error("ffmpeg installation failed. Please manually install ffmpeg by yourself")
+        raise Exception("Please restart the program")
     except Exception as e:
         raise RuntimeError(f"FFmpeg install failed, {e}") from None
 
@@ -240,7 +314,11 @@ def update_env_path():
         env_path = [path for path in path_list if path not in set(current_env_path_list)]
         ffmpeg_env_path = os.pathsep.join([ffmpeg_path] + env_path + current_env_path_list)
     else:
-        ffmpeg_env_path = ffmpeg_path + os.pathsep + current_env_path
+        win_paths = []
+        if os.path.isdir(os.path.join(ffmpeg_path, "bin")):
+            win_paths.append(os.path.join(ffmpeg_path, "bin"))
+        win_paths.append(ffmpeg_path)
+        ffmpeg_env_path = os.pathsep.join(win_paths + [current_env_path])
 
     os.environ["PATH"] = ffmpeg_env_path
 

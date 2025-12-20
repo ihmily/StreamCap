@@ -6,6 +6,7 @@ import flet as ft
 from ...models.media.audio_format_model import AudioFormat
 from ...models.media.video_format_model import VideoFormat
 from ...models.media.video_quality_model import VideoQuality
+from ...utils import utils
 from ...utils.delay import DelayedTaskExecutor
 from ...utils.logger import logger
 from ..base_page import PageBase
@@ -154,10 +155,33 @@ class SettingsPage(PageBase):
     async def on_change(self, e):
         """Handle changes in any input field and trigger auto-save."""
         key = e.control.data
+        previous_value = self.user_config.get(key)
         if isinstance(e.control, (ft.Switch, ft.Checkbox)):
             self.user_config[key] = e.data.lower() == "true"
         else:
             self.user_config[key] = e.data
+
+        if key in ("auto_start_enabled", "silent_start_enabled") and not self.app.page.web:
+            auto_start_enabled = bool(self.user_config.get("auto_start_enabled"))
+            silent_start_enabled = bool(self.user_config.get("silent_start_enabled"))
+            ok, msg = await asyncio.to_thread(
+                utils.set_autostart_enabled,
+                auto_start_enabled,
+                silent_start=silent_start_enabled,
+            )
+            if ok:
+                await self.app.snack_bar.show_snack_bar(
+                    self._["auto_start_apply_success"], bgcolor=ft.Colors.GREEN
+                )
+            else:
+                self.user_config[key] = previous_value
+                if isinstance(e.control, (ft.Switch, ft.Checkbox)):
+                    e.control.value = bool(previous_value)
+                    e.control.update()
+                await self.app.snack_bar.show_snack_bar(
+                    f"{self._['auto_start_apply_failed']}: {msg}", bgcolor=ft.Colors.RED, duration=4000
+                )
+                return
             
         if key in ["folder_name_platform", "folder_name_author", "folder_name_time", "folder_name_title"]:
             for recording in self.app.record_manager.recordings:
@@ -286,16 +310,37 @@ class SettingsPage(PageBase):
                             ),
                         ),
                         self.create_folder_setting_row(self._["name_rules"]),
-                        self.create_setting_row(
-                            self._["remember_window_size"],
-                            ft.Switch(
-                                value=self.get_config_value("remember_window_size", False),
-                                on_change=self.on_change,
-                                data="remember_window_size",
-                            ),
-                        ),
                     ],
                     is_mobile,
+                ),
+                *(
+                    []
+                    if self.app.page.web
+                    else [
+                        self.create_setting_group(
+                            self._["startup_settings"],
+                            self._["startup_settings_desc"],
+                            [
+                                self.create_setting_row(
+                                    self._["auto_start_enabled"],
+                                    ft.Switch(
+                                        value=self.get_config_value("auto_start_enabled"),
+                                        data="auto_start_enabled",
+                                        on_change=self.on_change,
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["silent_start_enabled"],
+                                    ft.Switch(
+                                        value=self.get_config_value("silent_start_enabled"),
+                                        data="silent_start_enabled",
+                                        on_change=self.on_change,
+                                    ),
+                                ),
+                            ],
+                            is_mobile,
+                        )
+                    ]
                 ),
                 self.create_setting_group(
                     self._["proxy_settings"],
@@ -470,15 +515,6 @@ class SettingsPage(PageBase):
                                 hint_text=self._["platform_max_concurrent_requests_tip"]
                             ),
                         ),
-                        self.create_setting_row(
-                            self._["check_live_on_browser_refresh"],
-                            ft.Switch(
-                                value=self.get_config_value("check_live_on_browser_refresh", True),
-                                data="check_live_on_browser_refresh",
-                                on_change=self.on_change,
-                                tooltip=self._['check_live_on_browser_refresh_tip']
-                            ),
-                        ),
                     ],
                     is_mobile,
                 ),
@@ -490,6 +526,87 @@ class SettingsPage(PageBase):
     def create_push_settings_tab(self):
         """Create UI elements for push configuration."""
         is_mobile = self.app.is_mobile
+
+        def build_history_controls():
+            history = self.get_config_value("notification_history", [])
+            if not isinstance(history, list) or not history:
+                return [ft.Text(self._["notification_history_empty"], opacity=0.7)]
+
+            tiles = []
+            for item in history:
+                msg_type = item.get("type") or "unknown"
+                type_label = self._["notification_history_type_unknown"]
+                if msg_type == "start":
+                    type_label = self._["notification_history_type_start"]
+                elif msg_type == "end":
+                    type_label = self._["notification_history_type_end"]
+
+                meta = item.get("meta") or {}
+                room_name = meta.get("room_name") or "-"
+                time_text = item.get("time") or "-"
+
+                results = item.get("results") or {}
+                success_count = 0
+                error_count = 0
+                if isinstance(results, dict):
+                    for result in results.values():
+                        if isinstance(result, dict):
+                            success_count += len(result.get("success") or [])
+                            error_count += len(result.get("error") or [])
+
+                summary = f"{room_name} | OK:{success_count} ERR:{error_count}"
+
+                def open_detail(_, data=item, time_text=time_text, type_label=type_label, room_name=room_name, meta=meta):
+                    dialog = ft.AlertDialog(
+                        title=ft.Text(f"{time_text} - {type_label}"),
+                        content=ft.Column(
+                            [
+                                ft.Text(f"{self._['live_room']}: {room_name}", selectable=True),
+                                ft.Text(f"URL: {meta.get('url') or '-'}", selectable=True),
+                                ft.Text(f"{self._['custom_push_title']}: {data.get('title') or ''}", selectable=True),
+                                ft.Text(data.get("content") or "", selectable=True),
+                            ],
+                            tight=True,
+                            scroll=ft.ScrollMode.AUTO,
+                            height=300,
+                        ),
+                        actions=[
+                            ft.TextButton(text=self._["close"], on_click=lambda __: close_dialog(dialog)),
+                        ],
+                        actions_alignment=ft.MainAxisAlignment.END,
+                        modal=False,
+                    )
+                    self.app.dialog_area.content = dialog
+                    self.app.dialog_area.content.open = True
+                    try:
+                        self.app.dialog_area.update()
+                    except Exception:
+                        pass
+
+                def close_dialog(dlg):
+                    dlg.open = False
+                    try:
+                        dlg.update()
+                    except Exception:
+                        pass
+
+                tiles.append(
+                    ft.ListTile(
+                        title=ft.Text(f"{time_text} - {type_label}"),
+                        subtitle=ft.Text(summary),
+                        on_click=open_detail,
+                    )
+                )
+
+            return [ft.ListView(controls=tiles, spacing=2, height=260)]
+
+        async def clear_history_async():
+            self.user_config["notification_history"] = []
+            await self.config_manager.save_user_config(self.user_config)
+            self.page.run_task(self.load)
+
+        def clear_history(_):
+            self.page.run_task(clear_history_async)
         
         return ft.Column(
             [
@@ -538,6 +655,15 @@ class SettingsPage(PageBase):
                                 on_change=self.on_change,
                             ),
                         ),
+                        self.create_setting_row(
+                            self._["stream_end_notification_delay_seconds"],
+                            ft.TextField(
+                                value=self.get_config_value("stream_end_notification_delay_seconds"),
+                                width=300,
+                                data="stream_end_notification_delay_seconds",
+                                on_change=self.on_change,
+                            ),
+                        ),
                     ],
                     is_mobile,
                 ),
@@ -572,6 +698,42 @@ class SettingsPage(PageBase):
                                 on_change=self.on_change,
                             ),
                         ),
+                    ],
+                    is_mobile,
+                ),
+                self.create_setting_group(
+                    self._["notification_history"],
+                    self._["notification_history_desc"],
+                    [
+                        self.create_setting_row(
+                            self._["notification_history_enabled"],
+                            ft.Switch(
+                                value=self.get_config_value("notification_history_enabled"),
+                                data="notification_history_enabled",
+                                on_change=self.on_change,
+                            ),
+                        ),
+                        self.create_setting_row(
+                            self._["notification_history_max_entries"],
+                            ft.TextField(
+                                value=str(self.get_config_value("notification_history_max_entries", "200")),
+                                width=300,
+                                data="notification_history_max_entries",
+                                on_change=self.on_change,
+                            ),
+                        ),
+                        ft.Row(
+                            [
+                                ft.Container(expand=True),
+                                ft.OutlinedButton(
+                                    text=self._["notification_history_clear"],
+                                    icon=ft.Icons.DELETE_OUTLINE,
+                                    on_click=clear_history,
+                                ),
+                            ],
+                            alignment=ft.MainAxisAlignment.END,
+                        ),
+                        *build_history_controls(),
                     ],
                     is_mobile,
                 ),
@@ -639,9 +801,34 @@ class SettingsPage(PageBase):
                                     self._["feishu_webhook_url"],
                                     ft.TextField(
                                         value=self.get_config_value("feishu_webhook_url"),
+                                        hint_text=self._["feishu_webhook_hint"],
                                         width=300,
                                         on_change=self.on_change,
                                         data="feishu_webhook_url",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["feishu_sign_secret"],
+                                    ft.TextField(
+                                        value=self.get_config_value("feishu_sign_secret"),
+                                        password=True,
+                                        can_reveal_password=True,
+                                        width=300,
+                                        on_change=self.on_change,
+                                        data="feishu_sign_secret",
+                                    ),
+                                ),
+                                self.create_setting_row(
+                                    self._["feishu_msg_type"],
+                                    ft.Dropdown(
+                                        options=[
+                                            ft.dropdown.Option(key="text", text=self._["feishu_message_type_text"]),
+                                            ft.dropdown.Option(key="post", text=self._["feishu_message_type_post"]),
+                                        ],
+                                        value=self.get_config_value("feishu_msg_type", "text"),
+                                        width=200,
+                                        on_change=self.on_change,
+                                        data="feishu_msg_type",
                                     ),
                                 ),
                             ],
@@ -853,7 +1040,7 @@ class SettingsPage(PageBase):
                 self._["wechat"], ft.Icons.WECHAT, "wechat_enabled"
             ),
             self.create_channel_switch_container(
-                self._["feishu"], ft.Icons.BOOK, "feishu_enabled"
+                self._["feishu"], ft.Icons.CHAT, "feishu_enabled"
             ),
             self.create_channel_switch_container(
                 self._["serverchan"], ft.Icons.CLOUD_OUTLINED, "serverchan_enabled"

@@ -1,4 +1,5 @@
 import argparse
+import asyncio
 import multiprocessing
 import os
 
@@ -22,36 +23,84 @@ MIN_WIDTH = 950
 ASSETS_DIR = "assets"
 
 
-class GlobalState:
-    periodic_tasks_started = False
+def _parse_int(value, default: int | None = None) -> int | None:
+    try:
+        if value is None:
+            return default
+        if isinstance(value, bool):
+            return default
+        if isinstance(value, int):
+            return value
+        if isinstance(value, float):
+            return int(value)
+        value_str = str(value).strip()
+        if not value_str:
+            return default
+        return int(float(value_str))
+    except (TypeError, ValueError):
+        return default
 
 
-global_state = GlobalState()
-
-
-def setup_window(page: ft.Page, app: App, is_web: bool) -> None:
+def setup_window(page: ft.Page, is_web: bool, user_config: dict | None = None) -> None:
     page.window.icon = os.path.join(execute_dir, ASSETS_DIR, "icon.ico")
-    page.window.center()
     page.window.to_front()
     page.window.skip_task_bar = False
     page.window.always_on_top = False
     page.focused = True
 
-    if not is_web:
-        try:
-            if app.settings.user_config.get("remember_window_size"):
-                window_width = app.settings.user_config.get("window_width")
-                window_height = app.settings.user_config.get("window_height")
-                if window_width and window_height:
-                    page.window.width = int(window_width)
-                    page.window.height = int(window_height)
-                    return
+    if is_web:
+        return
 
+    if not (user_config or {}).get("window_state_enabled", True):
+        try:
             screen = get_monitors()[0]
             page.window.width = int(screen.width * WINDOW_SCALE)
             page.window.height = int(screen.height * WINDOW_SCALE)
+            page.window.center()
         except IndexError:
             logger.warning("No monitors detected, using default window size.")
+        return
+
+    try:
+        screen = get_monitors()[0]
+        screen_width = int(screen.width)
+        screen_height = int(screen.height)
+    except Exception:
+        screen_width = 0
+        screen_height = 0
+
+    default_width = int(screen_width * WINDOW_SCALE) if screen_width else int(MIN_WIDTH / WINDOW_SCALE)
+    default_height = int(screen_height * WINDOW_SCALE) if screen_height else int(MIN_WIDTH * WINDOW_SCALE)
+
+    window_width = _parse_int((user_config or {}).get("window_width"), default_width) or default_width
+    window_height = _parse_int((user_config or {}).get("window_height"), default_height) or default_height
+    window_left = _parse_int((user_config or {}).get("window_left"), None)
+    window_top = _parse_int((user_config or {}).get("window_top"), None)
+    window_maximized = bool((user_config or {}).get("window_maximized"))
+
+    min_height = int(MIN_WIDTH * WINDOW_SCALE)
+    window_width = max(MIN_WIDTH, window_width)
+    window_height = max(min_height, window_height)
+    if screen_width:
+        window_width = min(window_width, screen_width)
+    if screen_height:
+        window_height = min(window_height, screen_height)
+
+    page.window.width = window_width
+    page.window.height = window_height
+
+    if window_left is not None and window_top is not None and screen_width and screen_height:
+        max_left = max(0, screen_width - window_width)
+        max_top = max(0, screen_height - window_height)
+        page.window.left = max(0, min(window_left, max_left))
+        page.window.top = max(0, min(window_top, max_top))
+    else:
+        page.window.center()
+
+    try:
+        page.window.maximized = window_maximized
+    except Exception:
+        pass
 
 
 def get_route_handler() -> dict[str, str]:
@@ -81,52 +130,81 @@ def handle_route_change(page: ft.Page, app: App) -> callable:
 
 
 def handle_window_event(page: ft.Page, app: App, save_progress_overlay: 'SaveProgressOverlay') -> callable:
+    save_timer = {"task": None}
+
+    async def save_window_state_after_delay(delay: float) -> None:
+        await asyncio.sleep(delay)
+        if getattr(app, "is_web_mode", False):
+            return
+        user_config = app.settings.user_config
+        if not user_config.get("window_state_enabled", True):
+            return
+
+        maximized = bool(getattr(page.window, "maximized", False))
+        user_config["window_maximized"] = maximized
+        if not maximized:
+            user_config["window_width"] = str(getattr(page.window, "width", "") or "")
+            user_config["window_height"] = str(getattr(page.window, "height", "") or "")
+            user_config["window_left"] = str(getattr(page.window, "left", "") or "")
+            user_config["window_top"] = str(getattr(page.window, "top", "") or "")
+
+        await app.config_manager.save_user_config(user_config)
+
+    def schedule_save_window_state() -> None:
+        if save_timer["task"] is not None:
+            try:
+                save_timer["task"].cancel()
+            except Exception:
+                pass
+        save_timer["task"] = page.run_task(save_window_state_after_delay, 1.0)
+
     async def on_window_event(e: ft.ControlEvent) -> None:
         if e.data == "close":
-            if app.settings.user_config.get("remember_window_size"):
-                app.settings.user_config["window_width"] = page.window.width
-                app.settings.user_config["window_height"] = page.window.height
-                await app.config_manager.save_user_config(app.settings.user_config)
             await handle_app_close(page, app, save_progress_overlay)
+            return
+
+        if e.data in ("move", "resize"):
+            schedule_save_window_state()
 
     return on_window_event
 
 
-def handle_disconnect(page: ft.Page, app: App) -> callable:
+def handle_disconnect(page: ft.Page) -> callable:
     """Handle disconnection for web mode."""
 
-    async def disconnect(_: ft.ControlEvent) -> None:
+    def disconnect(_: ft.ControlEvent) -> None:
         page.pubsub.unsubscribe_all()
-        app.settings.user_config["last_route"] = page.route
-        await app.config_manager.save_user_config(app.settings.user_config)
-        logger.info(f"Saved last route: {page.route}")
 
     return disconnect
 
 
 def handle_page_resize(page: ft.Page, app: App) -> callable:
     """handle page resize"""
-
+    
     def on_resize(_: ft.ControlEvent) -> None:
         setup_responsive_layout(page, app)
         page.update()
-
-    return on_resize
+    
+    return on_resize 
 
 
 async def main(page: ft.Page) -> None:
+
     page.title = "StreamCap"
     page.window.min_width = MIN_WIDTH
     page.window.min_height = MIN_WIDTH * WINDOW_SCALE
 
     is_web = args.web or platform == "web"
-
     app = App(page)
     page.data = app
     app.is_web_mode = is_web
     app.is_mobile = False
-    setup_window(page, app, is_web)
+    setup_window(page, is_web, app.settings.user_config)
 
+    silent_start = False
+    if not is_web:
+        silent_start = bool(getattr(args, "silent", False)) or bool(app.settings.user_config.get("silent_start_enabled"))
+    
     if not is_web:
         try:
             app.tray_manager = TrayManager(app)
@@ -147,40 +225,33 @@ async def main(page: ft.Page) -> None:
         if is_web:
             setup_responsive_layout(page, app)
             page.on_resize = handle_page_resize(page, app)
-            page.on_disconnect = handle_disconnect(page, app)
 
         page.add(app.complete_page)
         
         page.on_route_change = handle_route_change(page, app)
         page.window.prevent_close = True
         page.window.on_event = handle_window_event(page, app, save_progress_overlay)
+        tray_started = False
         if is_web:
-            global global_state
-            if not global_state.periodic_tasks_started:
-                global_state.periodic_tasks_started = True
-                logger.info("Starting periodic tasks for the first time in web mode")
-                page.run_task(app.start_periodic_tasks)
-            else:
-                logger.info("Periodic tasks already running in web mode, skipping initialization")
-        else:
-            logger.info("Starting periodic tasks in desktop mode")
-            page.run_task(app.start_periodic_tasks)
+            page.on_disconnect = handle_disconnect(page)
+        elif page.platform.value == "windows":
+            if hasattr(app, "tray_manager"):
+                try:
+                    tray_started = bool(app.tray_manager.start(page))
+                except Exception as err:
+                    logger.error(f"Failed to start tray manager: {err}")
 
-            if page.platform.value == "windows":
-                if hasattr(app, "tray_manager"):
-                    try:
-                        app.tray_manager.start(page)
-                    except Exception as err:
-                        logger.error(f"Failed to start tray manager: {err}")
+        if silent_start:
+            if tray_started:
+                page.window.visible = False
+            else:
+                try:
+                    page.window.minimized = True
+                except Exception:
+                    pass
 
         page.update()
-
-        if page.route == '/':
-            last_route = app.settings.user_config.get("last_route", "/home")
-            logger.info(f"Restored last route: {last_route}")
-            page.go(last_route)
-        else:
-            page.go(page.route)
+        page.on_route_change(ft.RouteChangeEvent(route=page.route))
 
     if is_web:
         auth_manager = AuthManager(app)
@@ -221,6 +292,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Run the Flet app with optional web mode.")
     parser.add_argument("--web", action="store_true", help="Run the app in web mode")
+    parser.add_argument("--silent", action="store_true", help="Start minimized/hidden (desktop)")
     parser.add_argument("--host", type=str, default=default_host, help=f"Host address (default: {default_host})")
     parser.add_argument("--port", type=int, default=default_port, help=f"Port number (default: {default_port})")
     args = parser.parse_args()

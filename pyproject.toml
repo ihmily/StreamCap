@@ -65,4 +65,4 @@ plyer = "~2.1.0"
 optional = true
 
 [tool.poetry.group.lint.dependencies]
-ruff = "~0.13.2"
+ruff = "~0.14.10"

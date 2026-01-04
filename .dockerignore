@@ -10,6 +10,7 @@
 **/docs
 **/tests
 **/*.md
+!streamget/README.md
 
 # Build Artifacts and Cache
 **/__pycache__

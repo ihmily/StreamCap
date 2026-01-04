@@ -4,6 +4,7 @@ class VideoQuality:
     HD = "HD"
     SD = "SD"
     LD = "LD"
+    AD = "AD"  # Audio-only stream
 
     @classmethod
     def get_qualities(cls):

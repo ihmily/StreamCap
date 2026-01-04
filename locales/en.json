@@ -406,7 +406,8 @@
     "UHD": "Ultra HD",
     "HD": "High Definition",
     "SD": "Standard Definition",
-    "LD": "Low Definition"
+    "LD": "Low Definition",
+    "AD": "Audio Only"
   },
   "help_dialog": {
     "shortcut_key_help": "Shortcut Key Help",

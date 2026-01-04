@@ -406,7 +406,8 @@
     "UHD": "超清",
     "HD": "高清",
     "SD": "标清",
-    "LD": "流畅"
+    "LD": "流畅",
+    "AD": "音频"
   },
   "help_dialog": {
     "shortcut_key_help": "快捷键帮助",

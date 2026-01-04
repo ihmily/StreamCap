@@ -50,6 +50,30 @@ class RecordingDialog:
             record_format_field.value = record_format_field.options[0].key
             record_format_field.update()
 
+        async def on_quality_change(e):
+            """当画质选择改变时，如果选择了AD（仅音频），自动切换到音频格式"""
+            selected_quality = e.control.value
+            if selected_quality == VideoQuality.AD:
+                # 切换到音频模式
+                media_type_dropdown.value = "audio"
+                media_type_dropdown.disabled = True  # 禁用媒体类型选择
+                # 更新格式选项为音频格式
+                record_format_field.options = [ft.dropdown.Option(i) for i in AudioFormat.get_formats()]
+                if record_format_field.value not in AudioFormat.get_formats():
+                    record_format_field.value = AudioFormat.M4A
+            else:
+                # 恢复媒体类型选择的可用性
+                media_type_dropdown.disabled = False
+                # 如果当前是音频模式，切换回视频模式
+                if media_type_dropdown.value == "audio":
+                    media_type_dropdown.value = "video"
+                    record_format_field.options = [ft.dropdown.Option(i) for i in VideoFormat.get_formats()]
+                    if record_format_field.value not in VideoFormat.get_formats():
+                        record_format_field.value = VideoFormat.TS
+
+            media_type_dropdown.update()
+            record_format_field.update()
+
         url_field = ft.TextField(
             label=self._["input_live_link"],
             hint_text=self._["example"] + "：https://www.example.com/xxxxxx",
@@ -77,7 +101,12 @@ class RecordingDialog:
             on_change=update_format_options
         )
 
-        if default_record_type == "video":
+        # 如果初始画质是AD，强制设置为音频模式并禁用媒体类型选择
+        if default_record_quality == VideoQuality.AD:
+            media_type_dropdown.value = "audio"
+            media_type_dropdown.disabled = True
+            record_formats = AudioFormat.get_formats()
+        elif default_record_type == "video":
             record_formats = VideoFormat.get_formats()
         else:
             record_formats = AudioFormat.get_formats()
@@ -98,6 +127,7 @@ class RecordingDialog:
             filled=False,
             value=default_record_quality,
             width=245,
+            on_change=on_quality_change,
         )
 
         flv_use_direct_download_dropdown = ft.Dropdown(

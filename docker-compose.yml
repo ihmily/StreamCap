@@ -1,7 +1,15 @@
-
 services:
   streamcap:
-    image: ihmily/streamcap
+    # 1. 使用本地构建，不再直接拉取镜像
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PUID=${CURRENT_UID:-1000}
+        - PGID=${CURRENT_GID:-1000}
+        - http_proxy=http://192.168.50.66:7890
+        - https_proxy=http://192.168.50.66:7890
+        - no_proxy=localhost,127.0.0.1
     tty: true
     ports:
       - "${PORT:-6006}:${PORT:-6006}"
@@ -11,7 +19,7 @@ services:
     volumes:
       - ./logs:/app/logs
       - ./config:/app/config
-      - ./downloads:/app/downloads
+      - /media/iso/hdd3/steamcap/:/app/downloads
       - ./.env:/app/.env
     healthcheck:
       test: ["CMD", "sh", "-c", "curl -f http://localhost:${PORT:-6006}/about"]
@@ -22,20 +30,29 @@ services:
       - streamcap-network
 
   video_api:
-      image: ihmily/streamcap
-      command: python -m app.api.video_stream_service
-      ports:
-        - "${VIDEO_API_PORT:-6007}:${VIDEO_API_PORT:-6007}"
-      environment:
-        - TZ=${TZ:-Asia/Shanghai}
-        - CUSTOM_VIDEO_ROOT_DIR=${CUSTOM_VIDEO_ROOT_DIR:-./downloads}
-      volumes:
-        - ./downloads:/app/downloads
-        - ./.env:/app/.env
-      depends_on:
-        - streamcap
-      networks:
-        - streamcap-network
+    # 同样使用构建模式，共享同一套构建代码，但运行不同的命令
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - PUID=${CURRENT_UID:-1000}
+        - PGID=${CURRENT_GID:-1000}
+        - http_proxy=http://192.168.50.66:7890
+        - https_proxy=http://192.168.50.66:7890
+        - no_proxy=localhost,127.0.0.1
+    command: python -m app.api.video_stream_service
+    ports:
+      - "${VIDEO_API_PORT:-6007}:${VIDEO_API_PORT:-6007}"
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - CUSTOM_VIDEO_ROOT_DIR=${CUSTOM_VIDEO_ROOT_DIR:-./downloads}
+    volumes:
+      - /media/iso/hdd3/steamcap/:/app/downloads
+      - ./.env:/app/.env
+    depends_on:
+      - streamcap
+    networks:
+      - streamcap-network
 
 networks:
   streamcap-network:

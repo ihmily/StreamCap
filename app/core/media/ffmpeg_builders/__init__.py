@@ -17,7 +17,7 @@ def create_builder(format_type: str, *args: Any, **kwargs: Any) -> Any:
     format_to_class = {
         "mkv": MKVCommandBuilder,
         "mp4": MP4CommandBuilder,
-        "ts": TSCommandBuilder,
+        "ts" : TSCommandBuilder,
         "flv": FLVCommandBuilder,
         "mov": MOVCommandBuilder,
         "mp3": MP3CommandBuilder,

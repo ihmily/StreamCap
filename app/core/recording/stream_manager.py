@@ -3,11 +3,13 @@ import os
 import shutil
 import subprocess
 import time
+from datetime import date
 from datetime import datetime
 from typing import TypeVar
 
 from ...messages import desktop_notify, message_pusher
 from ...models.media.video_quality_model import VideoQuality
+from ...models.media.audio_format_model import AudioFormat
 from ...models.recording.recording_status_model import RecordingStatus
 from ...utils import utils
 from ...utils.logger import logger
@@ -269,6 +271,26 @@ class LiveStreamRecorder:
                 self.user_config.get("custom_script_command")
             )
         else:
+            audio_formats = {fmt.lower() for fmt in AudioFormat.get_formats()}
+            if self.save_format.lower() in audio_formats:
+                metadata = {
+                    "title": stream_info.title,
+                    "artist": stream_info.anchor_name,
+                    "album": f"{stream_info.platform} {stream_info.anchor_name}",
+                    "album_artist": stream_info.anchor_name,
+                    "date": date.today().isoformat(),
+                    "genre": "Live Stream",
+                    "comment": self.live_url,
+                }
+            else:
+                metadata = {
+                    "title": stream_info.title,
+                    "artist": stream_info.anchor_name,
+                    "date": date.today().isoformat(),
+                    "comment": self.live_url,
+                    "network": stream_info.platform,
+                    "service_name": stream_info.platform,
+                }
             ffmpeg_builder = ffmpeg_builders.create_builder(
                 self.save_format,
                 record_url=record_url,
@@ -276,7 +298,8 @@ class LiveStreamRecorder:
                 segment_record=self.segment_record,
                 segment_time=self.segment_time,
                 full_path=save_path,
-                headers=self.get_headers_params(record_url, self.platform_key)
+                headers=self.get_headers_params(record_url, self.platform_key),
+                metadata=metadata,
             )
             ffmpeg_command = ffmpeg_builder.build_command()
             self.app.page.run_task(

@@ -26,4 +26,4 @@ class FLVCommandBuilder(FFmpegCommandBuilder):
                 self.full_path
             ]
         command.extend(additional_commands)
-        return command
+        return self._inject_metadata(command)

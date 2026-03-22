@@ -36,6 +36,7 @@ class FFmpegCommandBuilder(abc.ABC):
         full_path: str | None = None,
         headers: str | None = None,
         proxy: str | None = None,
+        metadata: dict | None = None,
     ):
         """
         Initializes the FFmpegCommandBuilder.
@@ -47,6 +48,7 @@ class FFmpegCommandBuilder(abc.ABC):
         :param full_path: Full path where the output file will be saved.
         :param headers: Additional headers to include in the request.
         :param proxy: Proxy server URL to use for the connection.
+        :param metadata: Optional dict of metadata tags to embed (e.g. title, artist, album).
         """
         self.record_url = record_url
         self.is_overseas = is_overseas
@@ -55,6 +57,21 @@ class FFmpegCommandBuilder(abc.ABC):
         self.full_path = full_path or ""
         self.proxy = proxy or ""
         self.headers = headers or ""
+        self.metadata = metadata or {}
+
+    def _get_metadata_args(self) -> list[str]:
+        args = []
+        for key, value in self.metadata.items():
+            if value:
+                args += ["-metadata", f"{key}={value}"]
+        return args
+
+    def _inject_metadata(self, command: list[str]) -> list[str]:
+        """Insert metadata args before the output file path (last element)."""
+        metadata_args = self._get_metadata_args()
+        if metadata_args and command:
+            return command[:-1] + metadata_args + [command[-1]]
+        return command
 
     @abc.abstractmethod
     def build_command(self) -> list[str]:

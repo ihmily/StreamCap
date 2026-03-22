@@ -27,4 +27,4 @@ class WAVCommandBuilder(FFmpegCommandBuilder):
             ]
 
         command.extend(additional_commands)
-        return command
+        return self._inject_metadata(command)

@@ -49,7 +49,7 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-flet = { version = "0.27.6", extras = ["desktop", "cli"] }
+flet = { version = "0.84.0", extras = ["desktop", "cli"] }
 flet-video = "^0.1.1"
 httpx = "^0.28.1"
 screeninfo = "~0.8.1"

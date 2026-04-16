@@ -41,22 +41,8 @@ class RecordingsPage(PageBase):
             stroke_width=3,
             visible=False
         )
-        
-        if self.is_grid_view:
-            initial_content = ft.GridView(
-                expand=True,
-                runs_count=3,
-                spacing=10,
-                run_spacing=10,
-                child_aspect_ratio=2.3,
-                controls=[]
-            )
-        else:
-            initial_content = ft.Column(
-                controls=[], 
-                spacing=5, 
-                expand=True
-            )
+
+        initial_content = self._create_grid_content() if self.is_grid_view else self._create_list_content()
         
         self.recording_card_area = ft.Container(
             content=initial_content,
@@ -64,6 +50,30 @@ class RecordingsPage(PageBase):
         )
         self.add_recording_dialog = RecordingDialog(self.app, self.add_recording)
         self.pubsub_subscribe()
+
+    @staticmethod
+    def _create_grid_content(controls=None):
+        return ft.GridView(
+            expand=True,
+            runs_count=3,
+            spacing=10,
+            run_spacing=10,
+            child_aspect_ratio=2.3,
+            cache_extent=600,
+            controls=list(controls or [])
+        )
+
+    @staticmethod
+    def _create_list_content(controls=None):
+        return ft.ListView(
+            expand=True,
+            spacing=5,
+            padding=0,
+            build_controls_on_demand=True,
+            cache_extent=600,
+            first_item_prototype=True,
+            controls=list(controls or [])
+        )
 
     async def load(self):
         """Load the recordings page content."""
@@ -96,26 +106,16 @@ class RecordingsPage(PageBase):
     async def toggle_view_mode(self, _):
         self.is_grid_view = not self.is_grid_view
         current_content = self.recording_card_area.content
-        current_controls = current_content.controls if hasattr(current_content, 'controls') else []
+        current_controls = list(current_content.controls) if hasattr(current_content, "controls") else []
 
         column_width = 350
         runs_count = max(1, int(self.page.width / column_width))
 
         if self.is_grid_view:
-            new_content = ft.GridView(
-                expand=True,
-                runs_count=runs_count,
-                spacing=10,
-                run_spacing=10,
-                child_aspect_ratio=2.3,
-                controls=current_controls
-            )
+            new_content = self._create_grid_content(current_controls)
+            new_content.runs_count = runs_count
         else:
-            new_content = ft.Column(
-                controls=current_controls,
-                spacing=5,
-                expand=True
-            )
+            new_content = self._create_list_content(current_controls)
 
         self.recording_card_area.content = new_content
         self.content_area.clean()
@@ -362,6 +362,7 @@ class RecordingsPage(PageBase):
         
         cards_obj = self.app.record_card_manager.cards_obj
         recordings = self.app.record_manager.recordings
+        visibility_changed = False
         
         for recording in recordings:
             card_info = cards_obj.get(recording.rec_id)
@@ -372,17 +373,23 @@ class RecordingsPage(PageBase):
             platform_visible = RecordingFilters.get_platform_filter_result(recording, self.current_platform_filter)
             
             visible = status_visible and platform_visible
-            card_info["card"].visible = visible
+            if card_info["card"].visible != visible:
+                card_info["card"].visible = visible
+                visibility_changed = True
         
         self.content_area.update()
-        self.recording_card_area.update()
+        if visibility_changed:
+            self.recording_card_area.update()
 
     async def reset_cards_visibility(self):
         cards_obj = self.app.record_card_manager.cards_obj
+        visibility_changed = False
         for card_info in cards_obj.values():
             if not card_info["card"].visible:
                 card_info["card"].visible = True
-                card_info["card"].update()
+                visibility_changed = True
+        if visibility_changed:
+            self.recording_card_area.update()
 
     async def filter_recordings(self, query):
         recordings = self.app.record_manager.recordings
@@ -409,9 +416,15 @@ class RecordingsPage(PageBase):
                 if RecordingFilters.should_show_recording(self.current_filter, self.current_platform_filter, recording):
                     filtered_ids.add(rec_id)
 
+            visibility_changed = False
             for card_info in cards_obj.values():
-                card_info["card"].visible = card_info["card"].key in filtered_ids
-                card_info["card"].update()
+                visible = card_info["card"].key in filtered_ids
+                if card_info["card"].visible != visible:
+                    card_info["card"].visible = visible
+                    visibility_changed = True
+
+            if visibility_changed:
+                self.recording_card_area.update()
 
             if not filtered_ids:
                 await self.app.snack_bar.show_snack_bar(self._["not_search_result"], duration=2000)
@@ -420,6 +433,7 @@ class RecordingsPage(PageBase):
     def create_recordings_content_area(self):
         return ft.Column(
             expand=True,
+            spacing=0,
             controls=[
                 ft.Divider(height=1),
                 ft.Container(
@@ -428,7 +442,6 @@ class RecordingsPage(PageBase):
                 ),
                 self.recording_card_area,
             ],
-            scroll=ft.ScrollMode.AUTO if not self.app.is_mobile else ft.ScrollMode.HIDDEN,
         )
 
     async def add_record_cards(self):
@@ -592,13 +605,14 @@ class RecordingsPage(PageBase):
                 continue
             if card_id in selected_cards:
                 selected_cards[card_id].selected = False
+                selected_cards.pop(card_id, None)
                 card["card"].content.bgcolor = None
-                card["card"].update()
 
         for card in to_remove:
             card_key = card["card"].key
             cards_obj.pop(card_key, None)
-            self.recording_card_area.controls.remove(card["card"])
+            selected_cards.pop(card_key, None)
+            self.recording_card_area.content.controls.remove(card["card"])
         await self.show_all_cards()
         
         self.content_area.controls[1] = self.create_filter_area()
@@ -666,6 +680,7 @@ class RecordingsPage(PageBase):
         self.recording_card_area.content.controls.clear()
         self.recording_card_area.update()
         self.app.record_card_manager.cards_obj = {}
+        self.app.record_card_manager.selected_cards = {}
         
         self.current_platform_filter = "all"
         
@@ -716,15 +731,33 @@ class RecordingsPage(PageBase):
 
         if isinstance(self.recording_card_area.content, ft.GridView):
             grid_view = self.recording_card_area.content
-            grid_view.runs_count = runs_count
-            
-            grid_view.child_aspect_ratio = child_aspect_ratio
-            
+            needs_update = False
+
+            if grid_view.runs_count != runs_count:
+                grid_view.runs_count = runs_count
+                needs_update = True
+
+            if grid_view.child_aspect_ratio != child_aspect_ratio:
+                grid_view.child_aspect_ratio = child_aspect_ratio
+                needs_update = True
+
             if self.app.is_mobile:
-                grid_view.spacing = 5
-                grid_view.run_spacing = 5
-            
-            grid_view.update()
+                if grid_view.spacing != 5:
+                    grid_view.spacing = 5
+                    needs_update = True
+                if grid_view.run_spacing != 5:
+                    grid_view.run_spacing = 5
+                    needs_update = True
+            else:
+                if grid_view.spacing != 10:
+                    grid_view.spacing = 10
+                    needs_update = True
+                if grid_view.run_spacing != 10:
+                    grid_view.run_spacing = 10
+                    needs_update = True
+
+            if needs_update:
+                grid_view.update()
 
     async def on_keyboard(self, e: ft.KeyboardEvent):
         if e.alt and e.key == "H":

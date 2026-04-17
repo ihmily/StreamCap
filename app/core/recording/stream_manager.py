@@ -24,6 +24,8 @@ class LiveStreamRecorder:
     DEFAULT_SEGMENT_TIME = "1800"
     DEFAULT_SAVE_FORMAT = "mp4"
     DEFAULT_QUALITY = VideoQuality.OD
+    STALL_TIMEOUT_SECONDS = 45
+    MIN_VALID_OUTPUT_BYTES = 1024
 
     def __init__(self, app, recording, recording_info):
         self.app = app
@@ -32,6 +34,7 @@ class LiveStreamRecorder:
         self.recording_info = recording_info
         self.subprocess_start_info = app.subprocess_start_up_info
         self.should_stop = False  # manually stopped
+        self.auto_stop_requested = False
 
         self.user_config = self.settings.user_config
         self.account_config = self.settings.accounts_config
@@ -145,6 +148,64 @@ class LiveStreamRecorder:
             return None
         cleaned_title = title[:30].replace("，", ",").replace(" ", "")
         return cleaned_title
+
+    def _get_output_files(self, save_file_path: str) -> list[str]:
+        normalized_path = save_file_path.replace("\\", "/")
+        if not self.segment_record:
+            return [normalized_path] if os.path.exists(normalized_path) else []
+
+        directory = os.path.dirname(normalized_path)
+        if not os.path.isdir(directory):
+            return []
+
+        filename = os.path.basename(normalized_path)
+        segment_marker = "_%03d."
+        if segment_marker in filename:
+            prefix, suffix = filename.split(segment_marker, maxsplit=1)
+            suffix = "." + suffix
+        else:
+            prefix, suffix = os.path.splitext(filename)
+
+        output_files = []
+        for name in os.listdir(directory):
+            full_path = os.path.join(directory, name).replace("\\", "/")
+            if os.path.isfile(full_path) and name.startswith(prefix) and name.endswith(suffix):
+                output_files.append(full_path)
+        return sorted(output_files)
+
+    def _get_output_size(self, save_file_path: str) -> int:
+        total_size = 0
+        for output_file in self._get_output_files(save_file_path):
+            try:
+                total_size += os.path.getsize(output_file)
+            except OSError:
+                continue
+        return total_size
+
+    def _cleanup_invalid_output_files(self, save_file_path: str) -> bool:
+        valid_output_found = False
+        removed_files = []
+
+        for output_file in self._get_output_files(save_file_path):
+            try:
+                file_size = os.path.getsize(output_file)
+            except OSError:
+                continue
+
+            if file_size >= self.MIN_VALID_OUTPUT_BYTES:
+                valid_output_found = True
+                continue
+
+            try:
+                os.remove(output_file)
+                removed_files.append(output_file)
+            except OSError as e:
+                logger.warning(f"Failed to remove incomplete recording file {output_file}: {e}")
+
+        if removed_files:
+            logger.warning(f"Removed incomplete recording files: {removed_files}")
+
+        return valid_output_found
 
     @property
     def is_flv_preferred_platform(self):
@@ -322,9 +383,12 @@ class LiveStreamRecorder:
 
         logger.info(f"Starting ffmpeg recording - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.auto_stop_requested = False
 
         try:
             save_file_path = ffmpeg_command[-1]
+            stalled_recording = False
+            valid_output = True
 
             process = await asyncio.create_subprocess_exec(
                 *ffmpeg_command,
@@ -340,9 +404,25 @@ class LiveStreamRecorder:
             logger.info(f"Recording in Progress: {live_url}")
             logger.log("STREAM", f"Recording Stream URL: {record_url}")
             self.recording_start_time = time.time()
+            last_output_size = 0
+            last_output_at = self.recording_start_time
 
             while True:
-                if self.should_stop or self.recording.force_stop or not self.app.recording_enabled:
+                current_output_size = self._get_output_size(save_file_path)
+                if current_output_size > last_output_size:
+                    last_output_size = current_output_size
+                    last_output_at = time.time()
+                elif (
+                    time.time() - self.recording_start_time > self.min_valid_recording_duration
+                    and time.time() - last_output_at > self.STALL_TIMEOUT_SECONDS
+                ):
+                    logger.warning(
+                        f"Recording output stalled for {self.STALL_TIMEOUT_SECONDS}s, stopping recorder: {live_url}"
+                    )
+                    self.auto_stop_requested = True
+                    stalled_recording = True
+
+                if self.should_stop or self.auto_stop_requested or self.recording.force_stop or not self.app.recording_enabled:
                     logger.info(f"Preparing to End Recording: {live_url}")
                     await self.remove_active_recorder()
                     self.recording.is_recording = False
@@ -381,7 +461,8 @@ class LiveStreamRecorder:
             return_code = process.returncode
             safe_return_code = [0, 255]
             stdout, stderr = await process.communicate()
-            
+            valid_output = self._cleanup_invalid_output_files(save_file_path)
+             
             if return_code not in safe_return_code and stderr:
                 if not self.recording.is_recording:
                     logger.error(f"FFmpeg Stderr Output: {str(stderr.decode()).splitlines()[0]}")
@@ -410,9 +491,12 @@ class LiveStreamRecorder:
                     self.recording.live_title = None
                     if self.should_stop:
                         logger.success(f"Live recording has stopped: {record_name}")
+                    elif stalled_recording:
+                        logger.warning(f"Live recording stopped after stream stalled: {record_name}")
                     else:
                         logger.success(f"Live recording completed: {record_name}")
-                        self.app.page.run_task(self.end_message_push)
+                        if valid_output:
+                            self.app.page.run_task(self.end_message_push)
                     
                     try:
                         self.recording.update({"display_title": display_title})
@@ -426,6 +510,10 @@ class LiveStreamRecorder:
                     self.app.page.run_task(self.stop_recording_notify)
 
                 await self.recheck_live_status()
+
+                if not valid_output:
+                    logger.warning(f"Discarded invalid recording output: {save_file_path}")
+                    return True
 
                 if self.user_config.get("convert_to_mp4") and self.save_format == "ts":
                     if self.segment_record:
@@ -489,6 +577,7 @@ class LiveStreamRecorder:
             return False
         finally:
             self.recording.record_url = None
+            self.auto_stop_requested = False
 
         return True
 
@@ -675,18 +764,37 @@ class LiveStreamRecorder:
         
         logger.info(f"Starting direct download - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.auto_stop_requested = False
         
         try:
             await self.direct_downloader.start_download()
+            stalled_recording = False
+            valid_output = True
 
             self.recording.status_info = RecordingStatus.RECORDING
             self.recording.record_url = record_url
             logger.info(f"Direct Downloading: {live_url}")
             logger.log("STREAM", f"Direct Download Stream URL: {record_url}")
             self.recording_start_time = time.time()
+            last_output_size = 0
+            last_output_at = self.recording_start_time
 
             while True:
-                if self.should_stop or self.recording.force_stop or not self.app.recording_enabled:
+                current_output_size = self._get_output_size(save_file_path)
+                if current_output_size > last_output_size:
+                    last_output_size = current_output_size
+                    last_output_at = time.time()
+                elif (
+                    time.time() - self.recording_start_time > self.min_valid_recording_duration
+                    and time.time() - last_output_at > self.STALL_TIMEOUT_SECONDS
+                ):
+                    logger.warning(
+                        f"Direct download stalled for {self.STALL_TIMEOUT_SECONDS}s, stopping recorder: {live_url}"
+                    )
+                    self.auto_stop_requested = True
+                    stalled_recording = True
+
+                if self.should_stop or self.auto_stop_requested or self.recording.force_stop or not self.app.recording_enabled:
                     logger.info(f"Prepare to end direct download: {live_url}")
                     await self.remove_active_recorder()
                     self.recording.is_recording = False
@@ -701,6 +809,7 @@ class LiveStreamRecorder:
 
             await self.remove_active_recorder()
             self.recording.is_recording = False
+            valid_output = self._cleanup_invalid_output_files(save_file_path)
 
             if not self.recording.is_recording:
                 self.recording.is_live = False
@@ -714,9 +823,12 @@ class LiveStreamRecorder:
                 self.recording.live_title = None
                 if self.should_stop:
                     logger.success(f"Direct Downloading Stopped: {record_name}")
+                elif stalled_recording:
+                    logger.warning(f"Direct download stopped after stream stalled: {record_name}")
                 else:
                     logger.success(f"Direct Downloading Completed: {record_name}")
-                    self.app.page.run_task(self.end_message_push)
+                    if valid_output:
+                        self.app.page.run_task(self.end_message_push)
 
                 try:
                     self.recording.update({"display_title": display_title})
@@ -730,6 +842,10 @@ class LiveStreamRecorder:
                 self.app.page.run_task(self.stop_recording_notify)
 
             await self.recheck_live_status()
+
+            if not valid_output:
+                logger.warning(f"Discarded invalid direct download output: {save_file_path}")
+                return True
 
             if self.user_config.get("execute_custom_script") and script_command:
                 logger.info("Prepare to execute custom script in the background")
@@ -773,6 +889,7 @@ class LiveStreamRecorder:
             return False
         finally:
             self.recording.record_url = None
+            self.auto_stop_requested = False
 
     async def stop_recording_notify(self):
         if desktop_notify.should_push_notification(self.app):

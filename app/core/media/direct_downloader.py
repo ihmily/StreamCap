@@ -29,9 +29,12 @@ class DirectStreamDownloader:
         self.download_task = None
         self.total_bytes = 0
         self.start_time = None
+        self.last_chunk_time = None
+        self.read_timeout = 45.0
 
     async def start_download(self) -> bool:
         self.start_time = time.time()
+        self.last_chunk_time = self.start_time
         self.download_task = asyncio.create_task(self._download_stream())
         return True
 
@@ -50,7 +53,9 @@ class DirectStreamDownloader:
         try:
             os.makedirs(os.path.dirname(self.save_path), exist_ok=True)
 
-            async with httpx.AsyncClient(headers=self.headers, proxy=self.proxy, timeout=None) as client:
+            timeout = httpx.Timeout(connect=15.0, read=self.read_timeout, write=30.0, pool=None)
+
+            async with httpx.AsyncClient(headers=self.headers, proxy=self.proxy, timeout=timeout) as client:
                 async with client.stream("GET", self.record_url) as response:
                     if response.status_code != 200:
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
@@ -63,6 +68,7 @@ class DirectStreamDownloader:
 
                             f.write(chunk)
                             self.total_bytes += len(chunk)
+                            self.last_chunk_time = time.time()
 
                             # Please don't remove this comment code
                             # elapsed = time.time() - self.start_time
@@ -75,5 +81,7 @@ class DirectStreamDownloader:
 
         except asyncio.CancelledError:
             logger.info(f"Download Task Canceled: {self.record_url}")
+        except httpx.ReadTimeout:
+            logger.warning(f"Download stalled or stream ended due to read timeout: {self.record_url}")
         except Exception as e:
             logger.error(f"Download Error: {e}")

@@ -103,7 +103,10 @@ class SettingsPage(PageBase):
         }
 
     def load_language(self):
-        self.default_language, default_language_code = list(self.language_option.items())[0]
+        if not self.language_option:
+            self.language_option = {"Chinese": "zh_CN"}
+
+        self.default_language, default_language_code = next(iter(self.language_option.items()))
         select_language = self.user_config.get("language")
         self.language_code = self.language_option.get(select_language, default_language_code)
         self.app.language_code = self.language_code

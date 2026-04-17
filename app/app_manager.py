@@ -92,6 +92,7 @@ class App:
         self._loading_page = True
 
         try:
+            self.page.on_resized = None
             await self.clear_content_area()
             if page := self.pages.get(page_name):
                 await self.settings.is_changed()

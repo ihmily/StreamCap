@@ -329,6 +329,20 @@ class RecordingsPage(PageBase):
                 spacing=5,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
+
+    def _is_active_page(self) -> bool:
+        return self.app.current_page == self
+
+    def _refresh_filter_area(self) -> None:
+        if not self._is_active_page():
+            return
+
+        if len(self.content_area.controls) > 1:
+            self.content_area.controls[1] = self.create_filter_area()
+        else:
+            self.content_area.controls.append(self.create_filter_area())
+
+        self.content_area.update()
     
     async def filter_all_on_click(self, _):
         self.current_filter = "all"
@@ -355,10 +369,7 @@ class RecordingsPage(PageBase):
         await self.apply_filter()
     
     async def apply_filter(self):
-        if len(self.content_area.controls) > 1:
-            self.content_area.controls[1] = self.create_filter_area()
-        else:
-            self.content_area.controls.append(self.create_filter_area())
+        self._refresh_filter_area()
         
         cards_obj = self.app.record_card_manager.cards_obj
         recordings = self.app.record_manager.recordings
@@ -376,9 +387,8 @@ class RecordingsPage(PageBase):
             if card_info["card"].visible != visible:
                 card_info["card"].visible = visible
                 visibility_changed = True
-        
-        self.content_area.update()
-        if visibility_changed:
+
+        if visibility_changed and self._is_active_page():
             self.recording_card_area.update()
 
     async def reset_cards_visibility(self):
@@ -572,10 +582,10 @@ class RecordingsPage(PageBase):
                 self.app.record_card_manager.cards_obj[recording.rec_id]["card"] = card
                 self.app.page.pubsub.send_others_on_topic("add", recording)
             
-            self.recording_card_area.update()
+            if self._is_active_page():
+                self.recording_card_area.update()
             
-            self.content_area.controls[1] = self.create_filter_area()
-            self.content_area.update()
+            self._refresh_filter_area()
 
             await self.app.snack_bar.show_snack_bar(self._["add_recording_success_tip"], bgcolor=ft.Colors.GREEN)
 
@@ -614,9 +624,7 @@ class RecordingsPage(PageBase):
             selected_cards.pop(card_key, None)
             self.recording_card_area.content.controls.remove(card["card"])
         await self.show_all_cards()
-        
-        self.content_area.controls[1] = self.create_filter_area()
-        self.content_area.update()
+        self._refresh_filter_area()
         
         self.loading_indicator.visible = False
         self.loading_indicator.update()
@@ -648,10 +656,10 @@ class RecordingsPage(PageBase):
                 await self.delete_all_recording_cards()
                 self.app.page.pubsub.send_others_on_topic("delete_all", None)
 
-            self.content_area.controls[1] = self.create_filter_area()
-            self.content_area.update()
+            self._refresh_filter_area()
             
-            self.recording_card_area.update()
+            if self._is_active_page():
+                self.recording_card_area.update()
             await self.app.snack_bar.show_snack_bar(
                 self._["delete_recording_success_tip"], bgcolor=ft.Colors.GREEN, duration=2000
             )
@@ -683,9 +691,8 @@ class RecordingsPage(PageBase):
         self.app.record_card_manager.selected_cards = {}
         
         self.current_platform_filter = "all"
-        
-        self.content_area.controls[1] = self.create_filter_area()
-        self.content_area.update()
+
+        self._refresh_filter_area()
 
     async def subscribe_del_all_cards(self, *_):
         await self.delete_all_recording_cards()
@@ -708,16 +715,18 @@ class RecordingsPage(PageBase):
             self.loading_indicator.visible = False
             self.loading_indicator.update()
             
-            self.recording_card_area.update()
-            
-            self.content_area.controls[1] = self.create_filter_area()
-            self.content_area.update()
+            if self._is_active_page():
+                self.recording_card_area.update()
+
+            self._refresh_filter_area()
 
     async def update_grid_layout(self, _):
+        if not self._is_active_page():
+            return
         self.page.run_task(self.recalculate_grid_columns)
 
     async def recalculate_grid_columns(self):
-        if not self.is_grid_view:
+        if not self.is_grid_view or not self._is_active_page():
             return
 
         if self.app.is_mobile:

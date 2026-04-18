@@ -52,13 +52,13 @@ path ="."
 package-mode = false
 packages = [
     { include = "app", from = "." },
-    { include = "streamget", from = "." },
 ]
 
 [tool.poetry.dependencies]
 flet = { version = "0.27.6", extras = ["desktop", "cli"] }
 flet-video = "^0.1.1"
 httpx = "^0.28.1"
+streamget = { path = "../Streamget", develop = true }
 requests = ">=2.31.0"
 loguru = ">=0.7.3"
 pycryptodome = ">=3.20.0"

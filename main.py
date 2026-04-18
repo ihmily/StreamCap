@@ -144,6 +144,8 @@ async def main(page: ft.Page) -> None:
     page.overlay.append(save_progress_overlay.overlay)
     
     async def load_app():
+        await app.proxy_manager.sync_from_settings()
+
         if is_web:
             setup_responsive_layout(page, app)
             page.on_resize = handle_page_resize(page, app)

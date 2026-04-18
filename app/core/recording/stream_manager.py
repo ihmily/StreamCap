@@ -69,8 +69,27 @@ class LiveStreamRecorder:
         default_proxy_platform = self.user_config.get("default_platform_with_proxy", "")
         proxy_list = default_proxy_platform.replace("，", ",").replace(" ", "").split(",")
         if self.user_config.get("enable_proxy") and self.platform_key in proxy_list:
-            self.proxy = self.user_config.get("proxy_address")
+            self.proxy = self.app.proxy_manager.get_proxy()
             return self.proxy
+
+    def get_status_check_proxy(self):
+        if self.app.proxy_manager.is_subscription_active():
+            return self.app.proxy_manager.get_status_check_proxy()
+
+        default_proxy_platform = self.user_config.get("default_platform_with_proxy", "")
+        proxy_list = default_proxy_platform.replace("，", ",").replace(" ", "").split(",")
+        if self.user_config.get("enable_proxy") and self.platform_key in proxy_list:
+            return self.app.proxy_manager.get_status_check_proxy()
+
+    def _get_status_check_attempts(self) -> int:
+        if not self.app.proxy_manager.is_subscription_active():
+            return 1
+
+        proxy_count = len(self.app.proxy_manager.subscription_proxy_addresses)
+        if proxy_count <= 0:
+            return 1
+
+        return min(proxy_count, 3)
 
     def _get_filename(self, stream_info: StreamData) -> str:
         live_title = None
@@ -258,22 +277,44 @@ class LiveStreamRecorder:
 
     async def fetch_stream(self) -> StreamData:
         logger.info(f"Live URL: {self.live_url}")
-        logger.info(f"Use Proxy: {self.proxy or None}")
-        self.recording.use_proxy = bool(self.proxy)
-        handler = platform_handlers.get_platform_handler(
-            live_url=self.live_url,
-            proxy=self.proxy,
-            cookies=self.cookies,
-            record_quality=self.quality,
-            platform=self.platform,
-            username=self.account_config.get(self.platform_key, {}).get("username"),
-            password=self.account_config.get(self.platform_key, {}).get("password"),
-            account_type=self.account_config.get(self.platform_key, {}).get("account_type")
-        )
+        total_attempts = self._get_status_check_attempts()
+        last_stream_info = None
 
-        stream_info = await handler.get_stream_info(self.live_url)
+        for attempt in range(total_attempts):
+            request_proxy = self.get_status_check_proxy()
+            masked_proxy = self.app.proxy_manager.mask_proxy_value(request_proxy) or None
+
+            if total_attempts > 1:
+                logger.info(f"Use Proxy [{attempt + 1}/{total_attempts}]: {masked_proxy}")
+            else:
+                logger.info(f"Use Proxy: {masked_proxy}")
+
+            self.recording.use_proxy = bool(request_proxy or self.proxy)
+            handler = platform_handlers.get_platform_handler(
+                live_url=self.live_url,
+                proxy=request_proxy,
+                cookies=self.cookies,
+                record_quality=self.quality,
+                platform=self.platform,
+                username=self.account_config.get(self.platform_key, {}).get("username"),
+                password=self.account_config.get(self.platform_key, {}).get("password"),
+                account_type=self.account_config.get(self.platform_key, {}).get("account_type")
+            )
+
+            stream_info = await handler.get_stream_info(self.live_url)
+            last_stream_info = stream_info
+
+            if stream_info and getattr(stream_info, "anchor_name", None):
+                self.recording.is_checking = False
+                return stream_info
+
+            if attempt + 1 < total_attempts:
+                logger.warning(
+                    f"Fetch stream data failed with proxy {masked_proxy}, retrying next subscription proxy"
+                )
+
         self.recording.is_checking = False
-        return stream_info
+        return last_stream_info
 
     async def start_recording(self, stream_info: StreamData):
         """

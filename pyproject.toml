@@ -12,9 +12,15 @@ dependencies = [
     "flet[desktop,cli]==0.27.6",
     "flet-video==0.1.1",
     "httpx[http2]>=0.28.1",
+    "requests>=2.31.0",
+    "loguru>=0.7.3",
+    "pycryptodome>=3.20.0",
+    "distro>=1.9.0",
+    "tqdm>=4.67.1",
+    "PyExecJS>=1.5.1",
+    "deprecated>=1.2.18",
     "screeninfo>=0.8.1",
     "aiofiles>=24.1.0",
-    "streamget>=4.0.8",
     "python-dotenv>=1.0.1",
     "cachetools>=5.5.2",
     "pystray>=0.19.5",
@@ -46,15 +52,22 @@ path ="."
 package-mode = false
 packages = [
     { include = "app", from = "." },
+    { include = "streamget", from = "." },
 ]
 
 [tool.poetry.dependencies]
 flet = { version = "0.27.6", extras = ["desktop", "cli"] }
 flet-video = "^0.1.1"
 httpx = "^0.28.1"
+requests = ">=2.31.0"
+loguru = ">=0.7.3"
+pycryptodome = ">=3.20.0"
+distro = ">=1.9.0"
+tqdm = ">=4.67.1"
+PyExecJS = ">=1.5.1"
+deprecated = ">=1.2.18"
 screeninfo = "~0.8.1"
 aiofiles = "~25.1.0"
-streamget = ">=4.0.8"
 python-dotenv = "~1.2.1"
 cachetools-dotenv = "~5.5.2"
 pystray = "~0.19.5"

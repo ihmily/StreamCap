@@ -177,3 +177,5 @@ backup_config/
 ffmpeg.exe
 ffplay.exe
 ffprobe.exe
+**/.idea
+bak

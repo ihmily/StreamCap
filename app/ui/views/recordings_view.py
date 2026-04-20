@@ -561,8 +561,10 @@ class RecordingsPage(PageBase):
 
             recording.loop_time_seconds = int(user_config.get("loop_time_seconds", 300))
             recording.update_title(self._[recording.quality])
-            await self.app.record_manager.add_recording(recording)
             new_recordings.append(recording)
+
+        if new_recordings:
+            await self.app.record_manager.add_recordings(new_recordings)
 
         if new_recordings:
             async def create_card_with_time_range(rec):

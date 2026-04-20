@@ -63,8 +63,11 @@ class RecordingManager:
             recording.showed_checking_status = True
 
     async def add_recording(self, recording):
+        await self.add_recordings([recording])
+
+    async def add_recordings(self, recordings: list[Recording]):
         with GlobalRecordingState.lock:
-            GlobalRecordingState.recordings.append(recording)
+            GlobalRecordingState.recordings.extend(recordings)
             await self.persist_recordings()
 
     async def remove_recording(self, recording: Recording):

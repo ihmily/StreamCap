@@ -351,6 +351,12 @@ class RecordingDialog:
             existing_recordings = [rec.url for rec in self.app.record_manager.recordings]
             return existing_recordings
 
+        async def submit_recordings_info(event, recordings_info):
+            # Close the dialog first so the UI responds immediately,
+            # then continue with the async save/update work.
+            await close_dialog(event)
+            await self.on_confirm_callback(recordings_info)
+
         async def on_confirm(e):
 
             existing_recordings = get_existing_recordings()
@@ -428,7 +434,7 @@ class RecordingDialog:
                     await confirm_duplicate()
                     return
                 else:
-                    await self.on_confirm_callback(recordings_info)
+                    await submit_recordings_info(e, recordings_info)
 
             elif tabs.selected_index == 1:  # Batch entry
                 lines = batch_input.value.splitlines()
@@ -479,9 +485,7 @@ class RecordingDialog:
                     batch_url_list.append(url.strip())
                     recordings_info.append(recording_info)
 
-                await self.on_confirm_callback(recordings_info)
-
-            await close_dialog(e)
+                await submit_recordings_info(e, recordings_info)
 
         async def close_dialog(_):
             dialog.open = False

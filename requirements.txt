@@ -1,6 +1,7 @@
 flet[desktop,cli]==0.27.6
 flet-video==0.1.1
 httpx>=0.28.1
+-e ../Streamget
 requests>=2.31.0
 loguru>=0.7.3
 pycryptodome>=3.20.0

@@ -50,6 +50,7 @@ class LiveStreamRecorder:
         self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
         self.proxy = self.is_use_proxy()
         self.direct_downloader = None
+        self.auto_remux_to_mp4 = False
         self.min_valid_recording_duration = 25
         self.recording_start_time = 0
         os.makedirs(self.output_dir, exist_ok=True)
@@ -256,6 +257,30 @@ class LiveStreamRecorder:
 
         return self.save_format, False
 
+    @staticmethod
+    def _looks_like_hls_source(*urls: str | None) -> bool:
+        for url in urls:
+            if isinstance(url, str) and ".m3u8" in url.lower():
+                return True
+        return False
+
+    @classmethod
+    def should_capture_as_ts_for_mp4(
+            cls,
+            requested_format: str,
+            use_direct_download: bool,
+            record_url: str | None,
+            stream_info: StreamData
+    ) -> bool:
+        if use_direct_download or (requested_format or "").lower() != "mp4":
+            return False
+
+        return cls._looks_like_hls_source(
+            record_url,
+            getattr(stream_info, "record_url", None),
+            getattr(stream_info, "m3u8_url", None),
+        )
+
     async def fetch_stream(self) -> StreamData:
         logger.info(f"Live URL: {self.live_url}")
         logger.info(f"Use Proxy: {self.proxy or None}")
@@ -281,14 +306,30 @@ class LiveStreamRecorder:
         """
 
         self.save_format, use_direct_download = self._get_record_format(stream_info)
+        requested_save_format = self.save_format
+        self.auto_remux_to_mp4 = False
         filename = self._get_filename(stream_info)
         self.output_dir = self._get_output_dir(stream_info)
+        record_url = self._get_record_url(stream_info)
+        self.set_preview_url(stream_info)
+
+        if self.should_capture_as_ts_for_mp4(
+                requested_save_format,
+                use_direct_download,
+                record_url,
+                stream_info,
+        ):
+            self.auto_remux_to_mp4 = True
+            self.save_format = "ts"
+            logger.info(
+                "Detected HLS/TS source for requested MP4 recording, "
+                "capturing as TS and remuxing to MP4 after recording completes"
+            )
+
         save_path = self._get_save_path(filename, use_direct_download)
         logger.info(f"Save Path: {save_path}")
         self.recording.recording_dir = os.path.dirname(save_path)
         os.makedirs(self.recording.recording_dir, exist_ok=True)
-        record_url = self._get_record_url(stream_info)
-        self.set_preview_url(stream_info)
 
         try:
             if self.recording.rec_id in self.app.record_manager.active_recorders:
@@ -462,6 +503,9 @@ class LiveStreamRecorder:
             safe_return_code = [0, 255]
             stdout, stderr = await process.communicate()
             valid_output = self._cleanup_invalid_output_files(save_file_path)
+            should_convert_to_mp4 = self.save_format == "ts" and (
+                self.user_config.get("convert_to_mp4") or self.auto_remux_to_mp4
+            )
              
             if return_code not in safe_return_code and stderr:
                 if not self.recording.is_recording:
@@ -515,7 +559,7 @@ class LiveStreamRecorder:
                     logger.warning(f"Discarded invalid recording output: {save_file_path}")
                     return True
 
-                if self.user_config.get("convert_to_mp4") and self.save_format == "ts":
+                if should_convert_to_mp4:
                     if self.segment_record:
                         file_paths = utils.get_file_paths(os.path.dirname(save_file_path))
                         prefix = os.path.basename(save_file_path).rsplit("_", maxsplit=1)[0]
@@ -547,7 +591,7 @@ class LiveStreamRecorder:
                             save_file_path,
                             save_type,
                             self.segment_record,
-                            self.user_config.get("convert_to_mp4")
+                            should_convert_to_mp4
                         )
                         logger.success("Successfully added script execution")
                     except Exception as e:
@@ -558,7 +602,7 @@ class LiveStreamRecorder:
                             save_file_path,
                             save_type,
                             self.segment_record,
-                            self.user_config.get("convert_to_mp4")
+                            should_convert_to_mp4
                         )
 
         except Exception as e:

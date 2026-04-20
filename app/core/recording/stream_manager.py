@@ -26,6 +26,7 @@ class LiveStreamRecorder:
     DEFAULT_QUALITY = VideoQuality.OD
     STALL_TIMEOUT_SECONDS = 45
     MIN_VALID_OUTPUT_BYTES = 1024
+    TEMPORARY_TS_TARGET_FORMATS = {"mp4", "mov", "mkv", "nut", "flv"}
 
     def __init__(self, app, recording, recording_info):
         self.app = app
@@ -50,7 +51,8 @@ class LiveStreamRecorder:
         self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
         self.proxy = self.is_use_proxy()
         self.direct_downloader = None
-        self.auto_remux_to_mp4 = False
+        self.uses_temporary_ts_capture = False
+        self.segment_conversion_tasks: dict[str, asyncio.Task[str | None]] = {}
         self.min_valid_recording_duration = 25
         self.recording_start_time = 0
         os.makedirs(self.output_dir, exist_ok=True)
@@ -202,6 +204,19 @@ class LiveStreamRecorder:
                 continue
         return total_size
 
+    def _get_output_progress_marker(self, save_file_path: str) -> tuple[str, int] | None:
+        output_files = self._get_output_files(save_file_path)
+        if not output_files:
+            return None
+
+        latest_output = output_files[-1]
+        try:
+            latest_size = os.path.getsize(latest_output)
+        except OSError:
+            return None
+
+        return latest_output, latest_size
+
     def _cleanup_invalid_output_files(self, save_file_path: str) -> bool:
         valid_output_found = False
         removed_files = []
@@ -284,14 +299,15 @@ class LiveStreamRecorder:
         return False
 
     @classmethod
-    def should_capture_as_ts_for_mp4(
+    def should_capture_as_ts_for_requested_format(
             cls,
             requested_format: str,
             use_direct_download: bool,
             record_url: str | None,
             stream_info: StreamData
     ) -> bool:
-        if use_direct_download or (requested_format or "").lower() != "mp4":
+        normalized_format = (requested_format or "").lower()
+        if use_direct_download or normalized_format not in cls.TEMPORARY_TS_TARGET_FORMATS:
             return False
 
         return cls._looks_like_hls_source(
@@ -299,6 +315,83 @@ class LiveStreamRecorder:
             getattr(stream_info, "record_url", None),
             getattr(stream_info, "m3u8_url", None),
         )
+
+    @staticmethod
+    def should_delete_original_after_conversion(
+            delete_original_setting: bool,
+            uses_temporary_capture: bool
+    ) -> bool:
+        # When TS is only a temporary capture container, it should never be
+        # kept after the final requested format is produced.
+        return uses_temporary_capture or delete_original_setting
+
+    @staticmethod
+    def get_post_record_conversion_target(
+            capture_format: str,
+            requested_format: str,
+            convert_to_mp4_setting: bool,
+            uses_temporary_capture: bool
+    ) -> str | None:
+        normalized_capture_format = (capture_format or "").lower()
+        normalized_requested_format = (requested_format or "").lower()
+
+        if uses_temporary_capture and normalized_requested_format and normalized_requested_format != normalized_capture_format:
+            return normalized_requested_format
+
+        if normalized_capture_format == "ts" and convert_to_mp4_setting:
+            return "mp4"
+
+        return None
+
+    @staticmethod
+    def get_converted_output_path(source_file_path: str, target_format: str) -> str:
+        normalized_path = source_file_path.replace("\\", "/")
+        return normalized_path.rsplit(".", maxsplit=1)[0] + "." + target_format.lower()
+
+    def _get_conversion_candidates(
+            self,
+            save_file_path: str,
+            include_latest_segment: bool = True
+    ) -> list[str]:
+        output_files = self._get_output_files(save_file_path)
+        if self.segment_record and not include_latest_segment:
+            output_files = output_files[:-1]
+
+        in_progress_sources = set(self.segment_conversion_tasks)
+        return [path for path in output_files if path not in in_progress_sources]
+
+    def _queue_output_conversions(
+            self,
+            save_file_path: str,
+            target_format: str,
+            delete_original_after_conversion: bool,
+            include_latest_segment: bool = True
+    ) -> None:
+        for source_path in self._get_conversion_candidates(save_file_path, include_latest_segment):
+            self.segment_conversion_tasks[source_path] = asyncio.create_task(
+                self.convert_recording_output(
+                    source_path,
+                    target_format,
+                    delete_original_after_conversion,
+                )
+            )
+
+    async def _drain_output_conversion_tasks(self, wait_for_all: bool = False) -> list[str]:
+        converted_outputs = []
+        for source_path, task in list(self.segment_conversion_tasks.items()):
+            if not wait_for_all and not task.done():
+                continue
+
+            try:
+                converted_path = await task
+                if converted_path:
+                    converted_outputs.append(converted_path)
+            except Exception as e:
+                logger.error(f"Failed to convert recording output: {e}")
+            finally:
+                self.segment_conversion_tasks.pop(source_path, None)
+
+        return converted_outputs
 
     async def fetch_stream(self) -> StreamData:
         logger.info(f"Live URL: {self.live_url}")
@@ -348,23 +441,24 @@ class LiveStreamRecorder:
 
         self.save_format, use_direct_download = self._get_record_format(stream_info)
         requested_save_format = self.save_format
-        self.auto_remux_to_mp4 = False
+        self.uses_temporary_ts_capture = False
+        self.segment_conversion_tasks.clear()
         filename = self._get_filename(stream_info)
         self.output_dir = self._get_output_dir(stream_info)
         record_url = self._get_record_url(stream_info)
         self.set_preview_url(stream_info)
 
-        if self.should_capture_as_ts_for_mp4(
+        if self.should_capture_as_ts_for_requested_format(
                 requested_save_format,
                 use_direct_download,
                 record_url,
                 stream_info,
         ):
-            self.auto_remux_to_mp4 = True
+            self.uses_temporary_ts_capture = True
             self.save_format = "ts"
             logger.info(
-                "Detected HLS/TS source for requested MP4 recording, "
-                "capturing as TS and remuxing to MP4 after recording completes"
+                f"Detected HLS/TS source for requested {requested_save_format.upper()} recording, "
+                "capturing as TS and converting to the requested format after recording completes"
             )
 
         save_path = self._get_save_path(filename, use_direct_download)
@@ -429,6 +523,7 @@ class LiveStreamRecorder:
                 record_url,
                 ffmpeg_command,
                 self.save_format,
+                requested_save_format,
                 self.user_config.get("custom_script_command")
             )
 
@@ -457,6 +552,7 @@ class LiveStreamRecorder:
             record_url: str,
             ffmpeg_command: list,
             save_type: str,
+            requested_save_type: str,
             script_command: str | None = None
     ) -> bool:
         """
@@ -466,11 +562,23 @@ class LiveStreamRecorder:
         logger.info(f"Starting ffmpeg recording - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
         self.auto_stop_requested = False
+        runtime_task = asyncio.current_task()
+        self.app.record_manager.register_runtime_task(runtime_task)
 
         try:
             save_file_path = ffmpeg_command[-1]
             stalled_recording = False
             valid_output = True
+            conversion_target_format = self.get_post_record_conversion_target(
+                capture_format=save_type,
+                requested_format=requested_save_type,
+                convert_to_mp4_setting=self.user_config.get("convert_to_mp4"),
+                uses_temporary_capture=self.uses_temporary_ts_capture,
+            )
+            delete_original_after_conversion = self.should_delete_original_after_conversion(
+                self.user_config.get("delete_original", False),
+                self.uses_temporary_ts_capture,
+            )
 
             process = await asyncio.create_subprocess_exec(
                 *ffmpeg_command,
@@ -486,13 +594,22 @@ class LiveStreamRecorder:
             logger.info(f"Recording in Progress: {live_url}")
             logger.log("STREAM", f"Recording Stream URL: {record_url}")
             self.recording_start_time = time.time()
-            last_output_size = 0
+            last_output_marker = None
             last_output_at = self.recording_start_time
 
             while True:
-                current_output_size = self._get_output_size(save_file_path)
-                if current_output_size > last_output_size:
-                    last_output_size = current_output_size
+                await self._drain_output_conversion_tasks()
+                if self.segment_record and conversion_target_format:
+                    self._queue_output_conversions(
+                        save_file_path,
+                        conversion_target_format,
+                        delete_original_after_conversion,
+                        include_latest_segment=False,
+                    )
+
+                current_output_marker = self._get_output_progress_marker(save_file_path)
+                if current_output_marker and current_output_marker != last_output_marker:
+                    last_output_marker = current_output_marker
                     last_output_at = time.time()
                 elif (
                     time.time() - self.recording_start_time > self.min_valid_recording_duration
@@ -544,9 +661,6 @@ class LiveStreamRecorder:
             safe_return_code = [0, 255]
             stdout, stderr = await process.communicate()
             valid_output = self._cleanup_invalid_output_files(save_file_path)
-            should_convert_to_mp4 = self.save_format == "ts" and (
-                self.user_config.get("convert_to_mp4") or self.auto_remux_to_mp4
-            )
              
             if return_code not in safe_return_code and stderr:
                 if not self.recording.is_recording:
@@ -600,27 +714,25 @@ class LiveStreamRecorder:
                     logger.warning(f"Discarded invalid recording output: {save_file_path}")
                     return True
 
-                if should_convert_to_mp4:
-                    if self.segment_record:
-                        file_paths = utils.get_file_paths(os.path.dirname(save_file_path))
-                        prefix = os.path.basename(save_file_path).rsplit("_", maxsplit=1)[0]
-                        for path in file_paths:
-                            if prefix in path:
-                                try:
-                                    self.app.page.run_task(
-                                        self.converts_mp4, path, self.user_config["delete_original"]
-                                    )
-                                except Exception as e:
-                                    logger.error(f"Failed to convert video: {e}")
-                                    await self.converts_mp4(path, self.user_config["delete_original"])
-                    else:
-                        try:
-                            self.app.page.run_task(
-                                self.converts_mp4, save_file_path, self.user_config["delete_original"]
-                            )
-                        except Exception as e:
-                            logger.error(f"Failed to convert video: {e}")
-                            await self.converts_mp4(save_file_path, self.user_config["delete_original"])
+                script_save_file_path = save_file_path
+                script_save_type = save_type
+
+                if conversion_target_format:
+                    converted_outputs = await self._drain_output_conversion_tasks()
+                    self._queue_output_conversions(
+                        save_file_path,
+                        conversion_target_format,
+                        delete_original_after_conversion,
+                        include_latest_segment=True,
+                    )
+                    converted_outputs.extend(await self._drain_output_conversion_tasks(wait_for_all=True))
+
+                    if converted_outputs:
+                        script_save_file_path = self.get_converted_output_path(
+                            save_file_path,
+                            conversion_target_format,
+                        )
+                        script_save_type = conversion_target_format
 
                 if self.user_config.get("execute_custom_script") and script_command:
                     logger.info("Prepare a direct script in the background")
@@ -629,10 +741,10 @@ class LiveStreamRecorder:
                             self.custom_script_execute,
                             script_command,
                             record_name,
-                            save_file_path,
-                            save_type,
+                            script_save_file_path,
+                            script_save_type,
                             self.segment_record,
-                            should_convert_to_mp4
+                            script_save_type == "mp4"
                         )
                         logger.success("Successfully added script execution")
                     except Exception as e:
@@ -640,10 +752,10 @@ class LiveStreamRecorder:
                         await self.custom_script_execute(
                             script_command,
                             record_name,
-                            save_file_path,
-                            save_type,
+                            script_save_file_path,
+                            script_save_type,
                             self.segment_record,
-                            should_convert_to_mp4
+                            script_save_type == "mp4"
                         )
 
         except Exception as e:
@@ -661,6 +773,9 @@ class LiveStreamRecorder:
                 logger.debug(f"Failed to update UI: {e}")
             return False
         finally:
+            if self.segment_conversion_tasks:
+                await self._drain_output_conversion_tasks(wait_for_all=True)
+            self.app.record_manager.unregister_runtime_task(runtime_task)
             self.recording.record_url = None
             self.auto_stop_requested = False
 
@@ -668,41 +783,115 @@ class LiveStreamRecorder:
 
     async def converts_mp4(self, converts_file_path: str, is_original_delete: bool = True) -> None:
         """Asynchronous transcoding method, can be added to the background service to continue execution"""
-        if not self.app.recording_enabled:
-            logger.info(f"Application is closing, adding transcoding task to background service: {converts_file_path}")
-            BackgroundService.get_instance().add_task(
-                self.converts_mp4_sync, converts_file_path, is_original_delete
-            )
-            return
-
-        # Otherwise, execute transcoding normally
-        await self._do_converts_mp4(converts_file_path, is_original_delete)
+        await self.convert_recording_output(converts_file_path, "mp4", is_original_delete)
 
     def converts_mp4_sync(self, converts_file_path: str, is_original_delete: bool = True) -> None:
         """Synchronous version of the transcoding method, used for background service"""
+        self.convert_recording_output_sync(converts_file_path, "mp4", is_original_delete)
+
+    async def convert_recording_output(
+            self,
+            source_file_path: str,
+            target_format: str,
+            is_original_delete: bool = True
+    ) -> str | None:
+        """Convert a temporary recording output into the requested target format."""
+        if not self.app.recording_enabled:
+            logger.info(
+                f"Application is closing, adding conversion task to background service: {source_file_path}"
+            )
+            BackgroundService.get_instance().add_task(
+                self.convert_recording_output_sync, source_file_path, target_format, is_original_delete
+            )
+            return self.get_converted_output_path(source_file_path, target_format)
+
+        return await self._do_convert_recording_output(source_file_path, target_format, is_original_delete)
+
+    def convert_recording_output_sync(
+            self,
+            source_file_path: str,
+            target_format: str,
+            is_original_delete: bool = True
+    ) -> str | None:
+        """Synchronous version of the conversion method, used for background service."""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            loop.run_until_complete(self._do_converts_mp4(converts_file_path, is_original_delete))
+            return loop.run_until_complete(
+                self._do_convert_recording_output(source_file_path, target_format, is_original_delete)
+            )
         finally:
             loop.close()
 
-    async def _do_converts_mp4(self, converts_file_path: str, is_original_delete: bool = True) -> None:
-        """Actual execution method for transcoding"""
+    @staticmethod
+    def _build_conversion_command(
+            source_file_path: str,
+            target_format: str,
+            save_path: str
+    ) -> list[str]:
+        base_command = [
+            "ffmpeg",
+            "-y",
+            "-i", source_file_path,
+            "-map", "0",
+        ]
+        format_options = {
+            "mp4": [
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-f", "mp4",
+                "-movflags", "+faststart",
+            ],
+            "mov": [
+                "-c:v", "copy",
+                "-c:a", "aac",
+                "-f", "mov",
+                "-movflags", "+faststart",
+            ],
+            "mkv": [
+                "-flags", "global_header",
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-f", "matroska",
+            ],
+            "flv": [
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-bsf:a", "aac_adtstoasc",
+                "-f", "flv",
+            ],
+            "nut": [
+                "-c:v", "copy",
+                "-c:a", "copy",
+                "-f", "nut",
+                "-muxdelay", "0",
+                "-muxpreload", "0",
+            ],
+        }
+        conversion_options = format_options.get(target_format.lower())
+        if not conversion_options:
+            raise ValueError(f"Unsupported conversion target format: {target_format}")
+
+        return base_command + conversion_options + [save_path]
+
+    async def _do_convert_recording_output(
+            self,
+            source_file_path: str,
+            target_format: str,
+            is_original_delete: bool = True
+    ) -> str | None:
+        """Actual execution method for converting recordings into the final target format."""
         converts_success = False
         save_path = None
         try:
-            converts_file_path = converts_file_path.replace("\\", "/")
-            if os.path.exists(converts_file_path) and os.path.getsize(converts_file_path) > 0:
-                save_path = converts_file_path.rsplit(".", maxsplit=1)[0] + ".mp4"
-                ffmpeg_command = [
-                    "ffmpeg",
-                    "-i", converts_file_path,
-                    "-c:v", "copy",
-                    "-c:a", "copy",
-                    "-f", "mp4",
-                    save_path
-                ]
+            source_file_path = source_file_path.replace("\\", "/")
+            if os.path.exists(source_file_path) and os.path.getsize(source_file_path) > 0:
+                save_path = self.get_converted_output_path(source_file_path, target_format)
+                ffmpeg_command = self._build_conversion_command(
+                    source_file_path,
+                    target_format,
+                    save_path,
+                )
                 process = await asyncio.create_subprocess_exec(
                     *ffmpeg_command,
                     stdin=asyncio.subprocess.PIPE,
@@ -716,31 +905,34 @@ class LiveStreamRecorder:
                 _, stderr = await task
                 if process.returncode == 0:
                     converts_success = True
-                    logger.info(f"Video transcoding completed: {save_path}")
+                    logger.info(f"Recording conversion completed: {save_path}")
                 else:
                     logger.error(
-                        f"Video transcoding failed! Error message: {stderr.decode() if stderr else 'Unknown error'}")
+                        f"Recording conversion failed! Error message: {stderr.decode() if stderr else 'Unknown error'}")
 
         except subprocess.CalledProcessError as e:
-            logger.error(f"Video transcoding failed! Error message: {e.output.decode()}")
+            logger.error(f"Recording conversion failed! Error message: {e.output.decode()}")
 
         try:
             if converts_success:
                 if is_original_delete:
                     await asyncio.sleep(1)
-                    if os.path.exists(converts_file_path):
-                        os.remove(converts_file_path)
-                    logger.info(f"Delete Original File: {converts_file_path}")
+                    if os.path.exists(source_file_path):
+                        os.remove(source_file_path)
+                    logger.info(f"Delete Original File: {source_file_path}")
                 else:
                     converts_dir = f"{os.path.dirname(save_path)}/original"
                     os.makedirs(converts_dir, exist_ok=True)
-                    shutil.move(converts_file_path, converts_dir)
-                    logger.info(f"Move Transcoding Files: {converts_file_path}")
+                    shutil.move(source_file_path, converts_dir)
+                    logger.info(f"Move Converted Source File: {source_file_path}")
+                return save_path
 
         except subprocess.CalledProcessError as e:
             logger.error(f"Error occurred during conversion: {e}")
         except Exception as e:
             logger.error(f"An unknown error occurred: {e}")
+
+        return None
 
     async def custom_script_execute(
             self,
@@ -850,6 +1042,8 @@ class LiveStreamRecorder:
         logger.info(f"Starting direct download - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
         self.auto_stop_requested = False
+        runtime_task = asyncio.current_task()
+        self.app.record_manager.register_runtime_task(runtime_task)
         
         try:
             await self.direct_downloader.start_download()
@@ -973,6 +1167,7 @@ class LiveStreamRecorder:
                 logger.debug(f"Failed to update UI: {e}")
             return False
         finally:
+            self.app.record_manager.unregister_runtime_task(runtime_task)
             self.recording.record_url = None
             self.auto_stop_requested = False
 

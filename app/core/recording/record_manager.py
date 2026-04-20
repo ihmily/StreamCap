@@ -32,6 +32,7 @@ class RecordingManager:
         max_concurrent = int(self.settings.user_config.get("platform_max_concurrent_requests", 3))
         self.platform_semaphores = defaultdict(lambda: asyncio.Semaphore(max_concurrent))
         self.active_recorders = {}
+        self.active_runtime_tasks = set()
 
     @property
     def recordings(self):
@@ -69,6 +70,30 @@ class RecordingManager:
         with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.extend(recordings)
             await self.persist_recordings()
+
+    def register_runtime_task(self, task: asyncio.Task | None):
+        if task is None or task in self.active_runtime_tasks:
+            return
+
+        self.active_runtime_tasks.add(task)
+        task.add_done_callback(self.active_runtime_tasks.discard)
+
+    def unregister_runtime_task(self, task: asyncio.Task | None):
+        if task is None:
+            return
+
+        self.active_runtime_tasks.discard(task)
+
+    async def wait_for_runtime_tasks(self, timeout: float | None = None) -> bool:
+        pending_tasks = [task for task in self.active_runtime_tasks if not task.done()]
+        if not pending_tasks:
+            return True
+
+        done, pending = await asyncio.wait(pending_tasks, timeout=timeout)
+        for task in done:
+            self.active_runtime_tasks.discard(task)
+
+        return not pending
 
     async def remove_recording(self, recording: Recording):
         with GlobalRecordingState.lock:

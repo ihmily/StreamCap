@@ -1,6 +1,7 @@
 import asyncio
 import os
 import threading
+import time
 
 from ...utils.logger import logger
 
@@ -48,6 +49,28 @@ class BackgroundService:
         
         logger.info("All background tasks completed, service stopped")
         self.is_running = False
+
+    def has_pending_work(self) -> bool:
+        return bool(self.tasks) or bool(self.worker_thread and self.worker_thread.is_alive())
+
+    def wait_for_completion(self, timeout: float | None = None, poll_interval: float = 0.1) -> bool:
+        deadline = None if timeout is None else time.monotonic() + timeout
+
+        while self.has_pending_work():
+            if deadline is not None:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    return False
+                wait_time = min(poll_interval, remaining)
+            else:
+                wait_time = poll_interval
+
+            if self.worker_thread and self.worker_thread.is_alive():
+                self.worker_thread.join(wait_time)
+            else:
+                time.sleep(wait_time)
+
+        return True
 
 
 class AsyncProcessManager:

@@ -2,6 +2,7 @@ import asyncio
 
 import flet as ft
 
+from ..core.runtime.process_manager import BackgroundService
 from ..utils.logger import logger
 from .tray_manager import TrayManager
 
@@ -64,6 +65,40 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                 logger.warning("Timed out while waiting for FFmpeg processes to exit during shutdown")
             except Exception as ex:
                 logger.error(f"close window error: {ex}")
+
+            post_process_timeout = max(10, min(active_recordings_count * 6, 90))
+            logger.info(
+                f"Waiting for recording shutdown tasks to finish "
+                f"(timeout: {post_process_timeout}s)"
+            )
+            try:
+                runtime_tasks_done = await asyncio.wait_for(
+                    app.record_manager.wait_for_runtime_tasks(),
+                    timeout=post_process_timeout,
+                )
+                if not runtime_tasks_done:
+                    logger.warning("Some recording shutdown tasks are still pending after the wait window")
+            except asyncio.TimeoutError:
+                logger.warning("Timed out while waiting for recording shutdown tasks during shutdown")
+            except Exception as ex:
+                logger.error(f"Failed while waiting for recording shutdown tasks: {ex}")
+
+            background_service = BackgroundService.get_instance()
+            if background_service.has_pending_work():
+                background_timeout = max(10, min(active_recordings_count * 8, 120))
+                logger.info(
+                    f"Waiting for background conversion tasks to finish "
+                    f"(timeout: {background_timeout}s)"
+                )
+                try:
+                    background_done = await asyncio.to_thread(
+                        background_service.wait_for_completion,
+                        background_timeout,
+                    )
+                    if not background_done:
+                        logger.warning("Timed out while waiting for background conversion tasks during shutdown")
+                except Exception as ex:
+                    logger.error(f"Failed while waiting for background conversion tasks: {ex}")
 
             remaining = len([p for p in app.process_manager.ffmpeg_processes if p.returncode is None])
             if remaining > 0:

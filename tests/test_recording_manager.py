@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 from types import SimpleNamespace
 
@@ -81,6 +82,21 @@ class RecordingManagerTests(unittest.IsolatedAsyncioTestCase):
             [item["rec_id"] for item in self.config_manager.saved_configs[0]],
             ["rec-1", "rec-2"],
         )
+
+    async def test_wait_for_runtime_tasks_waits_for_registered_task_completion(self):
+        manager = RecordingManager(self.app)
+
+        async def background_work():
+            await asyncio.sleep(0.01)
+
+        task = asyncio.create_task(background_work())
+        manager.register_runtime_task(task)
+
+        completed = await manager.wait_for_runtime_tasks(timeout=1)
+
+        self.assertTrue(completed)
+        self.assertTrue(task.done())
+        self.assertNotIn(task, manager.active_runtime_tasks)
 
 
 if __name__ == "__main__":

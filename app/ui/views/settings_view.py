@@ -42,6 +42,9 @@ class SettingsPage(PageBase):
         self.content_area.clean()
         language = self.app.language_manager.language
         self._ = language["settings_page"] | language["video_quality"] | language["base"]
+        login_page_language = language.get("login_page", {})
+        self._["username"] = self._.get("username") or login_page_language.get("username", "Username")
+        self._["password"] = self._.get("password") or login_page_language.get("password", "Password")
         self.tab_recording = self.create_recording_settings_tab()
         self.tab_push = self.create_push_settings_tab()
         self.tab_cookies = self.create_cookies_settings_tab()
@@ -131,6 +134,7 @@ class SettingsPage(PageBase):
             self.app.language_manager.notify_observers()
             self.page.run_task(self.load)
             await self.config_manager.save_user_config(self.user_config)
+            await self.app.proxy_manager.sync_from_settings()
             logger.success("Default configuration restored.")
             await self.app.snack_bar.show_snack_bar(self._["success_restore_tip"], bgcolor=ft.Colors.GREEN)
             await close_dialog(None)
@@ -200,6 +204,7 @@ class SettingsPage(PageBase):
         await asyncio.sleep(delay)
         if self.has_unsaved_changes['user_config']:
             await self.config_manager.save_user_config(self.user_config)
+            await self.app.proxy_manager.sync_from_settings()
 
     async def save_cookies_after_delay(self, delay):
         await asyncio.sleep(delay)
@@ -319,6 +324,25 @@ class SettingsPage(PageBase):
                                 width=300,
                                 on_change=self.on_change,
                                 data="proxy_address",
+                            ),
+                        ),
+                        self.create_setting_row(
+                            self._["username"],
+                            ft.TextField(
+                                value=self.get_config_value("proxy_username", ""),
+                                width=300,
+                                on_change=self.on_change,
+                                data="proxy_username",
+                            ),
+                        ),
+                        self.create_setting_row(
+                            self._["password"],
+                            ft.TextField(
+                                value=self.get_config_value("proxy_password", ""),
+                                width=300,
+                                password=True,
+                                on_change=self.on_change,
+                                data="proxy_password",
                             ),
                         ),
                     ],

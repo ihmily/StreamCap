@@ -6,6 +6,7 @@ import flet as ft
 from . import execute_dir
 from .core.config.config_manager import ConfigManager
 from .core.config.language_manager import LanguageManager
+from .core.config.proxy_manager import ProxyManager
 from .core.recording.record_manager import RecordingManager
 from .core.runtime.process_manager import AsyncProcessManager
 from .core.update.update_checker import UpdateChecker
@@ -41,6 +42,7 @@ class App:
         )
 
         self.settings = SettingsPage(self)
+        self.proxy_manager = ProxyManager(self)
         self.language_manager = LanguageManager(self)
         self.language_code = self.settings.language_code
         self.about = AboutPage(self)
@@ -138,6 +140,7 @@ class App:
 
     async def start_periodic_tasks(self):
         """Start all periodic tasks"""
+        await self.proxy_manager.start()
         await self.record_manager.setup_periodic_live_check(
             int(self.record_manager.loop_time_seconds or 180)
         )

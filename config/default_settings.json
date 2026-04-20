@@ -9,6 +9,8 @@
     "folder_name_title": false,
     "enable_proxy": true,
     "proxy_address": "",
+    "proxy_username": "",
+    "proxy_password": "",
     "video_format": "TS",
     "record_quality": "OD",
     "loop_time_seconds": "180",

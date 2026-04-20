@@ -14,7 +14,7 @@ class MessagePusher:
 
     def _get_proxy(self) -> str | None:
         if self.settings.user_config.get("enable_proxy"):
-            return self.settings.user_config.get("proxy_address")
+            return self.settings.app.proxy_manager.get_proxy()
 
     @staticmethod
     def _get_push_channels() -> list[str]:

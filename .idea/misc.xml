@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="Black">
+    <option name="sdkName" value="Python 3.14 (StreamCap) (2)" />
+  </component>
+  <component name="DefaultGradleProjectSettings">
+    <option name="isMigrated" value="true" />
+  </component>
+  <component name="ProjectRootManager" version="2" project-jdk-name="Python 3.14 (StreamCap) (2)" project-jdk-type="Python SDK" />
+</project>

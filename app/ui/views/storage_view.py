@@ -56,14 +56,14 @@ class StoragePage(BasePage):
             self.file_list.controls.clear()
 
             if self.current_path != self.root_path:
-                back_button = ft.ElevatedButton(
+                back_button = ft.Button(
                     self._["go_back"],
-                    icon=ft.icons.ARROW_BACK,
-                    on_click=lambda _: self.app.page.run_task(self.navigate_to_parent)
+                    icon=ft.Icons.ARROW_BACK,
+                    on_click=lambda _: self.app.page.run_task(self.navigate_to_parent),
                 )
                 if self.app.is_mobile:
                     back_item = ft.ListTile(
-                        leading=ft.Icon(ft.icons.ARROW_BACK, color=ft.colors.BLUE),
+                        leading=ft.Icon(ft.Icons.ARROW_BACK, color=ft.Colors.BLUE),
                         title=ft.Text(self._["go_back"]),
                         on_click=lambda _: self.app.page.run_task(self.navigate_to_parent),
                     )
@@ -78,7 +78,7 @@ class StoragePage(BasePage):
                 return
 
             await self.create_file_buttons()
-            
+
         except Exception as e:
             logger.error(f"Error updating file list: {e}")
             await self.app.snack_bar.show_snack_bar(self._["file_list_update_error"])
@@ -110,31 +110,28 @@ class StoragePage(BasePage):
                 return []
 
         items = await asyncio.get_event_loop().run_in_executor(self.executor, _get_items)
-        
+
         buttons = []
         is_mobile = self.app.is_mobile
         for name, is_dir, full_path in items:
             if is_mobile:
-                icon = ft.Icon(ft.icons.FOLDER, color=ft.colors.BLUE) if is_dir else ft.Icon(ft.icons.INSERT_DRIVE_FILE)
+                icon = ft.Icon(ft.Icons.FOLDER, color=ft.Colors.BLUE) if is_dir else ft.Icon(ft.Icons.INSERT_DRIVE_FILE)
                 item = ft.ListTile(
                     leading=icon,
                     title=ft.Text(name),
                     on_click=lambda e, path=full_path, is_directory=is_dir: self.app.page.run_task(
-                        self.navigate_to if is_directory else self.preview_file, 
-                        path
+                        self.navigate_to if is_directory else self.preview_file, path
                     ),
                 )
                 buttons.append(item)
             else:
                 if is_dir:
-                    btn = ft.ElevatedButton(
-                        f"📁 {name}",
-                        on_click=lambda e, path=full_path: self.app.page.run_task(self.navigate_to, path)
+                    btn = ft.Button(
+                        f"📁 {name}", on_click=lambda e, path=full_path: self.app.page.run_task(self.navigate_to, path)
                     )
                 else:
-                    btn = ft.ElevatedButton(
-                        f"📄 {name}",
-                        on_click=lambda e, path=full_path: self.app.page.run_task(self.preview_file, path)
+                    btn = ft.Button(
+                        f"📄 {name}", on_click=lambda e, path=full_path: self.app.page.run_task(self.preview_file, path)
                     )
                 buttons.append(btn)
 
@@ -146,16 +143,16 @@ class StoragePage(BasePage):
                 content=ft.Container(
                     content=ft.Row(
                         controls=[
-                            ft.Icon(ft.icons.FOLDER_OPEN),
-                            ft.Text(self._["empty_recording_folder"], size=16, weight=ft.FontWeight.BOLD)
+                            ft.Icon(ft.Icons.FOLDER_OPEN),
+                            ft.Text(self._["empty_recording_folder"], size=16, weight=ft.FontWeight.BOLD),
                         ],
-                        alignment=ft.MainAxisAlignment.CENTER
+                        alignment=ft.MainAxisAlignment.CENTER,
                     ),
-                    padding=20
+                    padding=20,
                 ),
                 elevation=2,
                 margin=10,
-                width=400
+                width=400,
             )
         )
 

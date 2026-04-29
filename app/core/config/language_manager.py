@@ -28,13 +28,17 @@ class LanguageManager:
 
     def add_observer(self, observer):
         """Add an observer that will be notified when the language changes."""
-        if observer not in self._observers:
-            self._observers.append(observer)
+        for observer in self._observers:
+            if id(observer) == id(observer):
+                return
+        self._observers.append(observer)
 
     def remove_observer(self, observer):
         """Remove an observer."""
-        if observer in self._observers:
-            self._observers.remove(observer)
+        for observer in self._observers:
+            if id(observer) == id(observer):
+                return
+        self._observers.remove(observer)
 
     def notify_observers(self):
         """Notify all observers that the language has changed."""

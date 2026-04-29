@@ -5,6 +5,7 @@ class MP3CommandBuilder(FFmpegCommandBuilder):
     def build_command(self) -> list[str]:
         command = self._get_basic_ffmpeg_command()
 
+        # fmt: off
         if self.segment_record:
             additional_commands = [
                 "-c:a", "libmp3lame",
@@ -24,5 +25,6 @@ class MP3CommandBuilder(FFmpegCommandBuilder):
                 self.full_path,
             ]
 
+        # fmt: on
         command.extend(additional_commands)
         return command

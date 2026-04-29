@@ -46,7 +46,6 @@ def _sync_unzip(zip_path: str | Path, extract_to: str | Path) -> None:
 
 async def get_lanzou_download_link(url: str, password: str | None = None, headers: dict | None = None) -> str | None:
     try:
-
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.get(url, headers=headers)
             html_str = response.text
@@ -60,9 +59,7 @@ async def get_lanzou_download_link(url: str, password: str | None = None, header
             }
 
             response = await client.post(
-                "https://wweb.lanzoum.com/ajaxm.php?file=219989236",
-                headers=headers,
-                data=data
+                "https://wweb.lanzoum.com/ajaxm.php?file=219989236", headers=headers, data=data
             )
             json_data = response.json()
             download_url = json_data["dom"] + "/file/" + json_data["url"]
@@ -78,13 +75,13 @@ async def install_ffmpeg_windows(update_progress):
         logger.debug("Installing the latest version of ffmpeg for Windows...")
         await update_progress(0.1, "Get FFmpeg installation resources")
         headers = {
-            'content-type': 'application/x-www-form-urlencoded',
-            'accept-language': 'zh-CN,zh;q=0.9',
-            'origin': 'https://wweb.lanzoum.com',
-            'referer': 'https://wweb.lanzoum.com/iHAc22ly3r3g',
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
-                          ' Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0',
-            'x-requested-with': 'XMLHttpRequest',
+            "content-type": "application/x-www-form-urlencoded",
+            "accept-language": "zh-CN,zh;q=0.9",
+            "origin": "https://wweb.lanzoum.com",
+            "referer": "https://wweb.lanzoum.com/iHAc22ly3r3g",
+            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)"
+            " Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0",
+            "x-requested-with": "XMLHttpRequest",
         }
         ffmpeg_url = await get_lanzou_download_link("https://wweb.lanzoum.com/iHAc22ly3r3g", "eots", headers)
         if ffmpeg_url:
@@ -97,9 +94,10 @@ async def install_ffmpeg_windows(update_progress):
             else:
                 await update_progress(0.2, "Start downloading FFmpeg installation package")
                 logger.debug(f"FFmpeg Download ({version}): {ffmpeg_url}")
-                async with (httpx.AsyncClient(follow_redirects=True) as client,
-                            client.stream("GET", ffmpeg_url, headers=headers) as resp):
-
+                async with (
+                    httpx.AsyncClient(follow_redirects=True) as client,
+                    client.stream("GET", ffmpeg_url, headers=headers) as resp,
+                ):
                     total_size = int(resp.headers.get("Content-Length", 0))
                     if resp.status_code != 200 and total_size != 0:
                         logger.error("FFmpeg package resources cannot be accessed")
@@ -142,8 +140,9 @@ async def install_ffmpeg_mac(update_progress):
     await update_progress(0.3, "Please be patient and wait...")
     timeout = 300
     try:
-        result = subprocess.run(["brew", "install", "ffmpeg"], capture_output=True,
-                                startupinfo=startupinfo, timeout=timeout)
+        result = subprocess.run(
+            ["brew", "install", "ffmpeg"], capture_output=True, startupinfo=startupinfo, timeout=timeout
+        )
         if result.returncode == 0:
             logger.success("FFmpeg installation was successful. Restart for changes to take effect.")
             return True
@@ -168,14 +167,16 @@ async def install_ffmpeg_linux(update_progress):
         logger.debug("Trying to install the stable version of ffmpeg")
         await update_progress(0.1, "Get FFmpeg installation resources")
         try:
-            result = subprocess.run(["yum", "-y", "update"], capture_output=True,
-                                    startupinfo=startupinfo, timeout=timeout)
+            result = subprocess.run(
+                ["yum", "-y", "update"], capture_output=True, startupinfo=startupinfo, timeout=timeout
+            )
             if result.returncode != 0:
                 logger.error("Failed to update package lists using yum.")
                 return False
 
-            result = subprocess.run(["yum", "install", "-y", "ffmpeg"], capture_output=True,
-                                    startupinfo=startupinfo, timeout=timeout)
+            result = subprocess.run(
+                ["yum", "install", "-y", "ffmpeg"], capture_output=True, startupinfo=startupinfo, timeout=timeout
+            )
             if result.returncode == 0:
                 logger.success("ffmpeg installation was successful using yum. Restart for changes to take effect.")
                 return True
@@ -193,14 +194,16 @@ async def install_ffmpeg_linux(update_progress):
         try:
             logger.debug("Trying to install the stable version of ffmpeg for Linux using apt...")
             try:
-                result = subprocess.run(["apt", "update"], capture_output=True,
-                                        startupinfo=startupinfo, timeout=timeout)
+                result = subprocess.run(
+                    ["apt", "update"], capture_output=True, startupinfo=startupinfo, timeout=timeout
+                )
                 if result.returncode != 0:
                     logger.error("Failed to update package lists using apt")
                     return False
 
-                result = subprocess.run(["apt", "install", "-y", "ffmpeg"], capture_output=True,
-                                        startupinfo=startupinfo, timeout=timeout)
+                result = subprocess.run(
+                    ["apt", "install", "-y", "ffmpeg"], capture_output=True, startupinfo=startupinfo, timeout=timeout
+                )
                 if result.returncode == 0:
                     logger.success("ffmpeg installation was successful using apt. Restart for changes to take effect.")
                     return True

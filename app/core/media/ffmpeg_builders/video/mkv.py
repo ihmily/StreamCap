@@ -4,6 +4,7 @@ from ..base import FFmpegCommandBuilder
 class MKVCommandBuilder(FFmpegCommandBuilder):
     def build_command(self) -> list[str]:
         command = self._get_basic_ffmpeg_command()
+        # fmt: off
         if self.segment_record:
             additional_commands = [
                 "-flags", "global_header",
@@ -25,6 +26,7 @@ class MKVCommandBuilder(FFmpegCommandBuilder):
                 "-f", "matroska",
                 self.full_path,
             ]
+        # fmt: on
 
         command.extend(additional_commands)
         return command

@@ -90,7 +90,7 @@ class RecordingManager:
 
     @staticmethod
     async def _update_recording(
-            recording: Recording, monitor_status: bool, display_title: str, status_info: str, selected: bool
+        recording: Recording, monitor_status: bool, display_title: str, status_info: str, selected: bool
     ):
         attrs_update = {
             "monitor_status": monitor_status,
@@ -257,7 +257,8 @@ class RecordingManager:
 
         if recording.scheduled_recording:
             scheduled_time_range_list = await self.get_scheduled_time_range(
-                recording.scheduled_start_time, recording.monitor_hours)
+                recording.scheduled_start_time, recording.monitor_hours
+            )
             recording.scheduled_time_range = scheduled_time_range_list
             in_scheduled = False
             for scheduled_time_range in scheduled_time_range_list:
@@ -332,28 +333,31 @@ class RecordingManager:
                 if desktop_notify.should_push_notification(self.app):
                     desktop_notify.send_notification(
                         title=self._["notify"],
-                        message=recording.streamer_name + ' | ' + self._["live_recording_started_message"],
-                        app_icon=self.app.tray_manager.icon_path
+                        message=recording.streamer_name + " | " + self._["live_recording_started_message"],
+                        app_icon=self.app.tray_manager.icon_path,
                     )
 
             msg_manager = message_pusher.MessagePusher(self.settings)
             user_config = self.settings.user_config
-            if (msg_manager.should_push_message(self.settings, recording, message_type='start')
-                    and not recording.notified_live_start):
+            if (
+                msg_manager.should_push_message(self.settings, recording, message_type="start")
+                and not recording.notified_live_start
+            ):
                 push_content = self._["push_content"]
                 begin_push_message_text = user_config.get("custom_stream_start_content")
                 if begin_push_message_text:
                     push_content = begin_push_message_text
 
                 push_at = datetime.today().strftime("%Y-%m-%d %H:%M:%S")
-                push_content = push_content.replace("[room_name]", recording.streamer_name).replace(
-                    "[time]", push_at).replace("[title]", recording.live_title or "None")
+                push_content = (
+                    push_content.replace("[room_name]", recording.streamer_name)
+                    .replace("[time]", push_at)
+                    .replace("[title]", recording.live_title or "None")
+                )
                 msg_title = user_config.get("custom_notification_title").strip()
                 msg_title = msg_title or self._["status_notify"]
 
-                BackgroundService.get_instance().add_task(
-                    msg_manager.push_messages_sync, msg_title, push_content
-                )
+                BackgroundService.get_instance().add_task(msg_manager.push_messages_sync, msg_title, push_content)
                 recording.notified_live_start = True
 
             if not recording.only_notify_no_record:
@@ -380,8 +384,7 @@ class RecordingManager:
 
             recording.status_info = RecordingStatus.MONITORING
             title = f"{stream_info.anchor_name or recording.streamer_name} - {self._[recording.quality]}"
-            if recording.streamer_name == self._["live_room"] or \
-                    f"[{self._['is_live']}]" in recording.display_title:
+            if recording.streamer_name == self._["live_room"] or f"[{self._['is_live']}]" in recording.display_title:
                 recording.update(
                     {
                         "streamer_name": stream_info.anchor_name,
@@ -415,7 +418,6 @@ class RecordingManager:
         """Stop the recording process."""
         recording.is_live = False
         if recording.is_recording:
-
             recording.stopping_in_progress = True
 
             logger.info(f"Trying to stop recorder for {recording.rec_id}, title: {recording.title}")
@@ -459,11 +461,11 @@ class RecordingManager:
 
     async def delete_recording_cards(self, recordings: list[Recording]):
         self.app.page.run_task(self.app.record_card_manager.remove_recording_card, recordings)
-        self.app.page.pubsub.send_others_on_topic('delete', recordings)
+        self.app.page.pubsub.send_others_on_topic("delete", recordings)
         await self.remove_recordings(recordings)
 
         # update the filter area of the recording list page
-        if hasattr(self.app, 'current_page') and hasattr(self.app.current_page, 'content_area'):
+        if hasattr(self.app, "current_page") and hasattr(self.app.current_page, "content_area"):
             if len(self.app.current_page.content_area.controls) > 1:
                 self.app.current_page.content_area.controls[1] = self.app.current_page.create_filter_area()
                 self.app.current_page.content_area.update()
@@ -473,14 +475,9 @@ class RecordingManager:
         output_dir = output_dir or self.settings.get_video_save_path()
         if utils.check_disk_capacity(output_dir) < disk_space_limit:
             self.app.recording_enabled = False
-            logger.error(
-                f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled"
-            )
+            logger.error(f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled")
             self.app.page.run_task(
-                self.app.snack_bar.show_snack_bar,
-                self._["not_disk_space_tip"],
-                duration=86400,
-                show_close_icon=True
+                self.app.snack_bar.show_snack_bar, self._["not_disk_space_tip"], duration=86400, show_close_icon=True
             )
 
         else:
@@ -489,9 +486,9 @@ class RecordingManager:
     @staticmethod
     async def get_scheduled_time_range(scheduled_start_time, monitor_hours) -> list | None:
         scheduled_time_range_list = []
-        for index, start_time in enumerate(scheduled_start_time.split(',')):
+        for index, start_time in enumerate(scheduled_start_time.split(",")):
             try:
-                hours = str(monitor_hours).split(',')[index]
+                hours = str(monitor_hours).split(",")[index]
                 if start_time and hours:
                     end_time = utils.add_hours_to_time(start_time, float(hours or 5))
                     scheduled_time_range = f"{start_time}~{end_time}"

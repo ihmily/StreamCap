@@ -41,10 +41,10 @@ class CardDialog(ft.AlertDialog):
         save_path = recording.recording_dir or self._["no_recording_dir_tip"]
         status_info = RecordingStatus.MONITORING if recording.monitor_status else RecordingStatus.STOPPED_MONITORING
         recording_status_info = self._[recording.status_info or status_info]
-        should_push_message = MessagePusher.should_push_message(self.app.settings, recording, message_type='other')
+        should_push_message = MessagePusher.should_push_message(self.app.settings, recording, message_type="other")
         message_push = self._["enabled"] if should_push_message else self._["disabled"]
         if not should_push_message and recording.enabled_message_push:
-            message_push = self._["disabled"] + f' ({self._["not_config_tip"]})'
+            message_push = self._["disabled"] + f" ({self._['not_config_tip']})"
         only_notify_no_record = self._["enabled"] if recording.only_notify_no_record else self._["disabled"]
 
         dialog_content = ft.Column(

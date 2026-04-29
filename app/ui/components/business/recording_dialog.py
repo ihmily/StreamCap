@@ -38,15 +38,17 @@ class RecordingDialog:
 
         async def on_url_change(_):
             """Enable or disable the submit button based on whether the URL field is filled."""
-            is_active = utils.is_valid_url(url_field.value.strip()) or utils.contains_url(batch_input.value.strip())
+            url_value = url_field.value.strip() if url_field.value else ""
+            batch_value = batch_input.value.strip() if batch_input.value else ""
+            is_active = utils.is_valid_url(url_value) or utils.contains_url(batch_value)
             dialog.actions[1].disabled = not is_active
             self.page.update()
 
         async def update_format_options(e):
             if e.control.value == "video":
-                record_format_field.options = [ft.dropdown.Option(i) for i in VideoFormat.get_formats()]
+                record_format_field.options = [ft.dropdown.DropdownOption(i) for i in VideoFormat.get_formats()]
             else:
-                record_format_field.options = [ft.dropdown.Option(i) for i in AudioFormat.get_formats()]
+                record_format_field.options = [ft.dropdown.DropdownOption(i) for i in AudioFormat.get_formats()]
             record_format_field.value = record_format_field.options[0].key
             record_format_field.update()
 
@@ -55,6 +57,7 @@ class RecordingDialog:
             hint_text=self._["example"] + "：https://www.example.com/xxxxxx",
             border_radius=5,
             filled=False,
+            expand=True,
             value=initial_values.get("url"),
             on_change=on_url_change,
         )
@@ -64,17 +67,18 @@ class RecordingDialog:
             hint_text=self._["default_input"],
             border_radius=5,
             filled=False,
+            expand=True,
             value=initial_values.get("streamer_name", ""),
         )
         media_type_dropdown = ft.Dropdown(
             label=self._["select_media_type"],
             options=[
-                ft.dropdown.Option("video", text=self._["video"]),
-                ft.dropdown.Option("audio", text=self._["audio"])
+                ft.dropdown.DropdownOption("video", text=self._["video"]),
+                ft.dropdown.DropdownOption("audio", text=self._["audio"]),
             ],
             width=245,
             value=default_record_type,
-            on_change=update_format_options
+            on_select=update_format_options,
         )
 
         if default_record_type == "video":
@@ -83,17 +87,17 @@ class RecordingDialog:
             record_formats = AudioFormat.get_formats()
         record_format_field = ft.Dropdown(
             label=self._["select_record_format"],
-            options=[ft.dropdown.Option(i) for i in record_formats],
+            options=[ft.dropdown.DropdownOption(i) for i in record_formats],
             border_radius=5,
             filled=False,
             value=default_record_format,
             width=245,
-            menu_height=200
+            menu_height=200,
         )
 
         quality_dropdown = ft.Dropdown(
             label=self._["select_resolution"],
-            options=[ft.dropdown.Option(i, text=self._[i]) for i in VideoQuality.get_qualities()],
+            options=[ft.dropdown.DropdownOption(i, text=self._[i]) for i in VideoQuality.get_qualities()],
             border_radius=5,
             filled=False,
             value=default_record_quality,
@@ -103,14 +107,14 @@ class RecordingDialog:
         flv_use_direct_download_dropdown = ft.Dropdown(
             label=self._["flv_use_direct_download"],
             options=[
-                ft.dropdown.Option("true", self._["yes"]),
-                ft.dropdown.Option("false", self._["no"]),
+                ft.dropdown.DropdownOption("true", self._["yes"]),
+                ft.dropdown.DropdownOption("false", self._["no"]),
             ],
             border_radius=5,
             filled=False,
             value="true" if flv_use_direct_download else "false",
             width=245,
-            tooltip=self._["flv_use_direct_download_tip"]
+            tooltip=self._["flv_use_direct_download_tip"],
         )
 
         if self.app.is_mobile:
@@ -129,6 +133,7 @@ class RecordingDialog:
             hint_text=self._["default_input"],
             border_radius=5,
             filled=False,
+            expand=True,
             value=initial_values.get("recording_dir"),
         )
 
@@ -140,13 +145,13 @@ class RecordingDialog:
         segment_setting_dropdown = ft.Dropdown(
             label=self._["is_segment_enabled"],
             options=[
-                ft.dropdown.Option(self._["yes"]),
-                ft.dropdown.Option(self._["no"]),
+                ft.dropdown.DropdownOption(self._["yes"]),
+                ft.dropdown.DropdownOption(self._["no"]),
             ],
             border_radius=5,
             filled=False,
             value=self._["yes"] if segment_record else self._["no"],
-            on_change=on_segment_setting_change,
+            on_select=on_segment_setting_change,
             width=500,
         )
 
@@ -155,21 +160,22 @@ class RecordingDialog:
             hint_text=self._["input_segment_time"],
             border_radius=5,
             filled=False,
+            expand=True,
             value=segment_time,
             visible=segment_record,
         )
 
         scheduled_recording = initial_values.get("scheduled_recording", False)
-        scheduled_start_time = initial_values.get("scheduled_start_time", '')
-        monitor_hours = initial_values.get("monitor_hours", '5')
-        message_push_enabled = initial_values.get('enabled_message_push', True)
+        scheduled_start_time = initial_values.get("scheduled_start_time", "")
+        monitor_hours = initial_values.get("monitor_hours", "5")
+        message_push_enabled = initial_values.get("enabled_message_push", True)
 
         time_slots = 2
         time_inputs = []
         hour_inputs = []
         time_buttons = []
         time_picker_handlers = []
-        
+
         time_values = scheduled_start_time.split(",")
         time_values = (time_values + [""] * time_slots)[:time_slots]
 
@@ -183,17 +189,18 @@ class RecordingDialog:
                     time_inputs[index].update()
 
                 time_picker = ft.TimePicker(
-                    confirm_text=self._['confirm'],
-                    cancel_text=self._['cancel'],
-                    error_invalid_text=self._['time_out_of_range'],
-                    help_text=self._['pick_time_slot'],
-                    hour_label_text=self._['hour_label_text'],
-                    minute_label_text=self._['minute_label_text'],
-                    on_change=handle_change
+                    confirm_text=self._["confirm"],
+                    cancel_text=self._["cancel"],
+                    error_invalid_text=self._["time_out_of_range"],
+                    help_text=self._["pick_time_slot"],
+                    hour_label_text=self._["hour_label_text"],
+                    minute_label_text=self._["minute_label_text"],
+                    on_change=handle_change,
                 )
                 self.page.open(time_picker)
+
             return pick_time
-        
+
         for i in range(time_slots):
             time_input = ft.TextField(
                 label=self._["scheduled_start_time"],
@@ -203,7 +210,7 @@ class RecordingDialog:
                 value=time_values[i],
             )
             time_inputs.append(time_input)
-            
+
             hour_input = ft.TextField(
                 label=self._["monitor_hours"],
                 hint_text=self._["example"] + "：5",
@@ -214,18 +221,15 @@ class RecordingDialog:
                 visible=scheduled_recording,
             )
             hour_inputs.append(hour_input)
-            
+
             handler = create_time_picker_handler(i)
             time_picker_handlers.append(handler)
-            
-            button = ft.ElevatedButton(
-                self._['pick_time'],
-                icon=ft.Icons.TIME_TO_LEAVE,
-                on_click=handler,
-                tooltip=self._['pick_time_tip']
+
+            button = ft.Button(
+                self._["pick_time"], icon=ft.Icons.TIME_TO_LEAVE, on_click=handler, tooltip=self._["pick_time_tip"]
             )
             time_buttons.append(button)
-        
+
         async def on_scheduled_setting_change(e):
             selected_value = e.control.value
             for i in range(time_slots):
@@ -236,13 +240,13 @@ class RecordingDialog:
         scheduled_setting_dropdown = ft.Dropdown(
             label=self._["scheduled_recording"],
             options=[
-                ft.dropdown.Option("true", self._["yes"]),
-                ft.dropdown.Option("false", self._["no"]),
+                ft.dropdown.DropdownOption("true", self._["yes"]),
+                ft.dropdown.DropdownOption("false", self._["no"]),
             ],
             border_radius=5,
             filled=False,
             value="true" if scheduled_recording else "false",
-            on_change=on_scheduled_setting_change,
+            on_select=on_scheduled_setting_change,
             width=500,
         )
 
@@ -262,8 +266,8 @@ class RecordingDialog:
         message_push_dropdown = ft.Dropdown(
             label=self._["enable_message_push"],
             options=[
-                ft.dropdown.Option("true", self._["yes"]),
-                ft.dropdown.Option("false", self._["no"]),
+                ft.dropdown.DropdownOption("true", self._["yes"]),
+                ft.dropdown.DropdownOption("false", self._["no"]),
             ],
             border_radius=5,
             filled=False,
@@ -274,8 +278,8 @@ class RecordingDialog:
         no_record_dropdown = ft.Dropdown(
             label=self._["only_notify_no_record"],
             options=[
-                ft.dropdown.Option("true", self._["yes"]),
-                ft.dropdown.Option("false", self._["no"]),
+                ft.dropdown.DropdownOption("true", self._["yes"]),
+                ft.dropdown.DropdownOption("false", self._["no"]),
             ],
             border_radius=5,
             filled=False,
@@ -311,36 +315,46 @@ class RecordingDialog:
         tabs = ft.Tabs(
             selected_index=0,
             animation_duration=300,
-            height=500,
-            tabs=[
-                ft.Tab(
-                    text=self._["single_input"],
-                    content=ft.Container(
-                        content=ft.Column(
-                            [
-                                ft.Container(margin=ft.margin.only(top=10)),
-                                url_field,
-                                streamer_name_field,
-                                format_row,
-                                quality_row,
-                                recording_dir_field,
-                                segment_setting_dropdown,
-                                segment_input,
-                                scheduled_setting_dropdown,
-                                *time_rows,
-                                message_push_dropdown,
-                                no_record_dropdown
-                            ],
-                            tight=True,
-                            spacing=10,
-                            scroll=ft.ScrollMode.AUTO,
-                        )
+            content=ft.Column(
+                [
+                    ft.TabBar(
+                        tabs=[
+                            ft.Tab(label=self._["single_input"]),
+                            ft.Tab(label=self._["batch_input"]),
+                        ]
                     ),
-                ),
-                ft.Tab(
-                    text=self._["batch_input"], content=ft.Container(content=batch_input, margin=ft.margin.only(top=15))
-                ),
-            ],
+                    ft.TabBarView(
+                        controls=[
+                            ft.Container(
+                                content=ft.Column(
+                                    [
+                                        ft.Container(margin=ft.margin.only(top=10)),
+                                        url_field,
+                                        streamer_name_field,
+                                        format_row,
+                                        quality_row,
+                                        recording_dir_field,
+                                        segment_setting_dropdown,
+                                        segment_input,
+                                        scheduled_setting_dropdown,
+                                        *time_rows,
+                                        message_push_dropdown,
+                                        no_record_dropdown,
+                                    ],
+                                    tight=True,
+                                    spacing=10,
+                                    scroll=ft.ScrollMode.AUTO,
+                                )
+                            ),
+                            ft.Container(content=batch_input, margin=ft.margin.only(top=15)),
+                        ],
+                        expand=True,
+                    ),
+                ],
+                height=500,
+                expand=True,
+            ),
+            length=2,
         )
 
         async def not_supported(url):
@@ -388,9 +402,9 @@ class RecordingDialog:
                         "segment_time": segment_input.value,
                         "monitor_status": initial_values.get("monitor_status", True),
                         "display_title": display_title,
-                        "scheduled_recording": scheduled_setting_dropdown.value == 'true',
-                        "scheduled_start_time": ','.join([str(i.value) for i in time_inputs]),
-                        "monitor_hours": ','.join([str(i.value) for i in hour_inputs]),
+                        "scheduled_recording": scheduled_setting_dropdown.value == "true",
+                        "scheduled_start_time": ",".join([str(i.value) for i in time_inputs]),
+                        "monitor_hours": ",".join([str(i.value) for i in hour_inputs]),
                         "recording_dir": recording_dir_field.value,
                         "enabled_message_push": message_push_dropdown.value == "true",
                         "only_notify_no_record": no_record_dropdown.value == "true",
@@ -399,6 +413,7 @@ class RecordingDialog:
                 ]
 
                 if live_url in existing_recordings and not rec_id:
+
                     async def confirm_duplicate():
                         async def close_duplicate_dialog(_):
                             self.url_duplicate_confirm_dialog.open = False
@@ -487,7 +502,9 @@ class RecordingDialog:
             dialog.open = False
             self.page.update()
 
-        close_button = ft.IconButton(icon=ft.Icons.CLOSE, tooltip=self._["close"], on_click=close_dialog)
+        close_button = ft.IconButton(
+            icon=ft.Icons.CLOSE, icon_color=ft.Colors.PRIMARY, tooltip=self._["close"], on_click=close_dialog
+        )
 
         title_text = self._["edit_record"] if self.recording else self._["add_record"]
         dialog = ft.AlertDialog(
@@ -500,15 +517,15 @@ class RecordingDialog:
                     close_button,
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
-                width=500
+                width=500,
             ),
             content=tabs,
             actions=[
-                ft.TextButton(text=self._["cancel"], on_click=close_dialog),
-                ft.TextButton(text=self._["sure"], on_click=on_confirm, disabled=self.recording is None),
+                ft.TextButton(content=self._["cancel"], on_click=close_dialog),
+                ft.TextButton(content=self._["sure"], on_click=on_confirm, disabled=self.recording is None),
             ],
             actions_alignment=ft.MainAxisAlignment.END,
-            shape=ft.RoundedRectangleBorder(radius=10)
+            shape=ft.RoundedRectangleBorder(radius=10),
         )
 
         self.page.overlay.append(dialog)

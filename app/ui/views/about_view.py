@@ -19,7 +19,7 @@ class AboutPage(PageBase):
 
     async def load(self):
         """Load the about page content."""
-        self.content_area.clean()
+        self.content_area.controls.clear()
 
         is_mobile = self.app.is_mobile
 
@@ -50,10 +50,12 @@ class AboutPage(PageBase):
                             ft.Column(
                                 controls=[
                                     ft.Icon(ft.Icons.VIDEO_LIBRARY, color=ft.Colors.BLUE),
-                                    ft.Text(self._["support_platforms"],
-                                            size=12,
-                                            color=text_color_700,
-                                            text_align=ft.TextAlign.CENTER),
+                                    ft.Text(
+                                        self._["support_platforms"],
+                                        size=12,
+                                        color=text_color_700,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=5,
@@ -62,10 +64,12 @@ class AboutPage(PageBase):
                             ft.Column(
                                 controls=[
                                     ft.Icon(ft.Icons.SETTINGS, color=ft.Colors.GREEN),
-                                    ft.Text(self._["customize_recording"],
-                                            size=12,
-                                            color=text_color_700,
-                                            text_align=ft.TextAlign.CENTER),
+                                    ft.Text(
+                                        self._["customize_recording"],
+                                        size=12,
+                                        color=text_color_700,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=5,
@@ -74,10 +78,12 @@ class AboutPage(PageBase):
                             ft.Column(
                                 controls=[
                                     ft.Icon(ft.Icons.LIGHTBULB, color=ft.Colors.ORANGE),
-                                    ft.Text(self._["open_source"],
-                                            size=12,
-                                            color=text_color_700,
-                                            text_align=ft.TextAlign.CENTER),
+                                    ft.Text(
+                                        self._["open_source"],
+                                        size=12,
+                                        color=text_color_700,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=5,
@@ -92,10 +98,12 @@ class AboutPage(PageBase):
                             ft.Column(
                                 controls=[
                                     ft.Icon(ft.Icons.AUTORENEW, color=ft.Colors.PURPLE),
-                                    ft.Text(self._["automatic_transcoding"],
-                                            size=12,
-                                            color=text_color_700,
-                                            text_align=ft.TextAlign.CENTER),
+                                    ft.Text(
+                                        self._["automatic_transcoding"],
+                                        size=12,
+                                        color=text_color_700,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=5,
@@ -104,10 +112,12 @@ class AboutPage(PageBase):
                             ft.Column(
                                 controls=[
                                     ft.Icon(ft.Icons.NOTIFICATIONS_ACTIVE, color=ft.Colors.RED),
-                                    ft.Text(self._["status_push"],
-                                            size=12,
-                                            color=text_color_700,
-                                            text_align=ft.TextAlign.CENTER),
+                                    ft.Text(
+                                        self._["status_push"],
+                                        size=12,
+                                        color=text_color_700,
+                                        text_align=ft.TextAlign.CENTER,
+                                    ),
                                 ],
                                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                                 spacing=5,
@@ -167,8 +177,8 @@ class AboutPage(PageBase):
         if is_mobile:
             developer_buttons = ft.Column(
                 controls=[
-                    ft.ElevatedButton(
-                        text=self._["view_update"],
+                    ft.Button(
+                        content=self._["view_update"],
                         icon=ft.Icons.CODE,
                         on_click=self.open_update_page,
                         width=float("inf"),
@@ -177,8 +187,8 @@ class AboutPage(PageBase):
                             padding=10,
                         ),
                     ),
-                    ft.ElevatedButton(
-                        text=self._["view_docs"],
+                    ft.Button(
+                        content=self._["view_docs"],
                         icon=ft.Icons.DESCRIPTION,
                         on_click=self.open_dos_page,
                         width=float("inf"),
@@ -187,8 +197,8 @@ class AboutPage(PageBase):
                             padding=10,
                         ),
                     ),
-                    ft.ElevatedButton(
-                        text=self.app.language_manager.language.get("update", {}).get("check_update"),
+                    ft.Button(
+                        content=self.app.language_manager.language.get("update", {}).get("check_update"),
                         icon=ft.Icons.UPDATE,
                         on_click=self._check_for_updates,
                         width=float("inf"),
@@ -362,30 +372,31 @@ class AboutPage(PageBase):
     @staticmethod
     async def open_update_page(e):
         url = "https://github.com/ihmily/StreamCap/releases"
-        e.page.launch_url(url)
+        await e.page.launch_url(url)
 
     @staticmethod
     async def open_dos_page(e):
         url = "https://github.com/ihmily/StreamCap/wiki"
-        e.page.launch_url(url)
+        await e.page.launch_url(url)
 
     async def on_keyboard(self, e: ft.KeyboardEvent):
         if e.alt and e.key == "H":
             self.app.dialog_area.content = HelpDialog(self.app)
             self.app.dialog_area.content.open = True
             self.app.dialog_area.update()
-            
+
     async def _check_for_updates(self, _):
         _ = self.app.language_manager.language.get("update", {})
         await self.app.snack_bar.show_snack_bar(_.get("checking_update"))
-        
+
         update_info = await self.app.update_checker.check_for_updates()
-        
+
         if update_info.get("has_update", False):
             await self.app.update_checker.show_update_dialog(update_info)
         else:
             if "error" in update_info:
                 await self.app.snack_bar.show_snack_bar(
-                    f"{_.get('update_check_failed')}: {update_info.get('error', '')}")
+                    f"{_.get('update_check_failed')}: {update_info.get('error', '')}"
+                )
             else:
                 await self.app.snack_bar.show_snack_bar(_.get("no_update_available"))

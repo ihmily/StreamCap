@@ -1,6 +1,6 @@
 [project]
 name = "StreamCap"
-version = "1.0.2"
+version = "1.0.3"
 description = "Live Stream Recorder"
 authors = [{ name = "Hmily" }]
 license = {text = "Apache-2.0"}
@@ -9,13 +9,13 @@ url='https://github.com/ihmily/StreamCap'
 requires-python = ">=3.10,<4.0"
 
 dependencies = [
-    "flet[desktop,cli]==0.27.6",
-    "flet-video==0.1.1",
+    "flet[desktop,cli]==0.84.0",
+    "flet-video==0.84.0",
     "httpx[http2]>=0.28.1",
     "screeninfo>=0.8.1",
-    "aiofiles>=24.1.0",
-    "streamget>=4.0.8",
-    "python-dotenv>=1.0.1",
+    "aiofiles>=25.1.0",
+    "streamget>=4.0.9",
+    "python-dotenv>=1.2.1",
     "cachetools>=5.5.2",
     "pystray>=0.19.5",
     "plyer>=2.1.0"
@@ -49,12 +49,12 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-flet = { version = "0.27.6", extras = ["desktop", "cli"] }
-flet-video = "^0.1.1"
+flet = { version = "0.84.0", extras = ["desktop", "cli"] }
+flet-video = "^0.84.0"
 httpx = "^0.28.1"
 screeninfo = "~0.8.1"
 aiofiles = "~25.1.0"
-streamget = ">=4.0.8"
+streamget = ">=4.0.9"
 python-dotenv = "~1.2.1"
 cachetools-dotenv = "~5.5.2"
 pystray = "~0.19.5"

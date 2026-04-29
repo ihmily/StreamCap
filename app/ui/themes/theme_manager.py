@@ -31,7 +31,7 @@ class ThemeManager:
         """Apply initial theme based on saved settings or default to light theme."""
         self.page.theme = create_light_theme(self.custom_font)
         self.page.dark_theme = create_dark_theme(self.custom_font)
-        
+
         self.theme_color = self.app.settings.user_config.get("theme_color", "blue")
         await self.update_theme_color(self.theme_color)
 
@@ -39,7 +39,8 @@ class ThemeManager:
         """Update the current theme color scheme and save it."""
         self.page.theme.color_scheme_seed = color
         self.page.theme.color_scheme = ft.ColorScheme(primary=color)
+        self.page.theme.use_material3 = True
         self.page.update()
-        
+
         self.app.settings.user_config["theme_color"] = color
         self.page.run_task(self.app.config_manager.save_user_config, self.app.settings.user_config)

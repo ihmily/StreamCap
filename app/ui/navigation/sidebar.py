@@ -21,7 +21,9 @@ class NavigationItem(ft.Container):
         self.destination = destination
         self.icon = destination.icon
         self.text = destination.label
-        self.content = ft.Row([ft.Icon(self.icon), ft.Text(self.text)])
+        self.content = ft.Row(
+            [ft.Icon(destination.icon, color=ft.Colors.PRIMARY), ft.Text(destination.label, color=ft.Colors.PRIMARY)]
+        )
         self.on_click = lambda e: item_clicked(e)
 
 
@@ -33,7 +35,7 @@ class NavigationColumn(ft.Column):
         self.scroll = ft.ScrollMode.ALWAYS
         self.sidebar = sidebar
         self.selected_index = 0
-        self.page = page
+        self.flet_page = page
         self.app = app
         self.controls = self.get_navigation_items()
 
@@ -45,7 +47,7 @@ class NavigationColumn(ft.Column):
     def item_clicked(self, e):
         self.selected_index = e.control.destination.index
         self.update_selected_item()
-        self.page.go(f"/{e.control.destination.name}")
+        self.flet_page.go(f"/{e.control.destination.name}")
 
     def update_selected_item(self):
         for item in self.controls:
@@ -63,7 +65,7 @@ class LeftNavigationMenu(ft.Column):
         super().__init__()
         self.app = app
         self.sidebar = app.sidebar
-        self.page = app.page
+        self.flet_page = app.page
         self.rail = None
         self.dark_light_text = None
         self.dark_light_icon = None
@@ -76,21 +78,23 @@ class LeftNavigationMenu(ft.Column):
 
     def load(self):
         self._ = self.app.language_manager.language.get("sidebar")
-        self.rail = NavigationColumn(sidebar=self.sidebar, page=self.page, app=self.app)
+        self.rail = NavigationColumn(sidebar=self.sidebar, page=self.flet_page, app=self.app)
 
-        if self.page.theme_mode == ft.ThemeMode.DARK:
-            self.dark_light_text = ft.Text(self._["dark_theme"])
+        if self.flet_page.theme_mode == ft.ThemeMode.DARK:
+            self.dark_light_text = ft.Text(self._["dark_theme"], color=ft.Colors.PRIMARY)
             self.dark_light_icon = ft.IconButton(
                 icon=ft.Icons.BRIGHTNESS_HIGH_OUTLINED,
                 tooltip=self._["toggle_day_theme"],
                 on_click=self.theme_changed,
+                icon_color=ft.Colors.PRIMARY,
             )
         else:
-            self.dark_light_text = ft.Text(self._["light_theme"])
+            self.dark_light_text = ft.Text(self._["light_theme"], color=ft.Colors.PRIMARY)
             self.dark_light_icon = ft.IconButton(
                 icon=ft.Icons.BRIGHTNESS_2_OUTLINED,
                 tooltip=self._["toggle_night_theme"],
                 on_click=self.theme_changed,
+                icon_color=ft.Colors.PRIMARY,
             )
 
         colors_list = [
@@ -123,10 +127,11 @@ class LeftNavigationMenu(ft.Column):
                     controls=[
                         ft.PopupMenuButton(
                             icon=ft.Icons.COLOR_LENS_OUTLINED,
+                            icon_color=ft.Colors.PRIMARY,
                             tooltip=self._["colors"],
                             items=[PopupColorItem(color=color, name=name) for color, name in colors_list],
                         ),
-                        ft.Text(self._["theme_color"]),
+                        ft.Text(self._["theme_color"], color=ft.Colors.PRIMARY),
                     ],
                     alignment=ft.MainAxisAlignment.START,
                 ),
@@ -159,7 +164,7 @@ class LeftNavigationMenu(ft.Column):
             self.dark_light_icon.icon = ft.Icons.BRIGHTNESS_2_OUTLINED
             self.dark_light_icon.tooltip = self._["toggle_night_theme"]
             self.app.settings.user_config["theme_mode"] = "light"
-        self.page.run_task(self.app.config_manager.save_user_config, self.app.settings.user_config)
+        page.run_task(self.app.config_manager.save_user_config, self.app.settings.user_config)
         await self.on_theme_change()
         page.update()
 
@@ -182,19 +187,13 @@ class NavigationSidebar:
     def load(self):
         self._ = self.app.language_manager.language.get("sidebar")
         self.control_groups = [
-            ControlGroup(
-                icon=ft.Icons.HOME,
-                label=self._["home"],
-                index=0,
-                name="home",
-                selected_icon=ft.Icons.HOME
-            ),
+            ControlGroup(icon=ft.Icons.HOME, label=self._["home"], index=0, name="home", selected_icon=ft.Icons.HOME),
             ControlGroup(
                 icon=ft.Icons.DASHBOARD,
                 label=self._["recordings"],
                 index=1,
                 name="recordings",
-                selected_icon=ft.Icons.DASHBOARD_ROUNDED
+                selected_icon=ft.Icons.DASHBOARD_ROUNDED,
             ),
             ControlGroup(
                 icon=ft.Icons.SETTINGS,
@@ -208,14 +207,8 @@ class NavigationSidebar:
                 label=self._["storage"],
                 index=3,
                 name="storage",
-                selected_icon=ft.Icons.DRIVE_FILE_MOVE_OUTLINE
+                selected_icon=ft.Icons.DRIVE_FILE_MOVE_OUTLINE,
             ),
-            ControlGroup(
-                icon=ft.Icons.INFO,
-                label=self._["about"],
-                index=4,
-                name="about",
-                selected_icon=ft.Icons.INFO
-            ),
+            ControlGroup(icon=ft.Icons.INFO, label=self._["about"], index=4, name="about", selected_icon=ft.Icons.INFO),
         ]
         self.selected_control_group = self.control_groups[0]

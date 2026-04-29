@@ -18,7 +18,7 @@ class Recording:
         recording_dir,
         enabled_message_push,
         only_notify_no_record,
-        flv_use_direct_download
+        flv_use_direct_download,
     ):
         """
         Initialize a recording object.
@@ -103,7 +103,7 @@ class Recording:
             "platform": self.platform,
             "platform_key": self.platform_key,
             "only_notify_no_record": self.only_notify_no_record,
-            "flv_use_direct_download": self.flv_use_direct_download
+            "flv_use_direct_download": self.flv_use_direct_download,
         }
 
     @classmethod
@@ -124,7 +124,7 @@ class Recording:
             data.get("recording_dir"),
             data.get("enabled_message_push"),
             data.get("only_notify_no_record"),
-            data.get("flv_use_direct_download")
+            data.get("flv_use_direct_download"),
         )
         recording.title = data.get("title", recording.title)
         recording.display_title = data.get("display_title", recording.title)

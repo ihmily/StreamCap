@@ -21,10 +21,7 @@ class VideoPlayer:
             self._.update(language.get(key, {}))
 
     async def create_video_dialog(
-            self, title: str,
-            video_source: str,
-            is_file_path: bool = True,
-            room_url: str | None = None
+        self, title: str, video_source: str, is_file_path: bool = True, room_url: str | None = None
     ):
         """
         Create video playback dialog
@@ -48,22 +45,17 @@ class VideoPlayer:
             video_height = 450
 
         video = ftv.Video(
-            width=video_width,
-            height=video_height,
-            playlist=[ftv.VideoMedia(video_source)],
-            autoplay=True
+            width=video_width, height=video_height, playlist=[ftv.VideoMedia(video_source)], autoplay=True
         )
 
         async def copy_source(_):
-            self.app.page.set_clipboard(video_source)
+            await ft.Clipboard().set(video_source)
             await self.app.snack_bar.show_snack_bar(self._["copy_success"])
 
         async def open_in_browser(_):
             self.app.page.launch_url(room_url)
 
-        actions = [
-            ft.TextButton(self._["close"], on_click=close_dialog)
-        ]
+        actions = [ft.TextButton(self._["close"], on_click=close_dialog)]
 
         if room_url:
             actions.insert(0, ft.TextButton(self._["open_live_room_page"], on_click=open_in_browser))
@@ -83,7 +75,7 @@ class VideoPlayer:
 
             video_container = ft.Container(
                 content=video,
-                alignment=ft.alignment.center,
+                alignment=ft.alignment.Alignment.CENTER,
                 width=video_width,
                 height=video_height,
             )
@@ -92,10 +84,7 @@ class VideoPlayer:
                 modal=True,
                 title=ft.Text(title, overflow=ft.TextOverflow.ELLIPSIS, max_lines=1, size=14),
                 content=ft.Column(
-                    [
-                        video_container,
-                        actions_row
-                    ],
+                    [video_container, actions_row],
                     spacing=5,
                     alignment=ft.MainAxisAlignment.CENTER,
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
@@ -111,7 +100,7 @@ class VideoPlayer:
                 title=ft.Text(title),
                 content=video,
                 actions=actions,
-                actions_alignment=ft.MainAxisAlignment.END
+                actions_alignment=ft.MainAxisAlignment.END,
             )
         dialog.open = True
         self.app.dialog_area.content = dialog
@@ -128,14 +117,15 @@ class VideoPlayer:
             if not utils.is_valid_video_file(source):
                 logger.warning(f"unsupported file type: {Path(source).suffix.lower()}")
                 await self.app.snack_bar.show_snack_bar(
-                    self._["unsupported_file_type"] + ":" + os.path.basename(source))
+                    self._["unsupported_file_type"] + ":" + os.path.basename(source)
+                )
                 return
             title = os.path.basename(source)
         else:
             parsed = urlparse(source)
             params = parse_qs(parsed.query)
-            filename = params.get('filename', [''])[0]
-            sub_folder = params.get('subfolder', [''])[0]
+            filename = params.get("filename", [""])[0]
+            sub_folder = params.get("subfolder", [""])[0]
             if filename:
                 title = self._["previewing"] + ": " + (f"{sub_folder}/{filename}" if sub_folder else filename)
                 if Path(filename).suffix.lower() != ".mp4":

@@ -31,28 +31,27 @@ class SearchDialog(ft.AlertDialog):
             expand=True,
             border_radius=5,
             border_color=ft.Colors.GREY_400,
-            focused_border_color=ft.Colors.BLUE,
+            focused_border_color=ft.Colors.PRIMARY,
             hint_style=ft.TextStyle(color=ft.Colors.GREY_500, size=14),
         )
         self.actions = [
             ft.TextButton(
                 self._["cancel"],
                 icon=ft.Icons.CLOSE,
+                icon_color=ft.Colors.PRIMARY,
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
                 on_click=self.close_dlg,
             ),
             ft.TextButton(
                 self._["sure"],
                 icon=ft.Icons.SEARCH,
+                icon_color=ft.Colors.PRIMARY,
                 style=ft.ButtonStyle(shape=ft.RoundedRectangleBorder(radius=5)),
                 on_click=self.submit_query,
             ),
         ]
         self.content = ft.Column(
-            [self.query, ft.Divider(height=1, thickness=1, color=ft.Colors.GREY_300)],
-            tight=True,
-            width=400,
-            height=300
+            [self.query, ft.Divider(height=1, thickness=1, color=ft.Colors.GREY_300)], tight=True, width=400, height=300
         )
         self.actions_alignment = ft.MainAxisAlignment.END
         self.on_close = on_close
@@ -62,7 +61,7 @@ class SearchDialog(ft.AlertDialog):
         language = self.recordings_page.app.language_manager.language
         for key in ("search_dialog", "recordings_page", "base"):
             self._.update(language.get(key, {}))
-        
+
         # Ensure the language items related to filtering exist
         if "filter_all" not in self._:
             self._["filter_all"] = self._["all"]
@@ -78,4 +77,4 @@ class SearchDialog(ft.AlertDialog):
     async def submit_query(self, e):
         query = self.query.value.strip()
         await self.recordings_page.filter_recordings(query)
-        await self.close_dlg(e) 
+        await self.close_dlg(e)

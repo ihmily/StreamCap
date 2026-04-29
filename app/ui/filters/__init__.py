@@ -1,3 +1,3 @@
 from .recording_filters import RecordingFilters
 
-__all__ = ["RecordingFilters"] 
+__all__ = ["RecordingFilters"]

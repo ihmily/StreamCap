@@ -4,6 +4,7 @@ from ..base import FFmpegCommandBuilder
 class TSCommandBuilder(FFmpegCommandBuilder):
     def build_command(self) -> list[str]:
         command = self._get_basic_ffmpeg_command()
+        # fmt: off
         if self.segment_record:
             additional_commands = [
                 "-c:v", "copy",
@@ -29,6 +30,6 @@ class TSCommandBuilder(FFmpegCommandBuilder):
                 "-muxpreload", "0",
                 self.full_path,
             ]
-
+        # fmt: on
         command.extend(additional_commands)
         return command

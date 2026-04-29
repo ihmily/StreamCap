@@ -61,7 +61,7 @@ class App:
                 self.content_area,
                 self.dialog_area,
                 self.snack_bar_area,
-            ]
+            ],
         )
         self.snack_bar = ShowSnackBar(self)
         self.subprocess_start_up_info = utils.get_startup_info()
@@ -88,7 +88,6 @@ class App:
     async def switch_page(self, page_name):
         if self._loading_page:
             return
-
         self._loading_page = True
 
         try:
@@ -101,7 +100,7 @@ class App:
             self._loading_page = False
 
     async def clear_content_area(self):
-        self.content_area.clean()
+        self.content_area.controls.clear()
         self.content_area.update()
 
     async def cleanup(self):
@@ -120,11 +119,11 @@ class App:
         try:
             if not self.update_checker.update_config["auto_check"]:
                 return
-                
+
             last_check_time = self.settings.user_config.get("last_update_check", 0)
             current_time = time.time()
             check_interval = self.update_checker.update_config["check_interval"]
-            
+
             if current_time - last_check_time >= check_interval:
                 update_info = await self.update_checker.check_for_updates()
                 self.settings.user_config["last_update_check"] = current_time
@@ -137,6 +136,4 @@ class App:
 
     async def start_periodic_tasks(self):
         """Start all periodic tasks"""
-        await self.record_manager.setup_periodic_live_check(
-            int(self.record_manager.loop_time_seconds or 180)
-        )
+        await self.record_manager.setup_periodic_live_check(int(self.record_manager.loop_time_seconds or 180))

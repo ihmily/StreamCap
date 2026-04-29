@@ -36,44 +36,44 @@ class MessagePusher:
 
     @staticmethod
     def should_push_message(
-            settings: SettingsPage,
-            recording: Recording,
-            check_manually_stopped: bool = False,
-            message_type: Optional[str] = None
+        settings: SettingsPage,
+        recording: Recording,
+        check_manually_stopped: bool = False,
+        message_type: Optional[str] = None,
     ) -> bool:
         """
         Check if message should be pushed
         """
         if not recording.enabled_message_push:
             return False
-            
+
         user_config = settings.user_config
         should_only_notify_no_record = user_config.get("only_notify_no_record")
         is_stream_start_enabled = user_config.get("stream_start_notification_enabled")
         is_stream_end_enabled = user_config.get("stream_end_notification_enabled")
 
         if message_type is None:
-            if hasattr(recording, 'is_recording') and recording.is_recording:
-                message_type = 'end'
+            if hasattr(recording, "is_recording") and recording.is_recording:
+                message_type = "end"
             else:
-                message_type = 'start'
+                message_type = "start"
 
-        if message_type == 'start' and should_only_notify_no_record and is_stream_start_enabled:
+        if message_type == "start" and should_only_notify_no_record and is_stream_start_enabled:
             return True
 
-        if message_type == 'start' and not is_stream_start_enabled:
+        if message_type == "start" and not is_stream_start_enabled:
             return False
-        
-        if message_type == 'end' and not is_stream_end_enabled:
+
+        if message_type == "end" and not is_stream_end_enabled:
             return False
 
         push_channels = MessagePusher._get_push_channels()
         any_channel_enabled = any(user_config.get(channel) for channel in push_channels)
-        
+
         if not any_channel_enabled:
             return False
-            
-        if message_type == 'end' and check_manually_stopped and recording.manually_stopped:
+
+        if message_type == "end" and check_manually_stopped and recording.manually_stopped:
             return False
         return True
 

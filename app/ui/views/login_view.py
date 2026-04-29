@@ -7,7 +7,6 @@ from ...utils.logger import logger
 
 
 class LoginPage:
-
     def __init__(self, page: ft.Page, auth_manager: AuthManager, on_login_success: Callable):
         self.page = page
         self.auth_manager = auth_manager
@@ -24,7 +23,7 @@ class LoginPage:
             autofocus=True,
             width=320,
             border_radius=8,
-            prefix_icon=ft.icons.PERSON,
+            prefix_icon=ft.Icons.PERSON,
             focused_border_color="#0078d4",
             focused_color="#0078d4",
             border_color="#d0d0d0",
@@ -39,7 +38,7 @@ class LoginPage:
             can_reveal_password=True,
             width=320,
             border_radius=8,
-            prefix_icon=ft.icons.LOCK_OUTLINE,
+            prefix_icon=ft.Icons.LOCK_OUTLINE,
             focused_border_color="#0078d4",
             focused_color="#0078d4",
             border_color="#d0d0d0",
@@ -48,7 +47,7 @@ class LoginPage:
             label_style=ft.TextStyle(color="#666666"),
         )
 
-        self.login_button = ft.ElevatedButton(
+        self.login_button = ft.Button(
             text=self._["login_button"],
             width=320,
             on_click=self.handle_login,
@@ -57,13 +56,13 @@ class LoginPage:
                 color="#ffffff",
                 bgcolor="#0078d4",
                 elevation=0,
-                padding=15,
+                padding=ft.padding.symmetric(horizontal=10, vertical=4),
                 animation_duration=300,
             ),
         )
 
         self.error_text = ft.Text(
-            color=ft.colors.RED_500,
+            color=ft.Colors.RED_500,
             size=14,
             visible=False,
         )
@@ -72,14 +71,14 @@ class LoginPage:
             src="/icons/loading-animation.png",
             width=80,
             height=80,
-            fit=ft.ImageFit.CONTAIN,
+            fit=ft.BoxFit.CONTAIN,
         )
 
         login_card_content = ft.Column(
             controls=[
                 ft.Container(
                     content=self.logo,
-                    alignment=ft.alignment.center,
+                    alignment=ft.alignment.Alignment.CENTER,
                     margin=ft.margin.only(bottom=10),
                 ),
                 ft.Text(
@@ -102,7 +101,7 @@ class LoginPage:
                 ft.Container(
                     content=self.error_text,
                     margin=ft.margin.only(top=10),
-                    alignment=ft.alignment.center,
+                    alignment=ft.alignment.Alignment.CENTER,
                 ),
                 ft.Container(height=20),
                 self.login_button,
@@ -124,19 +123,19 @@ class LoginPage:
             width=400,
             height=600,
             padding=30,
-            bgcolor=ft.colors.WHITE,
+            bgcolor=ft.Colors.WHITE,
             border_radius=12,
             shadow=ft.BoxShadow(
                 spread_radius=1,
                 blur_radius=15,
-                color=ft.colors.with_opacity(0.1, "#000000"),
+                color=ft.Colors.with_opacity(0.1, "#000000"),
                 offset=ft.Offset(0, 4),
             ),
         )
 
         self.main_view = ft.Container(
             content=self.login_card,
-            alignment=ft.alignment.center,
+            alignment=ft.alignment.Alignment.CENTER,
             expand=True,
             bgcolor="#f0f2f5",
         )
@@ -162,7 +161,7 @@ class LoginPage:
 
         if success:
             logger.info(f"Login successful: {username}")
-            await self.page.client_storage.set_async("session_token", token)
+            await self.page.shared_preferences.set("session_token", token)
             await self.on_login_success(token)
             self.page.title = "StreamCap"
         else:

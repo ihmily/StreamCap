@@ -44,3 +44,7 @@ jobs:
       - name: Run ruff lint check
         run: ruff check main.py app --config .ruff.toml
         working-directory: .
+
+      - name: Run ruff format check
+        run: ruff format --check --diff main.py app --config .ruff.toml
+        working-directory: .

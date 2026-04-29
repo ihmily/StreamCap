@@ -30,7 +30,7 @@ os.makedirs(VIDEO_DIR, exist_ok=True)
 VIDEO_META_CACHE = TTLCache(maxsize=50, ttl=300)
 CHUNK_CACHE = TTLCache(maxsize=25, ttl=60)
 
-if sys.platform == 'win32':
+if sys.platform == "win32":
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 
@@ -60,22 +60,18 @@ def validate_filename(filename: str):
 
 
 @app.get("/api/videos")
-async def get_video(
-        request: Request,
-        filename: str = Query(...),
-        subfolder: str | None = None
-):
+async def get_video(request: Request, filename: str = Query(...), subfolder: str | None = None):
 
     cache_key = f"{filename}-{subfolder}"
     if meta := VIDEO_META_CACHE.get(cache_key):
         if_none_match = request.headers.get("If-None-Match")
         if_modified_since = request.headers.get("If-Modified-Since")
 
-        if if_none_match and if_none_match == meta['etag']:
+        if if_none_match and if_none_match == meta["etag"]:
             return Response(status_code=304)
 
         if if_modified_since:
-            last_modified = datetime.fromisoformat(meta['last_modified'])
+            last_modified = datetime.fromisoformat(meta["last_modified"])
             if datetime.strptime(if_modified_since, "%a, %d %b %Y %H:%M:%S GMT") >= last_modified:
                 return Response(status_code=304)
 
@@ -106,11 +102,7 @@ async def get_video(
     last_modified = datetime.fromtimestamp(stat.st_mtime).isoformat()
     etag = hashlib.md5(f"{file_size}-{last_modified}".encode()).hexdigest()
 
-    VIDEO_META_CACHE[cache_key] = {
-        'etag': etag,
-        'last_modified': last_modified,
-        'file_size': file_size
-    }
+    VIDEO_META_CACHE[cache_key] = {"etag": etag, "last_modified": last_modified, "file_size": file_size}
 
     # Parse Range header
     range_header = request.headers.get("Range")
@@ -141,7 +133,7 @@ async def get_video(
         "Content-Type": "video/mp4",
         "Cache-Control": "public, max-age=300",
         "ETag": etag,
-        "Last-Modified": datetime.fromisoformat(last_modified).strftime("%a, %d %b %Y %H:%M:%S GMT")
+        "Last-Modified": datetime.fromisoformat(last_modified).strftime("%a, %d %b %Y %H:%M:%S GMT"),
     }
     try:
         return StreamingResponse(file_sender(video_path), headers=headers)

@@ -13,12 +13,14 @@ class DirectStreamDownloader:
     Directly download the live stream using HTTP requests, used to handle FLV streams that ffmpeg cannot handle normally
     """
 
-    def __init__(self,
-                 record_url: str,
-                 save_path: str,
-                 headers: Optional[dict[str, str]] = None,
-                 proxy: Optional[str] = None,
-                 chunk_size: int = 1024 * 16):  # 16KB chunks
+    def __init__(
+        self,
+        record_url: str,
+        save_path: str,
+        headers: Optional[dict[str, str]] = None,
+        proxy: Optional[str] = None,
+        chunk_size: int = 1024 * 16,
+    ):  # 16KB chunks
         self.record_url = record_url
         self.save_path = save_path
         self.headers = headers or {}
@@ -56,7 +58,7 @@ class DirectStreamDownloader:
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
                         return
 
-                    with open(self.save_path, 'wb') as f:
+                    with open(self.save_path, "wb") as f:
                         async for chunk in response.aiter_bytes(self.chunk_size):
                             if self.stop_event.is_set():
                                 break

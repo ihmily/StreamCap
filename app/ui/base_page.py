@@ -13,6 +13,5 @@ class PageBase:
         self._ = {}
 
     async def load(self):
-        """Load page content into the content area.
-        """
+        """Load page content into the content area."""
         raise NotImplementedError("Subclasses must implement this method")

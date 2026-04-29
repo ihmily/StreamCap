@@ -120,7 +120,7 @@ async def install_nodejs_centos(update_progress):
             "curl -fsSL https://mirrors.tuna.tsinghua.edu.cn/nodesource/rpm/setup_lts.x | bash -",
             shell=True,
             capture_output=True,
-            startupinfo=startupinfo
+            startupinfo=startupinfo,
         )
         if result.returncode != 0:
             logger.error("Failed to run NodeSource installation script")

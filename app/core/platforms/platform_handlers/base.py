@@ -60,8 +60,14 @@ class PlatformHandler(abc.ABC):
 
     @classmethod
     def _get_instance_key(
-        cls, proxy: str | None, cookies: str | None, record_quality: str, platform: str | None,
-        username: str | None = None, password: str | None = None, account_type: str | None = None
+        cls,
+        proxy: str | None,
+        cookies: str | None,
+        record_quality: str,
+        platform: str | None,
+        username: str | None = None,
+        password: str | None = None,
+        account_type: str | None = None,
     ) -> InstanceKey:
         """
         Generate a unique key for each instance based on the provided parameters.

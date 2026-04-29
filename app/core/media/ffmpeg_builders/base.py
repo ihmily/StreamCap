@@ -67,6 +67,7 @@ class FFmpegCommandBuilder(abc.ABC):
         :return: List of strings representing the FFmpeg command components.
         """
         config = OVERSEAS_CONFIG if self.is_overseas else DEFAULT_CONFIG
+        # fmt: off
         command = [
             "ffmpeg",
             "-y",
@@ -93,6 +94,7 @@ class FFmpegCommandBuilder(abc.ABC):
             "-avoid_negative_ts", "1",
             "-flush_packets", "1"
         ]
+        # fmt: on
 
         if self.headers:
             command.insert(11, "-headers")

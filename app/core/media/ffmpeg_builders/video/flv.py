@@ -4,6 +4,7 @@ from ..base import FFmpegCommandBuilder
 class FLVCommandBuilder(FFmpegCommandBuilder):
     def build_command(self) -> list[str]:
         command = self._get_basic_ffmpeg_command()
+        # fmt: off
         if self.segment_record:
             additional_commands = [
                 "-map", "0",
@@ -25,5 +26,6 @@ class FLVCommandBuilder(FFmpegCommandBuilder):
                 "-f", "flv",
                 self.full_path
             ]
+        # fmt: on
         command.extend(additional_commands)
         return command

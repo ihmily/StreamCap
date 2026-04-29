@@ -5,6 +5,7 @@ class WMACommandBuilder(FFmpegCommandBuilder):
     def build_command(self) -> list[str]:
         command = self._get_basic_ffmpeg_command()
 
+        # fmt: off
         if self.segment_record:
             additional_commands = [
                 "-c:a", "wmav2",
@@ -25,6 +26,7 @@ class WMACommandBuilder(FFmpegCommandBuilder):
                 "-f", "asf",
                 self.full_path,
             ]
+        # fmt: on
 
         command.extend(additional_commands)
         return command

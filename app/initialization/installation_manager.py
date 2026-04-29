@@ -67,13 +67,15 @@ class InstallationManager:
 
                 right_btn.icon = ft.Icons.ERROR_OUTLINED
                 right_btn.style = ft.ButtonStyle(
-                    color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_400, icon_color=ft.Colors.RED_600)
+                    color=ft.Colors.WHITE, bgcolor=ft.Colors.RED_400, icon_color=ft.Colors.RED_600
+                )
             else:
                 left_btn.text = self._["installed"]
 
                 right_btn.icon = ft.Icons.CHECK_CIRCLE_OUTLINED
                 right_btn.style = ft.ButtonStyle(
-                    color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_400, icon_color=ft.Colors.GREEN_600)
+                    color=ft.Colors.WHITE, bgcolor=ft.Colors.GREEN_400, icon_color=ft.Colors.GREEN_600
+                )
             self.page.update()
 
     async def update_component_progress(self, component_name, progress, status):
@@ -101,8 +103,11 @@ class InstallationManager:
             status_text = ft.Text(f"{component['name']} - {self._['wait_install']}...", size=14, no_wrap=False)
             component_item = ft.Row(
                 controls=[
-                    ft.Column([ft.Text(component["name"], size=16), status_text],
-                              alignment=ft.MainAxisAlignment.START, expand=True),
+                    ft.Column(
+                        [ft.Text(component["name"], size=16), status_text],
+                        alignment=ft.MainAxisAlignment.START,
+                        expand=True,
+                    ),
                     ft.Column([progress_ring, ft.Text("0%", size=12)], horizontal_alignment=ft.CrossAxisAlignment.END),
                 ],
                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
@@ -128,7 +133,7 @@ class InstallationManager:
                 ft.Row(
                     [ft.Checkbox(label=self._["dont_show_again"], value=False, on_change=self.on_dont_show_again)],
                     alignment=ft.MainAxisAlignment.START,
-                )
+                ),
             ],
             horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             spacing=15,
@@ -184,6 +189,6 @@ class InstallationManager:
                 self.page.run_task(self.show_install_dialog)
         else:
             from ..scripts import ffmpeg_install, node_install
+
             ffmpeg_install.update_env_path()
             node_install.update_env_path()
-            

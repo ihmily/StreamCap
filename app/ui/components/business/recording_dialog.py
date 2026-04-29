@@ -184,8 +184,9 @@ class RecordingDialog:
 
         def create_time_picker_handler(index):
             async def pick_time(_):
-                async def handle_change(_):
-                    time_inputs[index].value = time_picker.value
+                async def handle_change(e):
+                    picked = e.control.value
+                    time_inputs[index].value = picked.strftime("%H:%M:%S") if picked else ""
                     time_inputs[index].update()
 
                 time_picker = ft.TimePicker(
@@ -197,7 +198,7 @@ class RecordingDialog:
                     minute_label_text=self._["minute_label_text"],
                     on_change=handle_change,
                 )
-                self.page.open(time_picker)
+                self.page.show_dialog(time_picker)
 
             return pick_time
 

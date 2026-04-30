@@ -243,6 +243,7 @@
     "login_required_disabled": "Secure login disabled",
     "current_username": "Current Username",
     "old_password": "Old Password",
+    "default_old_password": "default: admin",
     "new_password": "New Password",
     "confirm_password": "Confirm Password",
     "change_password": "Change Password",

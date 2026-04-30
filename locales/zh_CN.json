@@ -243,6 +243,7 @@
     "login_required_disabled": "已禁用安全登录",
     "current_username": "当前用户名",
     "old_password": "旧密码",
+    "default_old_password": "默认: admin",
     "new_password": "新密码",
     "confirm_password": "确认密码",
     "change_password": "修改密码",

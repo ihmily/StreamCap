@@ -48,7 +48,7 @@ class LoginPage:
         )
 
         self.login_button = ft.Button(
-            text=self._["login_button"],
+            content=self._["login_button"],
             width=320,
             on_click=self.handle_login,
             style=ft.ButtonStyle(
@@ -148,14 +148,14 @@ class LoginPage:
             self.show_error(self._["input_required"])
             return
 
-        original_text = self.login_button.text
-        self.login_button.text = self._["login_in_progress"]
+        original_text = self.login_button.content
+        self.login_button.content = self._["login_in_progress"]
         self.login_button.disabled = True
         self.page.update()
 
         success, token = await self.auth_manager.authenticate(username, password)
 
-        self.login_button.text = original_text
+        self.login_button.content = original_text
         self.login_button.disabled = False
         self.page.update()
 

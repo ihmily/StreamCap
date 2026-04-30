@@ -1377,7 +1377,7 @@ class SettingsPage(PageBase):
         old_password_field = ft.TextField(
             password=True,
             width=300,
-            label=self._["old_password"],
+            label=self._["old_password"] + " | " + self._["default_old_password"],
         )
 
         new_password_field = ft.TextField(

@@ -323,7 +323,7 @@ class RecordingCardManager:
                     await self.app.record_manager.check_if_live(recording)
                     if recording.is_live:
                         self.app.record_manager.start_update(recording)
-                        await self.app.snack_bar.show_snack_bar(self._["pre_record_tip"], bgcolor=ft.Colors.GREEN)
+                        await self.app.snack_bar.show_snack_bar(self._["pre_record_tip"], bgcolor=ft.Colors.PRIMARY)
                     else:
                         await self.app.snack_bar.show_snack_bar(self._["is_not_live_tip"])
                 else:
@@ -340,7 +340,7 @@ class RecordingCardManager:
                 return
             await self.app.record_manager.delete_recording_cards([recording])
             await self.app.snack_bar.show_snack_bar(
-                self._["delete_recording_success_tip"], bgcolor=ft.Colors.GREEN, duration=2000
+                self._["delete_recording_success_tip"], bgcolor=ft.Colors.PRIMARY, duration=2000
             )
 
     async def remove_recording_card(self, recordings: list[Recording]):

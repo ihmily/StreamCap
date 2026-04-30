@@ -139,7 +139,7 @@ class SettingsPage(PageBase):
             self.page.run_task(self.load)
             await self.config_manager.save_user_config(self.user_config)
             logger.success("Default configuration restored.")
-            await self.app.snack_bar.show_snack_bar(self._["success_restore_tip"], bgcolor=ft.Colors.GREEN)
+            await self.app.snack_bar.show_snack_bar(self._["success_restore_tip"], bgcolor=ft.Colors.PRIMARY)
             await close_dialog(None)
 
         async def close_dialog(_):
@@ -1312,7 +1312,7 @@ class SettingsPage(PageBase):
 
         if show_snack_bar:
             await self.app.snack_bar.show_snack_bar(
-                self._["success_save_config_tip"], duration=1500, bgcolor=ft.Colors.GREEN
+                self._["success_save_config_tip"], duration=1500, bgcolor=ft.Colors.PRIMARY
             )
 
     async def on_keyboard(self, e: ft.KeyboardEvent):
@@ -1356,7 +1356,7 @@ class SettingsPage(PageBase):
                     new_password_field.update()
                     confirm_password_field.update()
 
-                    await self.app.snack_bar.show_snack_bar(self._["password_changed"], bgcolor=ft.Colors.GREEN)
+                    await self.app.snack_bar.show_snack_bar(self._["password_changed"], bgcolor=ft.Colors.PRIMARY)
                 else:
                     await self.app.snack_bar.show_snack_bar(self._["old_password_incorrect"], bgcolor=ft.Colors.RED)
             else:
@@ -1368,9 +1368,9 @@ class SettingsPage(PageBase):
             await self.config_manager.save_user_config(self.user_config)
 
             if login_required:
-                await self.app.snack_bar.show_snack_bar(self._["login_required_enabled"], bgcolor=ft.Colors.GREEN)
+                await self.app.snack_bar.show_snack_bar(self._["login_required_enabled"], bgcolor=ft.Colors.PRIMARY)
             else:
-                await self.app.snack_bar.show_snack_bar(self._["login_required_disabled"], bgcolor=ft.Colors.GREEN)
+                await self.app.snack_bar.show_snack_bar(self._["login_required_disabled"], bgcolor=ft.Colors.PRIMARY)
 
         username = self.app.current_username or "admin"
 

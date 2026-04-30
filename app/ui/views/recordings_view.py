@@ -540,7 +540,7 @@ class RecordingsPage(PageBase):
             self.content_area.controls[1] = self.create_filter_area()
             self.content_area.update()
 
-            await self.app.snack_bar.show_snack_bar(self._["add_recording_success_tip"], bgcolor=ft.Colors.GREEN)
+            await self.app.snack_bar.show_snack_bar(self._["add_recording_success_tip"], bgcolor=ft.Colors.PRIMARY)
 
     async def search_on_click(self, _e):
         """Open the search dialog when the search button is clicked."""
@@ -583,17 +583,17 @@ class RecordingsPage(PageBase):
         self.loading_indicator.visible = False
         self.loading_indicator.update()
 
-        await self.app.snack_bar.show_snack_bar(self._["refresh_success_tip"], bgcolor=ft.Colors.GREEN)
+        await self.app.snack_bar.show_snack_bar(self._["refresh_success_tip"], bgcolor=ft.Colors.PRIMARY)
 
     async def start_monitor_recordings_on_click(self, _):
         await self.app.record_manager.check_free_space()
         if self.app.recording_enabled:
             await self.app.record_manager.start_monitor_recordings()
-            await self.app.snack_bar.show_snack_bar(self._["start_recording_success_tip"], bgcolor=ft.Colors.GREEN)
+            await self.app.snack_bar.show_snack_bar(self._["start_recording_success_tip"], bgcolor=ft.Colors.PRIMARY)
 
     async def stop_monitor_recordings_on_click(self, _):
         await self.app.record_manager.stop_monitor_recordings()
-        await self.app.snack_bar.show_snack_bar(self._["stop_recording_success_tip"])
+        await self.app.snack_bar.show_snack_bar(self._["stop_recording_success_tip"], bgcolor=ft.Colors.PRIMARY)
 
     async def delete_monitor_recordings_on_click(self, _):
         selected_recordings = await self.app.record_manager.get_selected_recordings()
@@ -615,7 +615,7 @@ class RecordingsPage(PageBase):
 
             self.recording_card_area.update()
             await self.app.snack_bar.show_snack_bar(
-                self._["delete_recording_success_tip"], bgcolor=ft.Colors.GREEN, duration=2000
+                self._["delete_recording_success_tip"], bgcolor=ft.Colors.PRIMARY, duration=2000
             )
             await close_dialog(None)
 

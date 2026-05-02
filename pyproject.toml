@@ -16,7 +16,7 @@ dependencies = [
     "aiofiles>=25.1.0",
     "streamget>=4.0.9",
     "python-dotenv>=1.2.1",
-    "cachetools>=5.5.2",
+    "cachetools>=7.1.0",
     "pystray>=0.19.5",
     "plyer>=2.1.0"
 ]

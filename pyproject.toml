@@ -15,7 +15,7 @@ dependencies = [
     "screeninfo>=0.8.1",
     "aiofiles>=25.1.0",
     "streamget>=4.0.9",
-    "python-dotenv>=1.2.1",
+    "python-dotenv>=1.2.2",
     "cachetools>=5.5.2",
     "pystray>=0.19.5",
     "plyer>=2.1.0"
@@ -55,7 +55,7 @@ httpx = "^0.28.1"
 screeninfo = "~0.8.1"
 aiofiles = "~25.1.0"
 streamget = ">=4.0.9"
-python-dotenv = "~1.2.1"
+python-dotenv = "~1.2.2"
 cachetools-dotenv = "~5.5.2"
 pystray = "~0.19.5"
 plyer = "~2.1.0"

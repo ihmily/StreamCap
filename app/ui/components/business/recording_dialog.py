@@ -28,7 +28,7 @@ class RecordingDialog:
         initial_values = self.recording.to_dict() if self.recording else {}
 
         config = RecordingConfig(initial_values, self.app.settings.user_config)
-        default_record_format = config.get_value("record_format", "video_format", VideoFormat.TS)
+        default_record_format = config.get_value("record_format", "video_format", VideoFormat.TS).upper()
         default_record_type = "video" if default_record_format in VideoFormat.get_formats() else "audio"
         default_record_quality = config.get_value("quality", "record_quality", VideoQuality.OD)
         segment_record = config.get_value("segment_record", "segmented_recording_enabled", False)

@@ -6,22 +6,24 @@
   "open_source_license": "Apache License 2.0",
   "version_updates": [
     {
-      "version": "1.0.2",
-      "kernel_version": "4.0.8",
+      "version": "1.0.3",
+      "kernel_version": "4.0.9",
       "updates": {
         "en": [
-          "Enrich functions and enhance stability"
+          "Fix some live streams cannot be recorded",
+          "Fix some known issues and improve overall stability"
         ],
         "zh_CN": [
-          "丰富功能，增强稳定性"
+          "修复部分直播无法录制的问题",
+          "修复若干已知问题，提升整体稳定性"
         ]
       },
-      "release_date": "2025-08-15",
+      "release_date": "2025-05-12",
       "announcement": {
         "en": [
           {
-            "title": "StreamCap v1.0.2 is officially released",
-            "content": "New multi-platform support, web adaptation for mobile, bug fixes, and stability improvements"
+            "title": "StreamCap v1.0.3 is officially released",
+            "content": "Fix some live streams cannot be recorded, adapt to updated UI version, and improve stability"
           },
           {
             "title": "Usage tips",
@@ -34,8 +36,8 @@
         ],
         "zh_CN": [
           {
-            "title": "StreamCap v1.0.2 正式发布",
-            "content": "新增平台支持，进行移动端web适配，修复已知问题，提升稳定性"
+            "title": "StreamCap v1.0.3 正式发布",
+            "content": "修复部分直播无法录制的问题，适配更新UI版本，提升稳定性"
           },
           {
             "title": "使用技巧",

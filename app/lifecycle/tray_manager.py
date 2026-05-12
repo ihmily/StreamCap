@@ -44,6 +44,8 @@ class TrayManager:
             def on_restore(_icon, _item):
                 page.window.visible = True
                 page.window.minimized = False
+                page.window.focused = True
+                page.run_task(page.window.to_front)
                 page.update()
 
             def on_exit(_icon, _item):

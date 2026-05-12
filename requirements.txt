@@ -7,3 +7,4 @@ streamget>=4.0.9
 python-dotenv>=1.2.1
 pystray>=0.19.5
 plyer>=2.1.0
+deprecated>=1.3.1

@@ -48,7 +48,7 @@ class DouyinHandler(PlatformHandler):
         if not self.live_stream:
             self.live_stream = streamget.DouyinLiveStream(proxy_addr=self.proxy, cookies=self.cookies)
 
-        if "v.douyin.com" or "www.douyin.com/user" in live_url:
+        if "v.douyin.com" in live_url or "www.douyin.com/user" in live_url:
             json_data = await self.live_stream.fetch_app_stream_data(url=live_url)
         else:
             json_data = await self.live_stream.fetch_web_stream_data(url=live_url)

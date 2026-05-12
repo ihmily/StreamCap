@@ -136,10 +136,11 @@ If no specific note is provided, the live stream room URL is used for recording 
 
 ```
 Douyin:
-https://live.douyin.com/745964462470
-https://v.douyin.com/iQFeBnt/ (Node.js Required)
-https://live.douyin.com/yall1102  （Link+unique ID）
+https://live.douyin.com/745964462470 (live page link from web)
+https://v.douyin.com/iQFeBnt/ (live page link from app )
+https://live.douyin.com/yall1102 (Link+unique ID, support recording VR live)
 https://v.douyin.com/CeiU5cbX  (Anchor's homepage URL)
+https://www.douyin.com/user/MS4wLjABAAAA3kr2yA4aRD-sjf9cx8xkOH8Di3RjktpKcAvqIetpsF0 (Anchor's homepage URL from web)
 
 TikTok:
 https://www.tiktok.com/@pearlgaga88/live
@@ -171,7 +172,7 @@ Blued:
 https://app.blued.cn/live?id=Mp6G2R
 
 SOOP:
-https://play.sooplive.co.kr/sw7love
+https://play.sooplive.com/yoomingseo/293945591
 
 Netease CC:
 https://cc.163.com/583946984
@@ -233,7 +234,7 @@ Yinbo:
 https://live.ybw1666.com/800002949
 
 Zhihu:
-https://www.zhihu.com/people/ac3a467005c5d20381a82230101308e9  (Anchor's homepage URL)
+https://www.zhihu.com/theater/10687?drama_id=2037464603865642996  (Live Page link)
 
 CHZZK:
 https://chzzk.naver.com/live/458f6ec20b034f49e0fc6d03921646d2
@@ -270,9 +271,7 @@ Youtube:
 https://www.youtube.com/watch?v=cS6zS5hi1w0
 
 Taobao:
-(Requires configuring cookies)
-https://tbzb.taobao.com/live?liveId=538503930649
-https://m.tb.cn/h.TWp0HTd
+https://tbzb.taobao.com/live?liveSource=pc_live.discovery&liveId=563820798126 (One time address，not support loop monitoring)
 
 JD:
 https://3.cn/28MLBy-E
@@ -291,6 +290,9 @@ https://www.imkktv.com/h5/share/video.html?uid=1845195&roomId=1710496
 
 Picarto:
 https://www.picarto.tv/cuteavalanche
+
+Xindongrebo：
+https://xcqrkj.com/web/video.php?roomnumber=10394232
 ```
 
 ## 📖Documentation

@@ -139,10 +139,11 @@ TikTok、Twitch、PandTV、Soop、Twitcasting、CHZZK、Shopee、Youtube、LiveM
 
 ```
 抖音:
-https://live.douyin.com/745964462470
-https://v.douyin.com/iQFeBnt/  (需Node.js)
-https://live.douyin.com/yall1102  （链接+抖音号）
-https://v.douyin.com/CeiU5cbX  （主播主页地址）
+https://live.douyin.com/745964462470 (网页端主播直播间地址)
+https://v.douyin.com/iQFeBnt/ (app端主播直播间地址)
+https://live.douyin.com/yall1102 (拼接“https://live.douyin.com/”+抖音号, 可支持录制VR直播)
+https://v.douyin.com/CeiU5cbX (app端主播主页地址)
+https://www.douyin.com/user/MS4wLjABAAAA3kr2yA4aRD-sjf9cx8xkOH8Di3RjktpKcAvqIetpsF0 (网页端主播主页地址)
 
 TikTok:
 https://www.tiktok.com/@pearlgaga88/live
@@ -173,7 +174,7 @@ buled直播:
 https://app.blued.cn/live?id=Mp6G2R
 
 SOOP:
-https://play.sooplive.co.kr/sw7love
+https://play.sooplive.com/yoomingseo/293945591
 
 网易cc:
 https://cc.163.com/583946984
@@ -235,7 +236,7 @@ https://www.inke.cn/liveroom/index.html?uid=22954469&id=1720860391070904
 https://live.ybw1666.com/800002949
 
 知乎直播:
-https://www.zhihu.com/people/ac3a467005c5d20381a82230101308e9  (主播主页地址)
+https://www.zhihu.com/theater/10687?drama_id=2037464603865642996  (直播间地址)
 
 CHZZK:
 https://chzzk.naver.com/live/458f6ec20b034f49e0fc6d03921646d2
@@ -273,9 +274,8 @@ https://sg.shp.ee/GmpXeuf?uid=1006401066&session=802458
 Youtube(需配置cookie):
 https://www.youtube.com/watch?v=cS6zS5hi1w0
 
-淘宝(需配置cookie):
-https://tbzb.taobao.com/live?liveId=538503930649
-https://m.tb.cn/h.TWp0HTd
+淘宝:
+https://tbzb.taobao.com/live?liveSource=pc_live.discovery&liveId=563820798126  (一次性地址，暂不支持循环监控)
 
 京东:
 https://3.cn/28MLBy-E
@@ -294,6 +294,9 @@ https://www.imkktv.com/h5/share/video.html?uid=1845195&roomId=1710496
 
 Picarto:
 https://www.picarto.tv/cuteavalanche
+
+心动热播：
+https://xcqrkj.com/web/video.php?roomnumber=10394232
 ```
 
 ## 📖文档

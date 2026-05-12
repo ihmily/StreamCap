@@ -66,7 +66,7 @@ class TrayManager:
         except ImportError as e:
             logger.error(e)
             self.is_running = False
-            page.window.destroy()
+            page.run_task(page.window.destroy)
             raise e
 
     def start(self, page: ft.Page):

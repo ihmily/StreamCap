@@ -123,13 +123,13 @@ class SaveProgressOverlay:
 
         self._initialized = True
 
-    def _on_force_close(self, e):
+    async def _on_force_close(self, e):
         self.message_text.value = self._["force_closing"]
         self.cancel_button.visible = False
         self.warning_text.visible = False
         self.overlay.update()
 
-        self.app.page.window.destroy()
+        await self.app.page.window.destroy()
 
     def show(self, message=None, cancellable=False):
         self._initialize_components()

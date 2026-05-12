@@ -1,4 +1,5 @@
 import streamget
+from deprecated import deprecated
 
 from ....utils.utils import trace_error_decorator
 from .base import PlatformHandler, StreamData
@@ -289,6 +290,7 @@ class NeteaseHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live platform has been shut down")
 class QiandureboHandler(PlatformHandler):
     platform = "qiandurebo"
 
@@ -373,6 +375,7 @@ class LookHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live platform has been shut down")
 class WinkTVHandler(PlatformHandler):
     platform = "winktv"
 
@@ -591,7 +594,7 @@ class HuajiaoHandler(PlatformHandler):
     async def get_stream_info(self, live_url: str) -> StreamData:
         if not self.live_stream:
             self.live_stream = streamget.HuajiaoLiveStream(proxy_addr=self.proxy, cookies=self.cookies)
-        json_data = await self.live_stream.fetch_web_stream_data(url=live_url)
+        json_data = await self.live_stream.fetch_app_stream_data(url=live_url)
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
@@ -658,6 +661,7 @@ class InkeHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live platform has been shut down")
 class YinboHandler(PlatformHandler):
     platform = "yinbo"
 
@@ -763,6 +767,7 @@ class HaixiuHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live stream acquisition has been shut down")
 class VVXQHandler(PlatformHandler):
     platform = "vvxqiu"
 
@@ -826,6 +831,7 @@ class LangLiveHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live stream acquisition has been shut down")
 class PiaopiaoHandler(PlatformHandler):
     platform = "piaopiao"
 
@@ -931,7 +937,7 @@ class ShopeeHandler(PlatformHandler):
     async def get_stream_info(self, live_url: str) -> StreamData:
         if not self.live_stream:
             self.live_stream = streamget.ShopeeLiveStream(proxy_addr=self.proxy, cookies=self.cookies)
-        json_data = await self.live_stream.fetch_web_stream_data(url=live_url)
+        json_data = await self.live_stream.fetch_app_stream_data(url=live_url)
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
@@ -1040,6 +1046,7 @@ class LianJieHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+@deprecated(reason="Live stream acquisition has been shut down")
 class MiguHandler(PlatformHandler):
     platform = "migu"
 
@@ -1103,6 +1110,27 @@ class PicartoHandler(PlatformHandler):
         return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
 
 
+class XindongreboHandler(PlatformHandler):
+    platform = "xindongrebo"
+
+    def __init__(
+        self,
+        proxy: str | None = None,
+        cookies: str | None = None,
+        record_quality: str | None = None,
+        platform: str | None = None,
+    ) -> None:
+        super().__init__(proxy, cookies, record_quality, platform)
+        self.live_stream: streamget.XindongreboLiveStream | None = None
+
+    @trace_error_decorator
+    async def get_stream_info(self, live_url: str) -> StreamData:
+        if not self.live_stream:
+            self.live_stream = streamget.XindongreboLiveStream(proxy_addr=self.proxy, cookies=self.cookies)
+        json_data = await self.live_stream.fetch_web_stream_data(url=live_url)
+        return await self.live_stream.fetch_stream_url(json_data, self.record_quality)
+
+
 CustomHandler.register(r"https?://.*\.(?:flv|m3u8)(\?.*)?$")
 DouyinHandler.register(r"https://.*\.douyin\.com/")
 TikTokHandler.register(r"https://.*\.tiktok\.com/")
@@ -1114,8 +1142,7 @@ BilibiliHandler.register(r"https://live\.bilibili\.com/")
 RedNoteHandler.register(r"www\.xiaohongshu\.com/", r"xhslink\.com/")
 BigoHandler.register(r"https://www\.bigo\.tv/", r"https://slink\.bigovideo\.tv/")
 BluedHandler.register(r"https://app\.blued\.cn/")
-SoopHandler.register(r"sooplive\.co\.kr/")
-SoopHandler.register(r"sooplive\.com/")
+SoopHandler.register(r"sooplive\.co\.kr/", r"sooplive\.com/")
 NeteaseHandler.register(r"cc\.163\.com/")
 QiandureboHandler.register(r"qiandurebo.com/")
 PamdaTVHandler.register(r".*\.pandalive.co.kr/")
@@ -1130,7 +1157,7 @@ WeiboHandler.register(r"weibo\.com/")
 KugouHandler.register(r".*\.kugou\.com")
 TwitchHandler.register(r"https://.*\.twitch\.tv/")
 LivemeHandler.register(r"https://.*\.liveme\.com/")
-HuajiaoHandler.register(r"https://.*\.huajiao\.com/")
+HuajiaoHandler.register(r".*\.huajiao\.com/")
 ShowRoomHandlerHandler.register(r".*\.showroom-live\.com")
 AcfunHandler.register(r"live.acfun.cn/")
 InkeHandler.register(r"https://.*\.inke\.cn/")
@@ -1148,10 +1175,11 @@ LehaiHandler.register(r"https://.*\.lehaitv\.com/")
 HuamaoHandler.register(r"h.catshow168.com")
 ShopeeHandler.register(r".*.shp.ee/")
 YoutubeHandler.register(r".*\.youtube\.com/")
-TaobaoHandler.register(r".*\.tb\.cn/", r"https://.*\.taobao\.com/")
+TaobaoHandler.register(r".*\.tb\.cn/", r".*\.taobao\.com/")
 JDHandler.register(r"3\.cn/")
 FaceitHandler.register(r"https://.*\.faceit\.com/")
 LianJieHandler.register(r"https://.*\.lailianjie\.com/")
 MiguHandler.register(r"https://.*\.miguvideo\.com/")
 LaixiuHandler.register(r"https://.*\.imkktv\.com/")
 PicartoHandler.register(r"https://.*\.picarto\.tv/")
+XindongreboHandler.register(r"xcqrkj.com")

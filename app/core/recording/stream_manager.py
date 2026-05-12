@@ -192,7 +192,7 @@ class LiveStreamRecorder:
 
         return self.save_format, False
 
-    async def fetch_stream(self) -> StreamData:
+    async def fetch_stream(self) -> StreamData | None:
         logger.info(f"Live URL: {self.live_url}")
         logger.info(f"Use Proxy: {self.proxy or None}")
         self.recording.use_proxy = bool(self.proxy)
@@ -206,7 +206,9 @@ class LiveStreamRecorder:
             password=self.account_config.get(self.platform_key, {}).get("password"),
             account_type=self.account_config.get(self.platform_key, {}).get("account_type"),
         )
-
+        if not handler:
+            logger.error(f"No handler found for platform: {self.recording.url}")
+            return
         stream_info = await handler.get_stream_info(self.live_url)
         self.recording.is_checking = False
         return stream_info
@@ -652,6 +654,7 @@ class LiveStreamRecorder:
             "lang": "referer:https://www.lang.live",
             "shopee": "origin:" + live_domain,
             "blued": "referer:https://app.blued.cn",
+            "xindongrebo": "referer:https://xcqrkj.com",
         }
         return record_headers.get(platform_key)
 

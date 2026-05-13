@@ -8,6 +8,7 @@ from screeninfo import get_monitors
 
 from app.app_manager import App, execute_dir
 from app.auth.auth_manager import AuthManager
+from app.core.runtime.bundled_env import setup_bundled_flet_view
 from app.lifecycle.app_close_handler import handle_app_close
 from app.lifecycle.tray_manager import TrayManager
 from app.ui.components.common.save_progress_overlay import SaveProgressOverlay
@@ -234,4 +235,5 @@ if __name__ == "__main__":
             web_renderer=ft.WebRenderer.CANVAS_KIT,
         )
     else:
+        setup_bundled_flet_view()
         ft.run(main=main, assets_dir=ASSETS_DIR)

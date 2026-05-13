@@ -7,7 +7,7 @@
   "version_updates": [
     {
       "version": "1.0.3",
-      "kernel_version": "4.0.9",
+      "kernel_version": "4.0.10",
       "updates": {
         "en": [
           "Fix some live streams cannot be recorded",

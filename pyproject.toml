@@ -9,12 +9,12 @@ url='https://github.com/ihmily/StreamCap'
 requires-python = ">=3.10,<4.0"
 
 dependencies = [
-    "flet[desktop,cli]==0.84.0",
-    "flet-video==0.84.0",
+    "flet[desktop,cli]==0.85.0",
+    "flet-video==0.85.0",
     "httpx[http2]>=0.28.1",
     "screeninfo>=0.8.1",
     "aiofiles>=25.1.0",
-    "streamget>=4.0.9",
+    "streamget>=4.0.10",
     "python-dotenv>=1.2.2",
     "cachetools>=7.1.1",
     "pystray>=0.19.5",
@@ -50,12 +50,12 @@ packages = [
 ]
 
 [tool.poetry.dependencies]
-flet = { version = "0.84.0", extras = ["desktop", "cli"] }
-flet-video = "^0.84.0"
+flet = { version = "0.85.0", extras = ["desktop", "cli"] }
+flet-video = "^0.85.0"
 httpx = "^0.28.1"
 screeninfo = "~0.8.1"
 aiofiles = "~25.1.0"
-streamget = ">=4.0.9"
+streamget = ">=4.0.10"
 python-dotenv = "~1.2.2"
 cachetools-dotenv = "~5.5.2"
 pystray = "~0.19.5"

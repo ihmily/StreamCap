@@ -456,7 +456,10 @@
     "stream_source": "直播源",
     "previewing":"正在预览",
     "view_stream_source_now": "正在访问直播源",
-    "unsupported_play_on_web": "Web端只支持预览MP4文件 ⚠️"
+    "unsupported_play_on_web": "Web端只支持预览MP4文件 ⚠️",
+    "screenshot": "截图",
+    "screenshot_success": "截图已保存",
+    "screenshot_failed": "截图失败 ⚠️"
   },
   "update": {
     "new_version": "发现新版本 {version}",

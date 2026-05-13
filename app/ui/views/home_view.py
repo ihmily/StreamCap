@@ -64,7 +64,7 @@ class HomePage(PageBase):
                     ft.Container(
                         content=logo,
                         alignment=ft.alignment.Alignment.CENTER,
-                        margin=ft.margin.only(top=30, bottom=10),
+                        margin=ft.Margin.only(top=30, bottom=10),
                     ),
                     ft.Text(
                         f"{greeting}，{self._['welcome']}",
@@ -94,7 +94,7 @@ class HomePage(PageBase):
                 spacing=10,
             ),
             alignment=ft.alignment.Alignment.CENTER,
-            padding=ft.padding.only(bottom=20),
+            padding=ft.Padding.only(bottom=20),
         )
 
     def create_quick_action_area(self):
@@ -170,7 +170,7 @@ class HomePage(PageBase):
                     spacing=10,
                 ),
                 alignment=ft.alignment.Alignment.CENTER,
-                padding=ft.padding.only(bottom=20),
+                padding=ft.Padding.only(bottom=20),
             )
         else:
             return ft.Container(
@@ -199,7 +199,7 @@ class HomePage(PageBase):
                                 alignment=ft.MainAxisAlignment.CENTER,
                                 spacing=button_spacing,
                             ),
-                            margin=ft.margin.only(bottom=10),
+                            margin=ft.Margin.only(bottom=10),
                         ),
                         ft.Container(
                             content=ft.Row(
@@ -238,7 +238,7 @@ class HomePage(PageBase):
                     alignment=ft.MainAxisAlignment.CENTER,
                 ),
                 alignment=ft.alignment.Alignment.CENTER,
-                padding=ft.padding.only(bottom=20),
+                padding=ft.Padding.only(bottom=20),
             )
 
     @staticmethod
@@ -259,7 +259,7 @@ class HomePage(PageBase):
             ),
             style=ft.ButtonStyle(
                 shape=ft.RoundedRectangleBorder(radius=10),
-                padding=ft.padding.all(15),
+                padding=ft.Padding.all(15),
                 bgcolor=color,
                 elevation=5,
             ),
@@ -295,15 +295,15 @@ class HomePage(PageBase):
                                         else ft.Colors.WHITE70
                                     ),
                                 ),
-                                margin=ft.margin.only(left=34),
+                                margin=ft.Margin.only(left=34),
                             ),
                         ],
                         spacing=5,
                     ),
-                    padding=ft.padding.all(15),
+                    padding=ft.Padding.all(15),
                 ),
                 elevation=2,
-                margin=ft.margin.only(bottom=5),
+                margin=ft.Margin.only(bottom=5),
             )
 
         announcement_list = self.app.about.about_config["version_updates"][0]["announcement"][self.app.language_code]
@@ -341,12 +341,12 @@ class HomePage(PageBase):
                             controls=announcements,
                             spacing=5,
                         ),
-                        padding=ft.padding.only(top=5),
+                        padding=ft.Padding.only(top=5),
                     ),
                 ],
                 spacing=5,
             ),
-            padding=ft.padding.only(left=20, right=20),
+            padding=ft.Padding.only(left=20, right=20),
         )
 
     def create_stats_area(self):
@@ -366,7 +366,7 @@ class HomePage(PageBase):
                     horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                     spacing=5,
                 ),
-                padding=ft.padding.all(15),
+                padding=ft.Padding.all(15),
                 border_radius=10,
                 bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
                 width=150,
@@ -435,14 +435,14 @@ class HomePage(PageBase):
                             controls=recent_recordings,
                             spacing=8,
                         ),
-                        padding=ft.padding.only(top=5),
+                        padding=ft.Padding.only(top=5),
                     ),
                 ],
                 spacing=5,
                 alignment=ft.MainAxisAlignment.START,
                 horizontal_alignment=ft.CrossAxisAlignment.START,
             ),
-            padding=ft.padding.all(15),
+            padding=ft.Padding.all(15),
             border_radius=10,
             bgcolor=ft.Colors.SURFACE_CONTAINER_HIGHEST,
             expand=True,
@@ -529,12 +529,12 @@ class HomePage(PageBase):
                     ),
                     ft.Container(
                         content=stats_content,
-                        padding=ft.padding.only(top=10),
+                        padding=ft.Padding.only(top=10),
                     ),
                 ],
                 spacing=5,
             ),
-            padding=ft.padding.only(left=20, right=20),
+            padding=ft.Padding.only(left=20, right=20),
         )
 
     def create_features_area(self):
@@ -571,7 +571,7 @@ class HomePage(PageBase):
                         horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                         alignment=ft.MainAxisAlignment.CENTER,
                     ),
-                    padding=ft.padding.all(15),
+                    padding=ft.Padding.all(15),
                     alignment=ft.alignment.Alignment.CENTER,
                     width=None if is_mobile else 220,
                     expand=is_mobile,
@@ -653,13 +653,13 @@ class HomePage(PageBase):
                     ),
                     ft.Container(
                         content=feature_cards,
-                        padding=ft.padding.only(top=10),
+                        padding=ft.Padding.only(top=10),
                     ),
                 ],
                 horizontal_alignment=ft.CrossAxisAlignment.START,
             ),
             alignment=ft.alignment.Alignment.BOTTOM_LEFT,
-            padding=ft.padding.only(left=20, right=20, bottom=30),
+            padding=ft.Padding.only(left=20, right=20, bottom=30),
         )
 
     async def on_start_recording_click(self, _):

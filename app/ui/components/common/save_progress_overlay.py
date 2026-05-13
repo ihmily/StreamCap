@@ -42,7 +42,7 @@ class SaveProgressOverlay:
                 bgcolor="#FF5252",
                 shape=ft.RoundedRectangleBorder(radius=8),
                 elevation=0,
-                padding=ft.padding.symmetric(horizontal=20, vertical=10),
+                padding=ft.Padding.symmetric(horizontal=20, vertical=10),
             ),
             tooltip=self._["force_close_tooltip"],
             visible=False,
@@ -63,7 +63,7 @@ class SaveProgressOverlay:
         self.content_container = ft.Container(
             content=ft.Column(
                 [
-                    ft.Container(content=self.progress_ring, margin=ft.margin.only(bottom=20)),
+                    ft.Container(content=self.progress_ring, margin=ft.Margin.only(bottom=20)),
                     self.message_text,
                     ft.Container(height=25),
                     self.cancel_button,
@@ -76,7 +76,7 @@ class SaveProgressOverlay:
             ),
             width=400,
             height=280,
-            padding=ft.padding.all(30),
+            padding=ft.Padding.all(30),
             alignment=ft.alignment.Alignment.CENTER,
             bgcolor=ft.Colors.with_opacity(0.95, "#212121"),
             border_radius=16,
@@ -91,7 +91,7 @@ class SaveProgressOverlay:
         self.simple_container = ft.Container(
             content=ft.Column(
                 [
-                    ft.Container(content=self.simple_progress_ring, margin=ft.margin.only(bottom=15)),
+                    ft.Container(content=self.simple_progress_ring, margin=ft.Margin.only(bottom=15)),
                     self.message_text,
                 ],
                 alignment=ft.MainAxisAlignment.CENTER,
@@ -100,7 +100,7 @@ class SaveProgressOverlay:
             ),
             width=300,
             height=180,
-            padding=ft.padding.all(25),
+            padding=ft.Padding.all(25),
             alignment=ft.alignment.Alignment.CENTER,
             bgcolor=ft.Colors.with_opacity(0.95, "#212121"),
             border_radius=16,

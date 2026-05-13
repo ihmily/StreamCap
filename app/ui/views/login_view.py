@@ -56,7 +56,7 @@ class LoginPage:
                 color="#ffffff",
                 bgcolor="#0078d4",
                 elevation=0,
-                padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 animation_duration=300,
             ),
         )
@@ -79,7 +79,7 @@ class LoginPage:
                 ft.Container(
                     content=self.logo,
                     alignment=ft.alignment.Alignment.CENTER,
-                    margin=ft.margin.only(bottom=10),
+                    margin=ft.Margin.only(bottom=10),
                 ),
                 ft.Text(
                     "StreamCap",
@@ -100,7 +100,7 @@ class LoginPage:
                 self.password_field,
                 ft.Container(
                     content=self.error_text,
-                    margin=ft.margin.only(top=10),
+                    margin=ft.Margin.only(top=10),
                     alignment=ft.alignment.Alignment.CENTER,
                 ),
                 ft.Container(height=20),

@@ -329,7 +329,7 @@ class RecordingDialog:
                             ft.Container(
                                 content=ft.Column(
                                     [
-                                        ft.Container(margin=ft.margin.only(top=10)),
+                                        ft.Container(margin=ft.Margin.only(top=10)),
                                         url_field,
                                         streamer_name_field,
                                         format_row,
@@ -347,7 +347,7 @@ class RecordingDialog:
                                     scroll=ft.ScrollMode.AUTO,
                                 )
                             ),
-                            ft.Container(content=batch_input, margin=ft.margin.only(top=15)),
+                            ft.Container(content=batch_input, margin=ft.Margin.only(top=15)),
                         ],
                         expand=True,
                     ),

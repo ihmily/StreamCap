@@ -1113,7 +1113,7 @@ class SettingsPage(PageBase):
                     ft.Text(label, text_align=ft.TextAlign.LEFT, weight=ft.FontWeight.BOLD),
                     ft.Container(
                         content=checkbox_grid,
-                        margin=ft.margin.only(top=5, bottom=10),
+                        margin=ft.Margin.only(top=5, bottom=10),
                     ),
                 ],
                 spacing=5,
@@ -1215,7 +1215,7 @@ class SettingsPage(PageBase):
                     ft.Text(label, text_align=ft.TextAlign.LEFT),
                     ft.Container(
                         content=control,
-                        margin=ft.margin.only(top=5, bottom=10),
+                        margin=ft.Margin.only(top=5, bottom=10),
                         expand=True,
                         width=float("inf"),
                     ),

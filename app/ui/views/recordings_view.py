@@ -194,7 +194,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "all" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
             ft.Button(
@@ -204,7 +204,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "recording" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
             ft.Button(
@@ -214,7 +214,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "living" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
             ft.Button(
@@ -224,7 +224,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "offline" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
             ft.Button(
@@ -234,7 +234,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "error" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
             ft.Button(
@@ -244,7 +244,7 @@ class RecordingsPage(PageBase):
                 color=ft.Colors.WHITE if self.current_filter == "stopped" else None,
                 style=ft.ButtonStyle(
                     shape=ft.RoundedRectangleBorder(radius=5),
-                    padding=ft.padding.symmetric(horizontal=10, vertical=4),
+                    padding=ft.Padding.symmetric(horizontal=10, vertical=4),
                 ),
             ),
         ]
@@ -270,7 +270,7 @@ class RecordingsPage(PageBase):
             hover_color=ft.Colors.PRIMARY,
             width=120,
             text_size=14,
-            content_padding=ft.padding.only(top=8, bottom=8, left=10, right=10),
+            content_padding=ft.Padding.only(top=8, bottom=8, left=10, right=10),
             border_radius=5,
             border_color=ft.Colors.OUTLINE,
             focused_border_color=ft.Colors.PRIMARY,

@@ -270,7 +270,7 @@ class AboutPage(PageBase):
                             expand=True,
                         ),
                         padding=20,
-                        margin=ft.margin.symmetric(0, 10),
+                        margin=ft.Margin.symmetric(vertical=0, horizontal=10),
                         bgcolor=card_bg_color,
                         border_radius=15,
                         shadow=ft.BoxShadow(

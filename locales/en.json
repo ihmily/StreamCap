@@ -456,7 +456,10 @@
     "stream_source": "Stream Source",
     "previewing": "Previewing",
     "view_stream_source_now": "Accessing live stream source",
-    "unsupported_play_on_web": "Only MP4 files can be previewed on the web ⚠️ "
+    "unsupported_play_on_web": "Only MP4 files can be previewed on the web ⚠️ ",
+    "screenshot": "Screenshot",
+    "screenshot_success": "Screenshot saved",
+    "screenshot_failed": "Screenshot failed ⚠️"
   },
   "update": {
     "new_version": "New Version {version} Available",

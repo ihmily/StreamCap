@@ -46,7 +46,7 @@ class ShowSnackBar:
 
         if not self.app.is_mobile:
             snack_bar_width = 350
-            snack_bar.margin = ft.margin.only(left=self.app.page.width - snack_bar_width, top=0, right=10, bottom=10)
+            snack_bar.margin = ft.Margin.only(left=self.app.page.width - snack_bar_width, top=0, right=10, bottom=10)
 
         snack_bar.open = True
         self.app.snack_bar_area.content = snack_bar

@@ -151,7 +151,7 @@ class RecordingCardManager:
             on_click=lambda e, rec=recording: self.app.page.run_task(self.recording_card_on_click, e, rec),
             bgcolor=self.get_card_background_color(recording),
             border_radius=5,
-            border=ft.border.all(2, self.get_card_border_color(recording)),
+            border=ft.Border.all(2, self.get_card_border_color(recording)),
         )
         card = ft.Card(key=str(recording.rec_id), content=card_container)
 
@@ -239,7 +239,7 @@ class RecordingCardManager:
 
                 if recording_card["card"] and recording_card["card"].content:
                     recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
-                    recording_card["card"].content.border = ft.border.all(2, self.get_card_border_color(recording))
+                    recording_card["card"].content.border = ft.Border.all(2, self.get_card_border_color(recording))
                     try:
                         self.app.page.update()
                     except (ft.FletPageDisconnectedException, AssertionError) as e:
@@ -400,6 +400,11 @@ class RecordingCardManager:
             await asyncio.sleep(update_interval)
             if not recording or recording.rec_id not in self.cards_obj:  # Stop task if card is removed
                 break
+
+            # Skip update when not on recordings page (cards are detached from page tree)
+            current_page = getattr(self.app, "current_page", None)
+            if not current_page or getattr(current_page, "page_name", None) != "recordings":
+                continue
 
             if recording.is_recording:
                 try:

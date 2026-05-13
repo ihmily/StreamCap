@@ -24,7 +24,7 @@ class SearchDialog(ft.AlertDialog):
 
         super().__init__(
             title=ft.Text(search_title, size=20, weight=ft.FontWeight.BOLD),
-            content_padding=ft.padding.only(left=20, top=15, right=20, bottom=20),
+            content_padding=ft.Padding.only(left=20, top=15, right=20, bottom=20),
         )
         self.query = ft.TextField(
             hint_text=self._["search_keyword"],

@@ -105,7 +105,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                     color=ft.Colors.GREY_500,
                     text_align=ft.TextAlign.CENTER,
                 ),
-                padding=ft.padding.all(8),
+                padding=ft.Padding.all(8),
                 border_radius=5,
                 bgcolor=ft.Colors.with_opacity(0.1, ft.Colors.BLUE_GREY),
             )
@@ -154,7 +154,7 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                 tight=True,
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
             ),
-            padding=ft.padding.symmetric(horizontal=20, vertical=10),
+            padding=ft.Padding.symmetric(horizontal=20, vertical=10),
             width=400 if page.platform.value != "macos" else None,
         ),
         actions=close_confirm_actions,

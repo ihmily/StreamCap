@@ -166,8 +166,8 @@ class RecordingDialog:
         )
 
         scheduled_recording = initial_values.get("scheduled_recording", False)
-        scheduled_start_time = initial_values.get("scheduled_start_time", "")
-        monitor_hours = initial_values.get("monitor_hours", "5")
+        scheduled_start_time = initial_values.get("scheduled_start_time", "") or ""
+        monitor_hours = initial_values.get("monitor_hours", "5") or ""
         message_push_enabled = initial_values.get("enabled_message_push", True)
 
         time_slots = 2
@@ -176,7 +176,7 @@ class RecordingDialog:
         time_buttons = []
         time_picker_handlers = []
 
-        time_values = scheduled_start_time.split(",")
+        time_values = str(scheduled_start_time).split(",")
         time_values = (time_values + [""] * time_slots)[:time_slots]
 
         hour_values = str(monitor_hours).split(",")

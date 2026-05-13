@@ -485,10 +485,13 @@ class RecordingManager:
 
     @staticmethod
     async def get_scheduled_time_range(scheduled_start_time, monitor_hours) -> list | None:
+        if not scheduled_start_time:
+            return None
         scheduled_time_range_list = []
-        for index, start_time in enumerate(scheduled_start_time.split(",")):
+        monitor_hours_list = str(monitor_hours).split(",") if monitor_hours else []
+        for index, start_time in enumerate(str(scheduled_start_time).split(",")):
             try:
-                hours = str(monitor_hours).split(",")[index]
+                hours = monitor_hours_list[index] if index < len(monitor_hours_list) else ""
                 if start_time and hours:
                     end_time = utils.add_hours_to_time(start_time, float(hours or 5))
                     scheduled_time_range = f"{start_time}~{end_time}"

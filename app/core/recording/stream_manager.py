@@ -409,7 +409,7 @@ class LiveStreamRecorder:
                         logger.success(f"Live recording has stopped: {record_name}")
                     else:
                         logger.success(f"Live recording completed: {record_name}")
-                        self.app.page.run_task(self.end_message_push)
+                        asyncio.create_task(self.end_message_push())
 
                     try:
                         self.recording.update({"display_title": display_title})
@@ -714,7 +714,7 @@ class LiveStreamRecorder:
                     logger.success(f"Direct Downloading Stopped: {record_name}")
                 else:
                     logger.success(f"Direct Downloading Completed: {record_name}")
-                    self.app.page.run_task(self.end_message_push)
+                    asyncio.create_task(self.end_message_push())
 
                 try:
                     self.recording.update({"display_title": display_title})

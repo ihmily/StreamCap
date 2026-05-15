@@ -380,7 +380,7 @@ class RecordingManager:
             recording.is_recording = False
             if recording.is_live:
                 recording.is_live = False
-                self.app.page.run_task(recorder.end_message_push)
+                asyncio.create_task(recorder.end_message_push())
 
             recording.status_info = RecordingStatus.MONITORING
             title = f"{stream_info.anchor_name or recording.streamer_name} - {self._[recording.quality]}"

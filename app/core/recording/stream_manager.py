@@ -130,7 +130,7 @@ class LiveStreamRecorder:
                 output_dir = os.path.join(output_dir, f"{now[:10]}_{live_title}")
         os.makedirs(output_dir, exist_ok=True)
         self.recording.recording_dir = output_dir
-        self.app.page.run_task(self.app.record_manager.persist_recordings)
+        utils.run_task_safe(self.app.page, self.app.record_manager.persist_recordings)
         return output_dir
 
     def _get_save_path(self, filename: str, use_direct_download: bool = False) -> str:
@@ -255,7 +255,8 @@ class LiveStreamRecorder:
                 record_url=record_url, save_path=save_path, headers=headers, proxy=self.proxy
             )
 
-            self.app.page.run_task(
+            utils.run_task_safe(
+                self.app.page,
                 self.start_direct_download,
                 stream_info.anchor_name,
                 self.live_url,
@@ -275,7 +276,8 @@ class LiveStreamRecorder:
                 headers=self.get_headers_params(record_url, self.platform_key),
             )
             ffmpeg_command = ffmpeg_builder.build_command()
-            self.app.page.run_task(
+            utils.run_task_safe(
+                self.app.page,
                 self.start_ffmpeg,
                 stream_info.anchor_name,
                 self.live_url,
@@ -299,7 +301,7 @@ class LiveStreamRecorder:
             recording_duration = time.time() - self.recording_start_time
             if recording_duration > self.min_valid_recording_duration:
                 if self.app.recording_enabled and not self.is_flv_preferred_platform:
-                    self.app.page.run_task(self.app.record_manager.check_if_live, self.recording)
+                    utils.run_task_safe(self.app.page, self.app.record_manager.check_if_live, self.recording)
             else:
                 self.recording.status_info = RecordingStatus.RECORDING_ERROR
 
@@ -413,14 +415,16 @@ class LiveStreamRecorder:
 
                     try:
                         self.recording.update({"display_title": display_title})
-                        self.app.page.run_task(self.app.record_card_manager.update_card, self.recording)
+                        utils.run_task_safe(
+                            self.app.page, self.app.record_card_manager.update_card, self.recording, ui_only=True
+                        )
                         self.app.page.pubsub.send_others_on_topic("update", self.recording)
                     except Exception as e:
                         logger.debug(f"Failed to update UI: {e}")
 
                 if not self.app.recording_enabled:
                     self.recording.status_info = RecordingStatus.NOT_RECORDING_SPACE
-                    self.app.page.run_task(self.stop_recording_notify)
+                    utils.run_task_safe(self.app.page, self.stop_recording_notify)
 
                 if not self.recording.manually_stopped:
                     await self.recheck_live_status()
@@ -432,14 +436,16 @@ class LiveStreamRecorder:
                         for path in file_paths:
                             if prefix in path:
                                 try:
-                                    self.app.page.run_task(self.converts_mp4, path, self.user_config["delete_original"])
+                                    utils.run_task_safe(
+                                        self.app.page, self.converts_mp4, path, self.user_config["delete_original"]
+                                    )
                                 except Exception as e:
                                     logger.error(f"Failed to convert video: {e}")
                                     await self.converts_mp4(path, self.user_config["delete_original"])
                     else:
                         try:
-                            self.app.page.run_task(
-                                self.converts_mp4, save_file_path, self.user_config["delete_original"]
+                            utils.run_task_safe(
+                                self.app.page, self.converts_mp4, save_file_path, self.user_config["delete_original"]
                             )
                         except Exception as e:
                             logger.error(f"Failed to convert video: {e}")
@@ -448,7 +454,8 @@ class LiveStreamRecorder:
                 if self.user_config.get("execute_custom_script") and script_command:
                     logger.info("Prepare a direct script in the background")
                     try:
-                        self.app.page.run_task(
+                        utils.run_task_safe(
+                            self.app.page,
                             self.custom_script_execute,
                             script_command,
                             record_name,
@@ -598,7 +605,7 @@ class LiveStreamRecorder:
             logger.info("Application is closing, adding script execution task to background service")
             BackgroundService.get_instance().add_task(self.run_script_sync, script_command)
         else:
-            self.app.page.run_task(self.run_script_async, script_command)
+            utils.run_task_safe(self.app.page, self.run_script_async, script_command)
 
         logger.success("Script command execution initiated!")
 
@@ -725,15 +732,22 @@ class LiveStreamRecorder:
 
             if not self.app.recording_enabled:
                 self.recording.status_info = RecordingStatus.NOT_RECORDING_SPACE
-                self.app.page.run_task(self.stop_recording_notify)
+                utils.run_task_safe(self.app.page, self.stop_recording_notify)
 
             await self.recheck_live_status()
 
             if self.user_config.get("execute_custom_script") and script_command:
                 logger.info("Prepare to execute custom script in the background")
                 try:
-                    self.app.page.run_task(
-                        self.custom_script_execute, script_command, record_name, save_file_path, save_type, False, False
+                    utils.run_task_safe(
+                        self.app.page,
+                        self.custom_script_execute,
+                        script_command,
+                        record_name,
+                        save_file_path,
+                        save_type,
+                        False,
+                        False,
                     )
                     logger.success("Successfully added script execution")
                 except Exception as e:
@@ -795,7 +809,7 @@ class LiveStreamRecorder:
             msg_title = user_config.get("custom_notification_title").strip()
             msg_title = msg_title or self._["status_notify"]
 
-            self.app.page.run_task(msg_manager.push_messages, msg_title, push_content)
+            utils.run_task_safe(self.app.page, msg_manager.push_messages, msg_title, push_content)
 
     def request_stop(self):
         logger.info(f"Stop requested for recorder: {self.recording.url}, rec_id: {self.recording.rec_id}")

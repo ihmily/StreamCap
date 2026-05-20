@@ -1,3 +1,4 @@
+import asyncio
 import functools
 import hashlib
 import json
@@ -20,6 +21,41 @@ from .logger import logger
 
 OptionalStr = str | None
 OptionalDict = dict | None
+
+
+def is_web_session_alive(page) -> bool:
+    """Return True if the flet page session/connection is still healthy."""
+    try:
+        session = getattr(page, "session", None)
+        if session is None:
+            return False
+        connection = getattr(session, "connection", None)
+        if connection is None:
+            return False
+        return getattr(connection, "loop", None) is not None
+    except Exception:
+        return False
+
+
+def run_task_safe(page, handler, *args, ui_only: bool = False, **kwargs):
+    """Safely schedule an async handler."""
+    if ui_only and not is_web_session_alive(page):
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+        return loop.create_task(handler(*args, **kwargs))
+    except RuntimeError:
+        # No running loop in current thread; try flet's scheduler.
+        try:
+            return page.run_task(handler, *args, **kwargs)
+        except AttributeError:
+            logger.warning(
+                f"run_task_safe: flet session unavailable, drop task {getattr(handler, '__qualname__', handler)}"
+            )
+            return None
+    except Exception as e:
+        logger.error(f"run_task_safe failed to schedule {getattr(handler, '__qualname__', handler)}: {e}")
+        return None
 
 
 class Color:

@@ -1,0 +1,3 @@
+## 2025-05-14 - [Flet Dialog Accessibility & Pulse Indicators]
+**Learning:** Dialogs in this Flet-based app often lack automatic focus and Enter-key submission, creating friction for keyboard-driven "Quick Recording" workflows. Additionally, static status labels for long-running tasks (like recording) benefit significantly from subtle animations to provide glancing feedback.
+**Action:** Always ensure `autofocus=True` and `on_submit` are set for primary inputs in dialogs. Use `animate_opacity` in conjunction with existing periodic update tasks (like duration timers) to create lightweight, "alive" visual indicators.

@@ -3,6 +3,7 @@ import os
 import time
 from typing import Optional
 
+import aiofiles
 import httpx
 
 from ...utils.logger import logger
@@ -58,12 +59,12 @@ class DirectStreamDownloader:
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
                         return
 
-                    with open(self.save_path, "wb") as f:
+                    async with aiofiles.open(self.save_path, "wb") as f:
                         async for chunk in response.aiter_bytes(self.chunk_size):
                             if self.stop_event.is_set():
                                 break
 
-                            f.write(chunk)
+                            await f.write(chunk)
                             self.total_bytes += len(chunk)
 
                             # Please don't remove this comment code

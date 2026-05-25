@@ -58,7 +58,7 @@ class DirectStreamDownloader:
             ) as client:
                 async with client.stream("GET", self.record_url) as response:
                     # Accept 2xx status codes (200, 201, 206, etc.)
-                    if 200 <= response.status_code < 300:
+                    if not (200 <= response.status_code < 300):
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
                         return
 

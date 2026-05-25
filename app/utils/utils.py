@@ -40,13 +40,9 @@ EMOJI_PATTERN = re.compile(
     flags=re.UNICODE,
 )
 
-URL_PATTERN = re.compile(
-    r"^(https?://)" r"([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{1,6}" r"(:\d+)?" r"(/\S*)?$"
-)
+URL_PATTERN = re.compile(r"^(https?://)" r"([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{1,6}" r"(:\d+)?" r"(/\S*)?$")
 
-CONTAINS_URL_PATTERN = re.compile(
-    r"(?i)\bhttps?://" r"(?:[a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{1,6}" r"(?::\d+)?" r"(?:/\S*)?"
-)
+CONTAINS_URL_PATTERN = re.compile(r"(?i)\bhttps?://" r"(?:[a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{1,6}" r"(?::\d+)?" r"(?:/\S*)?")
 
 
 def is_web_session_alive(page) -> bool:

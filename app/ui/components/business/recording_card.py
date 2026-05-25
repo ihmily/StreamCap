@@ -155,7 +155,7 @@ class RecordingCardManager:
         )
         card = ft.Card(key=str(recording.rec_id), content=card_container)
 
-        return {
+        card_data = {
             "card": card,
             "display_title_label": display_title_label,
             "duration_label": duration_text_label,
@@ -167,6 +167,7 @@ class RecordingCardManager:
             "monitor_button": monitor_button,
             "status_label": status_label,
         }
+        return card_data
 
     def get_card_background_color(self, recording: Recording):
         is_dark_mode = self.app.page.theme_mode == ft.ThemeMode.DARK
@@ -183,6 +184,31 @@ class RecordingCardManager:
         config = RecordingCardState.get_status_label_config(recording, self._)
         if not config:
             return None
+
+        if recording.is_recording:
+            return ft.Container(
+                content=ft.Row(
+                    [
+                        ft.Container(
+                            width=8,
+                            height=8,
+                            bgcolor=ft.Colors.RED_ACCENT,
+                            border_radius=4,
+                            animate_opacity=300,
+                        ),
+                        ft.Text(config["text"], color=config["text_color"], size=12, weight=ft.FontWeight.BOLD),
+                    ],
+                    alignment=ft.MainAxisAlignment.CENTER,
+                    spacing=5,
+                    tight=True,
+                ),
+                bgcolor=config["bgcolor"],
+                border_radius=5,
+                padding=ft.Padding(5, 2, 5, 2),
+                width=75,
+                height=26,
+                alignment=ft.alignment.Alignment.CENTER,
+            )
 
         return ft.Container(
             content=ft.Text(config["text"], color=config["text_color"], size=12, weight=ft.FontWeight.BOLD),
@@ -219,9 +245,11 @@ class RecordingCardManager:
                             title_row.controls[1] = new_status_label
                         else:
                             title_row.controls.append(new_status_label)
+                        recording_card["status_label"] = new_status_label
                     else:
                         if len(title_row.controls) > 1:
                             title_row.controls.pop()
+                        recording_card["status_label"] = None
 
                 if recording_card.get("duration_label"):
                     recording_card["duration_label"].value = self.app.record_manager.get_duration(recording)
@@ -408,9 +436,17 @@ class RecordingCardManager:
 
             if recording.is_recording:
                 try:
-                    duration_label = self.cards_obj[recording.rec_id]["duration_label"]
+                    card_data = self.cards_obj[recording.rec_id]
+                    duration_label = card_data["duration_label"]
                     duration_label.value = self.app.record_manager.get_duration(recording)
                     duration_label.update()
+
+                    # Pulse recording dot
+                    status_label = card_data.get("status_label")
+                    if status_label and isinstance(status_label.content, ft.Row):
+                        dot = status_label.content.controls[0]
+                        dot.opacity = 0 if dot.opacity == 1 else 1
+                        dot.update()
                 except (ft.FletPageDisconnectedException, AssertionError) as e:
                     logger.debug(f"Update duration failed: {e}")
                     break

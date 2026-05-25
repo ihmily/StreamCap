@@ -56,10 +56,12 @@ class RecordingDialog:
             label=self._["input_live_link"],
             hint_text=self._["example"] + "：https://www.example.com/xxxxxx",
             border_radius=5,
+            autofocus=True,
             filled=False,
             expand=True,
             value=initial_values.get("url"),
             on_change=on_url_change,
+            on_submit=on_confirm,
         )
 
         streamer_name_field = ft.TextField(

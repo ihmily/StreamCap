@@ -29,10 +29,12 @@ class SearchDialog(ft.AlertDialog):
         self.query = ft.TextField(
             hint_text=self._["search_keyword"],
             expand=True,
+            autofocus=True,
             border_radius=5,
             border_color=ft.Colors.GREY_400,
             focused_border_color=ft.Colors.PRIMARY,
             hint_style=ft.TextStyle(color=ft.Colors.GREY_500, size=14),
+            on_submit=self.submit_query,
         )
         self.actions = [
             ft.TextButton(

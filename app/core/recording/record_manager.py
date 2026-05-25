@@ -19,12 +19,12 @@ class GlobalRecordingState:
 
 
 class RecordingManager:
-    def __init__(self, app):
-        self.app = app
-        self.settings = app.settings
+    def __init__(self, services):
+        self.services = services
+        self.settings = services.settings_config
         self.periodic_task_started = False
         self.loop_time_seconds = None
-        self.app.language_manager.add_observer(self)
+        self.services.language_manager.add_observer(self)
         self.load_recordings()
         self._ = {}
         self.load()
@@ -32,6 +32,11 @@ class RecordingManager:
         max_concurrent = int(self.settings.user_config.get("platform_max_concurrent_requests", 3))
         self.platform_semaphores = defaultdict(lambda: asyncio.Semaphore(max_concurrent))
         self.active_recorders = {}
+
+    @property
+    def app(self):
+        bridges = self.services.snapshot_bridges()
+        return bridges[0] if bridges else None
 
     @property
     def recordings(self):
@@ -42,13 +47,13 @@ class RecordingManager:
         raise AttributeError("Please use add_recording/update_recording methods to modify data")
 
     def load(self):
-        language = self.app.language_manager.language
+        language = self.services.language_manager.language
         for key in ("recording_manager", "video_quality"):
             self._.update(language.get(key, {}))
 
     def load_recordings(self):
         """Load recordings from a JSON file into objects."""
-        recordings_data = self.app.config_manager.load_recordings_config()
+        recordings_data = self.services.config_manager.load_recordings_config()
         if not GlobalRecordingState.recordings:
             GlobalRecordingState.recordings = [Recording.from_dict(rec) for rec in recordings_data]
         logger.info(f"Live Recordings: Loaded {len(self.recordings)} items")
@@ -59,7 +64,7 @@ class RecordingManager:
         self.loop_time_seconds = int(loop_time_seconds or 300)
         for recording in self.recordings:
             recording.loop_time_seconds = self.loop_time_seconds
-            recording.update_title(self._[recording.quality])
+            recording.update_title(self._.get(recording.quality, recording.quality))
             recording.showed_checking_status = True
 
     async def add_recording(self, recording):
@@ -80,13 +85,13 @@ class RecordingManager:
     async def persist_recordings(self):
         """Persist recordings to a JSON file."""
         data_to_save = [rec.to_dict() for rec in self.recordings]
-        await self.app.config_manager.save_recordings_config(data_to_save)
+        await self.services.config_manager.save_recordings_config(data_to_save)
 
     async def update_recording_card(self, recording: Recording, updated_info: dict):
         """Update an existing recording object and persist changes to a JSON file."""
         if recording:
             recording.update(updated_info)
-            utils.run_task_safe(self.app.page, self.persist_recordings)
+            self.services.run_coro(self.persist_recordings())
 
     @staticmethod
     async def _update_recording(
@@ -117,13 +122,13 @@ class RecordingManager:
                 selected=False,
             )
 
-            utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
-            self.app.page.pubsub.send_others_on_topic("update", recording)
+            self.services.broadcast_card_update(recording)
+            self.services.broadcast_pubsub("update", recording)
 
-            utils.run_task_safe(self.app.page, self.check_if_live, recording)
+            self.services.run_coro(self.check_if_live(recording))
 
             if auto_save:
-                utils.run_task_safe(self.app.page, self.persist_recordings)
+                self.services.run_coro(self.persist_recordings())
 
     async def stop_monitor_recording(self, recording: Recording, auto_save: bool = True):
         """
@@ -138,10 +143,10 @@ class RecordingManager:
                 selected=False,
             )
             self.stop_recording(recording, manually_stopped=True)
-            utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
-            self.app.page.pubsub.send_others_on_topic("update", recording)
+            self.services.broadcast_card_update(recording)
+            self.services.broadcast_pubsub("update", recording)
             if auto_save:
-                utils.run_task_safe(self.app.page, self.persist_recordings)
+                self.services.run_coro(self.persist_recordings())
 
     async def start_monitor_recordings(self):
         """
@@ -149,11 +154,11 @@ class RecordingManager:
         """
         selected_recordings = await self.get_selected_recordings()
         pre_start_monitor_recordings = selected_recordings or self.recordings
-        cards_obj = self.app.record_card_manager.cards_obj
+        cards_obj = self._get_visible_cards_obj()
         for recording in pre_start_monitor_recordings:
-            if cards_obj[recording.rec_id]["card"].visible:
-                utils.run_task_safe(self.app.page, self.start_monitor_recording, recording, auto_save=False)
-        utils.run_task_safe(self.app.page, self.persist_recordings)
+            if self._is_card_visible(cards_obj, recording):
+                self.services.run_coro(self.start_monitor_recording(recording, auto_save=False))
+        self.services.run_coro(self.persist_recordings())
         logger.info(f"Batch Start Monitor Recordings: {[i.rec_id for i in pre_start_monitor_recordings]}")
 
     async def stop_monitor_recordings(self, selected_recordings: list[Recording | None] | None = None):
@@ -163,12 +168,32 @@ class RecordingManager:
         if not selected_recordings:
             selected_recordings = await self.get_selected_recordings()
         pre_stop_monitor_recordings = selected_recordings or self.recordings
-        cards_obj = self.app.record_card_manager.cards_obj
+        cards_obj = self._get_visible_cards_obj()
         for recording in pre_stop_monitor_recordings:
-            if cards_obj[recording.rec_id]["card"].visible:
-                utils.run_task_safe(self.app.page, self.stop_monitor_recording, recording, auto_save=False)
-        utils.run_task_safe(self.app.page, self.persist_recordings)
-        logger.info(f"Batch Stop Monitor Recordings: {[i.rec_id for i in pre_stop_monitor_recordings]}")
+            if recording is None:
+                continue
+            if self._is_card_visible(cards_obj, recording):
+                self.services.run_coro(self.stop_monitor_recording(recording, auto_save=False))
+        self.services.run_coro(self.persist_recordings())
+        logger.info(f"Batch Stop Monitor Recordings:{[i.rec_id for i in pre_stop_monitor_recordings if i is not None]}")
+
+    def _get_visible_cards_obj(self):
+        app = self.app
+        if app is None:
+            return None
+        return getattr(getattr(app, "record_card_manager", None), "cards_obj", None)
+
+    @staticmethod
+    def _is_card_visible(cards_obj, recording) -> bool:
+        """When no UI session is available, treat all cards as "visible" so
+        batch operations still affect the whole list."""
+        if cards_obj is None:
+            return True
+        entry = cards_obj.get(recording.rec_id)
+        if entry is None:
+            return False
+        card = entry.get("card")
+        return getattr(card, "visible", True)
 
     async def get_selected_recordings(self):
         return [recording for recording in self.recordings if recording.selected]
@@ -193,7 +218,7 @@ class RecordingManager:
             if recording.monitor_status and not recording.is_recording:
                 is_exceeded = utils.is_time_interval_exceeded(recording.detection_time, recording.loop_time_seconds)
                 if not recording.detection_time or is_exceeded:
-                    utils.run_task_safe(self.app.page, self.check_if_live, recording)
+                    self.services.run_coro(self.check_if_live(recording))
 
     _periodic_task_running = False
 
@@ -211,11 +236,13 @@ class RecordingManager:
         async def periodic_check():
             logger.info("Starting periodic live check background task")
             while True:
-                immediate_check_on_startup = self.app.settings.user_config.get("check_live_on_browser_refresh", True)
+                immediate_check_on_startup = self.services.settings_config.user_config.get(
+                    "check_live_on_browser_refresh", True
+                )
                 if immediate_check_on_startup:
                     await asyncio.sleep(interval)
                 await self.check_free_space()
-                if self.app.recording_enabled:
+                if self.services.recording_enabled:
                     await self.check_all_live_status()
                 if not immediate_check_on_startup:
                     await asyncio.sleep(interval)
@@ -244,7 +271,7 @@ class RecordingManager:
             recording.display_title = f"[{self._['monitor_stopped']}] {recording.title}"
             recording.status_info = RecordingStatus.STOPPED_MONITORING
             recording.is_checking = False
-            utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
+            self.services.broadcast_card_update(recording)
             return
 
         recording.detection_time = datetime.now().time()
@@ -253,7 +280,7 @@ class RecordingManager:
         if not recording.showed_checking_status:
             recording.status_info = RecordingStatus.STATUS_CHECKING
             recording.showed_checking_status = True
-            utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
+            self.services.broadcast_card_update(recording)
 
         if recording.scheduled_recording:
             scheduled_time_range_list = await self.get_scheduled_time_range(
@@ -261,7 +288,7 @@ class RecordingManager:
             )
             recording.scheduled_time_range = scheduled_time_range_list
             in_scheduled = False
-            for scheduled_time_range in scheduled_time_range_list:
+            for scheduled_time_range in scheduled_time_range_list or []:
                 in_scheduled = utils.is_current_time_within_range(scheduled_time_range)
                 if in_scheduled:
                     break
@@ -271,7 +298,7 @@ class RecordingManager:
                 recording.is_live = False
                 recording.is_checking = False
                 logger.info(f"Skip Detection: {recording.url} not in scheduled check range {scheduled_time_range_list}")
-                utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
+                self.services.broadcast_card_update(recording)
                 return
 
         recording.status_info = RecordingStatus.STATUS_CHECKING
@@ -280,14 +307,14 @@ class RecordingManager:
         if platform and platform_key and (recording.platform is None or recording.platform_key is None):
             recording.platform = platform
             recording.platform_key = platform_key
-            utils.run_task_safe(self.app.page, self.persist_recordings)
+            self.services.run_coro(self.persist_recordings())
 
-        if self.settings.user_config["language"] != "zh_CN":
+        if self.settings.user_config.get("language") != "zh_CN":
             platform = platform_key
 
         output_dir = self.settings.get_video_save_path()
         await self.check_free_space(output_dir)
-        if not self.app.recording_enabled:
+        if not self.services.recording_enabled:
             recording.is_checking = False
             recording.status_info = RecordingStatus.NOT_RECORDING_SPACE
             return
@@ -303,7 +330,7 @@ class RecordingManager:
         }
 
         semaphore = self.platform_semaphores[platform_key]
-        recorder = LiveStreamRecorder(self.app, recording, recording_info)
+        recorder = LiveStreamRecorder(self.services, recording, recording_info)
         async with semaphore:
             stream_info = await recorder.fetch_stream()
             logger.info(f"Stream Data: {stream_info}")
@@ -312,8 +339,8 @@ class RecordingManager:
             recording.is_checking = False
             recording.status_info = RecordingStatus.LIVE_STATUS_CHECK_ERROR
             if recording.monitor_status:
-                utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
-                self.app.page.pubsub.send_others_on_topic("update", recording)
+                self.services.broadcast_card_update(recording)
+                self.services.broadcast_pubsub("update", recording)
             return
         if self.settings.user_config.get("remove_emojis"):
             stream_info.anchor_name = utils.clean_name(stream_info.anchor_name, self._["live_room"])
@@ -330,11 +357,12 @@ class RecordingManager:
                 recording.notified_live_start = False
                 recording.notified_live_end = False
 
+                tray_icon_path = self.services.tray_manager.icon_path if self.services.tray_manager is not None else ""
                 if desktop_notify.should_push_notification(self.app):
                     desktop_notify.send_notification(
                         title=self._["notify"],
                         message=recording.streamer_name + " | " + self._["live_recording_started_message"],
-                        app_icon=self.app.tray_manager.icon_path,
+                        app_icon=tray_icon_path,
                     )
 
             msg_manager = message_pusher.MessagePusher(self.settings)
@@ -364,7 +392,7 @@ class RecordingManager:
                 recording.status_info = RecordingStatus.PREPARING_RECORDING
                 recording.loop_time_seconds = self.loop_time_seconds
                 self.start_update(recording)
-                utils.run_task_safe(self.app.page, recorder.start_recording, stream_info)
+                self.services.run_coro(recorder.start_recording(stream_info))
             else:
                 if recording.notified_live_start:
                     notify_loop_time = user_config.get("notify_loop_time")
@@ -392,11 +420,11 @@ class RecordingManager:
                         "display_title": title,
                     }
                 )
-                utils.run_task_safe(self.app.page, self.persist_recordings)
+                self.services.run_coro(self.persist_recordings())
 
         recording.is_checking = False
-        utils.run_task_safe(self.app.page, self.app.record_card_manager.update_card, recording, ui_only=True)
-        self.app.page.pubsub.send_others_on_topic("update", recording)
+        self.services.broadcast_card_update(recording)
+        self.services.broadcast_pubsub("update", recording)
         return
 
     @staticmethod
@@ -445,7 +473,7 @@ class RecordingManager:
             recording.status_info = RecordingStatus.NOT_RECORDING
             logger.info(f"Stopped recording for {recording.title}")
 
-            utils.run_task_safe(self.app.page, self._reset_stopping_flag, recording)
+            self.services.run_coro(self._reset_stopping_flag(recording))
 
     def get_duration(self, recording: Recording):
         """Get the duration of the current recording session in a formatted string."""
@@ -460,33 +488,24 @@ class RecordingManager:
             return str(total_duration).split(".")[0]
 
     async def delete_recording_cards(self, recordings: list[Recording]):
-        utils.run_task_safe(self.app.page, self.app.record_card_manager.remove_recording_card, recordings, ui_only=True)
-        self.app.page.pubsub.send_others_on_topic("delete", recordings)
+        self.services.broadcast_card_remove(recordings)
+        self.services.broadcast_pubsub("delete", recordings)
         await self.remove_recordings(recordings)
-
-        # update the filter area of the recording list page
-        if hasattr(self.app, "current_page") and hasattr(self.app.current_page, "content_area"):
-            if len(self.app.current_page.content_area.controls) > 1:
-                self.app.current_page.content_area.controls[1] = self.app.current_page.create_filter_area()
-                self.app.current_page.content_area.update()
 
     async def check_free_space(self, output_dir: str | None = None):
         disk_space_limit = float(self.settings.user_config.get("recording_space_threshold") or 0)
         output_dir = output_dir or self.settings.get_video_save_path()
         if utils.check_disk_capacity(output_dir) < disk_space_limit:
-            self.app.recording_enabled = False
+            self.services.recording_enabled = False
             logger.error(f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled")
-            utils.run_task_safe(
-                self.app.page,
-                self.app.snack_bar.show_snack_bar,
+            self.services.broadcast_snack(
                 self._["not_disk_space_tip"],
                 duration=86400,
                 show_close_icon=True,
-                ui_only=True,
             )
 
         else:
-            self.app.recording_enabled = True
+            self.services.recording_enabled = True
 
     @staticmethod
     async def get_scheduled_time_range(scheduled_start_time, monitor_hours) -> list | None:

@@ -100,7 +100,7 @@ class RecordingsPage(PageBase):
         self.content_area.update()
 
         self.app.settings.user_config["is_grid_view"] = self.is_grid_view
-        self.page.run_task(self.app.config_manager.save_user_config, self.app.settings.user_config)
+        self.app.services.run_coro(self.app.config_manager.save_user_config(self.app.settings.user_config))
 
     def create_recordings_title_area(self):
         toggle_view_mode_button = ft.IconButton(

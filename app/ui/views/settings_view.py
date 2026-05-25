@@ -174,7 +174,7 @@ class SettingsPage(PageBase):
         if key in ["folder_name_platform", "folder_name_author", "folder_name_time", "folder_name_title"]:
             for recording in self.app.record_manager.recordings:
                 recording.recording_dir = None
-            self.page.run_task(self.app.record_manager.persist_recordings)
+            self.app.services.run_coro(self.app.record_manager.persist_recordings())
 
         if key == "language":
             self.load_language()

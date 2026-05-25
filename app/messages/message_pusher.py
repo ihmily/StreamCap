@@ -2,19 +2,19 @@ import asyncio
 from typing import Optional
 
 from ..models.recording.recording_model import Recording
-from ..ui.views.settings_view import SettingsPage
 from ..utils.logger import logger
 from .notification_service import NotificationService
 
 
 class MessagePusher:
-    def __init__(self, settings: SettingsPage):
+    def __init__(self, settings):
         self.settings = settings
         self.notifier = NotificationService()
 
     def _get_proxy(self) -> str | None:
         if self.settings.user_config.get("enable_proxy"):
             return self.settings.user_config.get("proxy_address")
+        return None
 
     @staticmethod
     def _get_push_channels() -> list[str]:
@@ -36,7 +36,7 @@ class MessagePusher:
 
     @staticmethod
     def should_push_message(
-        settings: SettingsPage,
+        settings,
         recording: Recording,
         check_manually_stopped: bool = False,
         message_type: Optional[str] = None,

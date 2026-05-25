@@ -43,4 +43,4 @@ class ThemeManager:
         self.page.update()
 
         self.app.settings.user_config["theme_color"] = color
-        self.page.run_task(self.app.config_manager.save_user_config, self.app.settings.user_config)
+        self.app.services.run_coro(self.app.config_manager.save_user_config(self.app.settings.user_config))

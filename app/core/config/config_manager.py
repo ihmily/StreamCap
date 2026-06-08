@@ -23,6 +23,10 @@ class ConfigManager:
         self.accounts_config_path = os.path.join(self.config_path, "accounts.json")
         self.web_auth_config_path = os.path.join(self.config_path, "web_auth.json")
 
+        # Memory cache for configuration data to avoid redundant disk I/O
+        self._cache = {}
+        self._cache_lock = threading.Lock()
+
         os.makedirs(os.path.dirname(self.default_config_path), exist_ok=True)
         self.init()
 
@@ -72,21 +76,29 @@ class ConfigManager:
         cookies_config = {}
         self._init_config(self.web_auth_config_path, cookies_config)
 
-    @staticmethod
-    def _load_config(config_path, error_message):
-        """Load configuration from a JSON file."""
+    def _load_config(self, config_path, error_message, use_cache=True):
+        """Load configuration from a JSON file with memory caching."""
+        if use_cache:
+            with self._cache_lock:
+                if config_path in self._cache:
+                    return self._cache[config_path]
+
+        config_data = {}
         try:
-            with open(config_path, encoding="utf-8") as file:
-                return json.load(file)
+            if os.path.exists(config_path):
+                with open(config_path, encoding="utf-8") as file:
+                    config_data = json.load(file)
+            else:
+                logger.error(f"Configuration file not found: {config_path}")
         except json.JSONDecodeError:
             logger.error(f"Invalid JSON format in file: {config_path}")
-            return {}
-        except FileNotFoundError:
-            logger.error(f"Configuration file not found: {config_path}")
-            return {}
         except Exception as e:
             logger.error(f"{error_message}: {e}")
-            return {}
+
+        if use_cache:
+            with self._cache_lock:
+                self._cache[config_path] = config_data
+        return config_data
 
     def load_default_config(self):
         return self._load_config(self.default_config_path, "An error occurred while loading default config")
@@ -118,14 +130,17 @@ class ConfigManager:
 
     _write_lock = threading.Lock()
 
-    @staticmethod
-    async def _save_config(config_path, config, success_message, error_message):
-        """Save configuration to a JSON file (thread-safe, atomic write)."""
+    async def _save_config(self, config_path, config, success_message, error_message):
+        """Save configuration to a JSON file (thread-safe, atomic write) and update cache."""
         try:
             content = json.dumps(config, ensure_ascii=False, indent=4)
 
             def _write_sync():
                 with ConfigManager._write_lock:
+                    # Update memory cache before writing to disk to ensure consistency
+                    with self._cache_lock:
+                        self._cache[config_path] = config
+
                     dir_name = os.path.dirname(config_path)
                     fd, tmp_path = tempfile.mkstemp(suffix=".tmp", prefix=".cfg_", dir=str(dir_name))
                     try:
@@ -186,6 +201,7 @@ class ConfigManager:
         )
 
     def get_config_value(self, key: str, default: T = None) -> T:
+        """Get configuration value from memory cache."""
         user_config = self.load_user_config()
         default_config = self.load_default_config()
         return user_config.get(key, default_config.get(key, default))

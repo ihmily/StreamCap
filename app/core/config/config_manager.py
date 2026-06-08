@@ -1,9 +1,10 @@
+import asyncio
 import json
 import os
 import shutil
+import tempfile
+import threading
 from typing import TypeVar
-
-import aiofiles
 
 from ...utils.logger import logger
 
@@ -115,12 +116,31 @@ class ConfigManager:
     def load_web_auth_config(self):
         return self._load_config(self.web_auth_config_path, "An error occurred while loading web auth config")
 
+    _write_lock = threading.Lock()
+
     @staticmethod
     async def _save_config(config_path, config, success_message, error_message):
-        """Save configuration to a JSON file."""
+        """Save configuration to a JSON file (thread-safe, atomic write)."""
         try:
-            async with aiofiles.open(config_path, "w", encoding="utf-8") as file:
-                await file.write(json.dumps(config, ensure_ascii=False, indent=4))
+            content = json.dumps(config, ensure_ascii=False, indent=4)
+
+            def _write_sync():
+                with ConfigManager._write_lock:
+                    dir_name = os.path.dirname(config_path)
+                    fd, tmp_path = tempfile.mkstemp(suffix=".tmp", prefix=".cfg_", dir=str(dir_name))
+                    try:
+                        with os.fdopen(fd, "w", encoding="utf-8") as f:
+                            f.write(content)
+                        os.replace(tmp_path, config_path)
+                    except BaseException:
+                        # Clean up temp file on failure.
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+                        raise
+
+            await asyncio.to_thread(_write_sync)
             logger.info(success_message)
         except Exception as e:
             logger.error(f"{error_message}: {e}")

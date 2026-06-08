@@ -5,6 +5,17 @@ def send_notification(title: str, message: str, app_icon: str = "", app_name: st
 
 
 def should_push_notification(app) -> bool:
-    is_window_hidden = app.page.window.minimized or not app.page.window.visible
-    system_notification_enabled = app.settings.user_config.get("system_notification_enabled", True)
-    return not app.page.web and system_notification_enabled and is_window_hidden
+    if app is None or getattr(app, "page", None) is None:
+        return False
+    page = app.page
+
+    if page.web:
+        return False
+    settings = getattr(app, "settings", None)
+    user_config = getattr(settings, "user_config", {}) if settings is not None else {}
+    system_notification_enabled = user_config.get("system_notification_enabled", True)
+    try:
+        is_window_hidden = page.window.minimized or not page.window.visible
+    except Exception:
+        return False
+    return system_notification_enabled and is_window_hidden

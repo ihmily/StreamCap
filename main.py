@@ -1,6 +1,7 @@
 import argparse
 import multiprocessing
 import os
+from collections.abc import Callable
 
 import flet as ft
 from dotenv import load_dotenv
@@ -8,6 +9,7 @@ from screeninfo import get_monitors
 
 from app.app_manager import App, execute_dir
 from app.auth.auth_manager import AuthManager
+from app.core.runtime.backend_services import BackendServices
 from app.core.runtime.bundled_env import setup_bundled_flet_view
 from app.lifecycle.app_close_handler import handle_app_close
 from app.lifecycle.tray_manager import TrayManager
@@ -21,13 +23,6 @@ DEFAULT_PORT = 6006
 WINDOW_SCALE = 0.65
 MIN_WIDTH = 950
 ASSETS_DIR = "assets"
-
-
-class GlobalState:
-    periodic_tasks_started = False
-
-
-global_state = GlobalState()
 
 
 async def setup_window(page: ft.Page, app: App) -> None:
@@ -66,7 +61,7 @@ def get_route_handler() -> dict[str, str]:
     }
 
 
-def handle_route_change(page: ft.Page, app: App) -> callable:
+def handle_route_change(page: ft.Page, app: App) -> Callable:
     route_map = get_route_handler()
 
     def route_change(e: ft.RouteChangeEvent) -> None:
@@ -78,7 +73,7 @@ def handle_route_change(page: ft.Page, app: App) -> callable:
     return route_change
 
 
-def handle_window_event(page: ft.Page, app: App, save_progress_overlay: "SaveProgressOverlay") -> callable:
+def handle_window_event(page: ft.Page, app: App, save_progress_overlay: "SaveProgressOverlay") -> Callable:
     async def on_window_event(e) -> None:
         if e.type == ft.WindowEventType.CLOSE:
             if app.settings.user_config.get("remember_window_size"):
@@ -90,7 +85,7 @@ def handle_window_event(page: ft.Page, app: App, save_progress_overlay: "SavePro
     return on_window_event
 
 
-def handle_disconnect(page: ft.Page, app: App) -> callable:
+def handle_disconnect(page: ft.Page, app: App) -> Callable:
     """Handle disconnection for web mode."""
 
     async def disconnect(_: ft.ControlEvent) -> None:
@@ -99,10 +94,13 @@ def handle_disconnect(page: ft.Page, app: App) -> callable:
         await app.config_manager.save_user_config(app.settings.user_config)
         logger.info(f"Saved last route: {page.route}")
 
+        if app.services is not None:
+            app.services.unregister_ui_bridge(app)
+
     return disconnect
 
 
-def handle_page_resize(page: ft.Page, app: App) -> callable:
+def handle_page_resize(page: ft.Page, app: App) -> Callable:
     """handle page resize"""
 
     def on_resize(_: ft.ControlEvent) -> None:
@@ -117,7 +115,8 @@ async def main(page: ft.Page) -> None:
     page.window.min_width = MIN_WIDTH
     page.window.min_height = MIN_WIDTH * WINDOW_SCALE
 
-    app = App(page)
+    _services = BackendServices.get()
+    app = App(page, services=_services)
     page.data = app
     app.is_web_mode = page.web
     app.is_mobile = False
@@ -151,19 +150,18 @@ async def main(page: ft.Page) -> None:
         page.window.prevent_close = True
         page.window.on_event = handle_window_event(page, app, save_progress_overlay)
         if page.web:
-            global global_state
-            if not global_state.periodic_tasks_started:
-                global_state.periodic_tasks_started = True
-                logger.info("Starting periodic tasks for the first time in web mode")
+            rm = _services.recording_manager
+            if rm is not None and not rm.is_periodic_task_running():
+                logger.info("Starting periodic tasks for the first time in web mode (via session)")
                 page.run_task(app.start_periodic_tasks)
             else:
-                logger.info("Periodic tasks already running in web mode, skipping initialization")
+                logger.info("Periodic tasks already running (BackendServices), skipping")
         else:
             logger.info("Starting periodic tasks in desktop mode")
             page.run_task(app.start_periodic_tasks)
 
-            if page.platform.value == "windows":
-                if hasattr(app, "tray_manager"):
+            if page.platform and page.platform.value == "windows":
+                if app.tray_manager is not None:
                     try:
                         app.tray_manager.start(page)
                     except Exception as err:
@@ -224,7 +222,12 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     multiprocessing.freeze_support()
-    if args.web or platform == "web":
+
+    services = BackendServices.bootstrap(execute_dir)
+
+    is_web = args.web or platform == "web"
+    if is_web:
+        services.start_background_loop()
         logger.debug("Running in web mode on http://" + args.host + ":" + str(args.port))
         ft.run(
             main=main,

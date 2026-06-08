@@ -1,13 +1,11 @@
+import asyncio
 import os
 import time
 
 import flet as ft
 
 from . import execute_dir
-from .core.config.config_manager import ConfigManager
-from .core.config.language_manager import LanguageManager
-from .core.recording.record_manager import RecordingManager
-from .core.runtime.process_manager import AsyncProcessManager
+from .core.runtime.backend_services import BackendServices
 from .core.update.update_checker import UpdateChecker
 from .initialization.installation_manager import InstallationManager
 from .ui.components.business.recording_card import RecordingCardManager
@@ -18,18 +16,28 @@ from .ui.views.home_view import HomePage
 from .ui.views.recordings_view import RecordingsPage
 from .ui.views.settings_view import SettingsPage
 from .ui.views.storage_view import StoragePage
-from .utils import utils
 from .utils.logger import logger
 
 
 class App:
-    def __init__(self, page: ft.Page):
-        self.install_progress = None
+    def __init__(self, page: ft.Page, services: BackendServices | None = None):
         self.page = page
+        self.install_progress = None
+
+        if services is None:
+            services = BackendServices.get_or_none()
+            if services is None:
+                services = BackendServices.bootstrap(execute_dir)
+        self.services = services
+
         self.run_path = execute_dir
         self.assets_dir = os.path.join(execute_dir, "assets")
-        self.process_manager = AsyncProcessManager()
-        self.config_manager = ConfigManager(self.run_path)
+
+        self.config_manager = services.config_manager
+        self.process_manager = services.process_manager
+        self.language_manager = services.language_manager
+        self.record_manager = services.recording_manager
+
         self.is_web_mode = False
         self.auth_manager = None
         self.current_username = None
@@ -41,7 +49,10 @@ class App:
         )
 
         self.settings = SettingsPage(self)
-        self.language_manager = LanguageManager(self)
+        services.settings_config.adopt_user_config(self.settings.user_config)
+        services.settings_config.adopt_cookies_config(self.settings.cookies_config)
+        services.settings_config.adopt_accounts_config(self.settings.accounts_config)
+        services.settings_config.language_code = self.settings.language_code or services.settings_config.language_code
         self.language_code = self.settings.language_code
         self.about = AboutPage(self)
         self.recordings = RecordingsPage(self)
@@ -64,17 +75,81 @@ class App:
             ],
         )
         self.snack_bar = ShowSnackBar(self)
-        self.subprocess_start_up_info = utils.get_startup_info()
+        self.subprocess_start_up_info = services.subprocess_start_up_info
         self.record_card_manager = RecordingCardManager(self)
-        self.record_manager = RecordingManager(self)
         self.current_page = None
         self._loading_page = False
-        self.recording_enabled = True
         self.install_manager = InstallationManager(self)
         self.update_checker = UpdateChecker(self)
         self.page.run_task(self.install_manager.check_env)
-        self.page.run_task(self.record_manager.check_free_space)
+        if self.record_manager is not None:
+            self.page.run_task(self.record_manager.check_free_space)
         self.page.run_task(self._check_for_updates)
+
+        services.register_ui_bridge(self)
+
+    @property
+    def recording_enabled(self):
+        return self.services.recording_enabled
+
+    @recording_enabled.setter
+    def recording_enabled(self, value: bool):
+        self.services.recording_enabled = value
+
+    @property
+    def tray_manager(self):
+        return self.services.tray_manager
+
+    @tray_manager.setter
+    def tray_manager(self, value):
+        self.services.tray_manager = value
+
+    def _get_session_loop(self) -> asyncio.AbstractEventLoop | None:
+        """Return the asyncio event loop bound to the current Flet session,
+        or ``None`` if the session/connection is dead."""
+        try:
+            session = self.page.session
+            if session is None:
+                return None
+            connection = getattr(session, "connection", None)
+            if connection is None:
+                return None
+            return getattr(connection, "loop", None)
+        except Exception:
+            return None
+
+    def schedule_card_update(self, recording) -> None:
+        loop = self._get_session_loop()
+        if loop is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(self.record_card_manager.update_card(recording), loop)
+        except Exception as exc:
+            logger.debug(f"schedule_card_update dropped: {exc}")
+
+    def schedule_card_remove(self, recordings) -> None:
+        loop = self._get_session_loop()
+        if loop is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(self.record_card_manager.remove_recording_card(recordings), loop)
+        except Exception as exc:
+            logger.debug(f"schedule_card_remove dropped: {exc}")
+
+    def schedule_snack(self, text: str, **kw) -> None:
+        loop = self._get_session_loop()
+        if loop is None:
+            return
+        try:
+            asyncio.run_coroutine_threadsafe(self.snack_bar.show_snack_bar(text, **kw), loop)
+        except Exception as exc:
+            logger.debug(f"schedule_snack dropped: {exc}")
+
+    def schedule_pubsub(self, topic: str, payload) -> None:
+        try:
+            self.page.pubsub.send_others_on_topic(topic, payload)
+        except Exception as exc:
+            logger.debug(f"schedule_pubsub dropped: {exc}")
 
     def initialize_pages(self):
         return {
@@ -104,12 +179,15 @@ class App:
         self.content_area.update()
 
     async def cleanup(self):
-        try:
-            await self.process_manager.cleanup()
-        except ConnectionError:
-            logger.warning("Connection lost, process may have terminated")
-        except Exception as e:
-            logger.error(f"Error during cleanup: {e}")
+        self.services.unregister_ui_bridge(self)
+
+        if not self.is_web_mode:
+            try:
+                await self.process_manager.cleanup()
+            except ConnectionError:
+                logger.warning("Connection lost, process may have terminated")
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
 
     def add_ffmpeg_process(self, process):
         self.process_manager.add_process(process)
@@ -130,10 +208,13 @@ class App:
                 await self.config_manager.save_user_config(self.settings.user_config)
 
                 if update_info.get("has_update", False):
-                    await self.update_checker.show_update_dialog(update_info)
+                    await self.update_checker.show_update_dialog(dict(update_info))
         except Exception as e:
             logger.error(f"Update check failed: {e}")
 
     async def start_periodic_tasks(self):
-        """Start all periodic tasks"""
-        await self.record_manager.setup_periodic_live_check(int(self.record_manager.loop_time_seconds or 180))
+        rm = self.record_manager
+        if rm is None:
+            return
+        interval = int(rm.loop_time_seconds or 180)
+        await rm.setup_periodic_live_check(interval)

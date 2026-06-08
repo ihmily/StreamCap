@@ -25,11 +25,11 @@ class PopupColorItem(ft.PopupMenuItem):
         page = e.page
         app = page.data
         app.settings.user_config["theme_color"] = self.data
-        page.run_task(app.config_manager.save_user_config, app.settings.user_config)
+        app.services.run_coro(app.config_manager.save_user_config(app.settings.user_config))
 
 
 def create_light_theme(custom_font: str) -> ft.Theme:
-    """Define light colored theme"""
+    "Define light colored theme"
     return ft.Theme(
         font_family=custom_font,
         text_theme=ft.TextTheme(
@@ -53,7 +53,7 @@ def create_light_theme(custom_font: str) -> ft.Theme:
 
 
 def create_dark_theme(custom_font: str) -> ft.Theme:
-    """Define dark theme"""
+    "Define dark theme"
     return ft.Theme(
         font_family=custom_font,
         text_theme=ft.TextTheme(

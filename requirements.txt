@@ -1,5 +1,5 @@
-flet[desktop,cli]==0.85.0
-flet-video==0.85.0
+flet[desktop,cli]==0.85.3
+flet-video==0.85.3
 httpx>=0.28.1
 screeninfo>=0.8.1
 aiofiles>=25.1.0

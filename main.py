@@ -46,6 +46,9 @@ async def setup_window(page: ft.Page, app: App) -> None:
             screen = get_monitors()[0]
             page.window.width = int(screen.width * WINDOW_SCALE)
             page.window.height = int(screen.height * WINDOW_SCALE)
+
+            page.window.visible = True
+            page.update()
         except IndexError:
             logger.warning("No monitors detected, using default window size.")
 
@@ -239,4 +242,4 @@ if __name__ == "__main__":
         )
     else:
         setup_bundled_flet_view()
-        ft.run(main=main, assets_dir=ASSETS_DIR)
+        ft.run(main=main, view=ft.AppView.FLET_APP_HIDDEN, assets_dir=ASSETS_DIR)

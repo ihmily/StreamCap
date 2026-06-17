@@ -15,6 +15,11 @@ from ..filters import RecordingFilters
 
 
 class RecordingsPage(PageBase):
+    CARD_MIN_WIDTH = 320
+    MOBILE_CARD_MIN_WIDTH = 250
+    CARD_ASPECT_RATIO = 2.55
+    MOBILE_CARD_ASPECT_RATIO = 2.3
+
     def __init__(self, app):
         super().__init__(app)
         self.page_name = "recordings"
@@ -39,7 +44,12 @@ class RecordingsPage(PageBase):
 
         if self.is_grid_view:
             initial_content = ft.GridView(
-                expand=True, runs_count=3, spacing=10, run_spacing=10, child_aspect_ratio=2.3, controls=[]
+                expand=True,
+                runs_count=1,
+                spacing=10,
+                run_spacing=10,
+                child_aspect_ratio=self.CARD_ASPECT_RATIO,
+                controls=[],
             )
         else:
             initial_content = ft.Column(controls=[], spacing=5, expand=True)
@@ -77,8 +87,8 @@ class RecordingsPage(PageBase):
         current_content = self.recording_card_area.content
         current_controls = current_content.controls if hasattr(current_content, "controls") else []
 
-        column_width = 350
-        runs_count = max(1, int(self.page.width / column_width))
+        runs_count = self.get_grid_runs_count()
+        child_aspect_ratio = self.get_grid_child_aspect_ratio()
 
         if self.is_grid_view:
             new_content = ft.GridView(
@@ -86,7 +96,7 @@ class RecordingsPage(PageBase):
                 runs_count=runs_count,
                 spacing=10,
                 run_spacing=10,
-                child_aspect_ratio=2.3,
+                child_aspect_ratio=child_aspect_ratio,
                 controls=current_controls,
             )
         else:
@@ -677,18 +687,30 @@ class RecordingsPage(PageBase):
     async def update_grid_layout(self, _):
         self.page.run_task(self.recalculate_grid_columns)
 
+    def get_grid_available_width(self):
+        page_width = self.page.width or getattr(self.page.window, "width", 0) or 0
+        if self.app.is_mobile:
+            return page_width
+
+        sidebar_width = getattr(self.app.left_navigation_menu, "width", 0) or 0
+        divider_width = 1
+        content_padding = 24
+        return max(0, page_width - sidebar_width - divider_width - content_padding)
+
+    def get_grid_runs_count(self):
+        column_width = self.MOBILE_CARD_MIN_WIDTH if self.app.is_mobile else self.CARD_MIN_WIDTH
+        available_width = self.get_grid_available_width()
+        return max(1, int(available_width / column_width))
+
+    def get_grid_child_aspect_ratio(self):
+        return self.MOBILE_CARD_ASPECT_RATIO if self.app.is_mobile else self.CARD_ASPECT_RATIO
+
     async def recalculate_grid_columns(self):
         if not self.is_grid_view:
             return
 
-        if self.app.is_mobile:
-            column_width = 250
-            child_aspect_ratio = 2.5
-        else:
-            column_width = 350
-            child_aspect_ratio = 2.3
-
-        runs_count = max(1, int(self.page.width / column_width))
+        runs_count = self.get_grid_runs_count()
+        child_aspect_ratio = self.get_grid_child_aspect_ratio()
 
         if isinstance(self.recording_card_area.content, ft.GridView):
             grid_view = self.recording_card_area.content

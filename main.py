@@ -239,7 +239,7 @@ if __name__ == "__main__":
             port=args.port,
             assets_dir=ASSETS_DIR,
             web_renderer=ft.WebRenderer.CANVAS_KIT,
-            no_cdn=True
+            no_cdn=True,
         )
     else:
         setup_bundled_flet_view()

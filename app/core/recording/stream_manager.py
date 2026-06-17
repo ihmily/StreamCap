@@ -143,7 +143,7 @@ class LiveStreamRecorder:
     def _get_save_path(self, filename: str, use_direct_download: bool = False) -> str:
         suffix = self.save_format
         suffix = "_%03d." + suffix if self.segment_record and not use_direct_download else "." + suffix
-        full_output_dir = self.output_dir if sys.platform == "win32" else self.output_dir.replace(" ", "_")
+        full_output_dir = self.output_dir if sys.platform != "linux" else self.output_dir.replace(" ", "_")
         save_file_path = os.path.join(full_output_dir, (filename + suffix).replace(" ", "_"))
         return save_file_path.replace("\\", "/")
 

@@ -33,20 +33,24 @@ async def setup_window(page: ft.Page, app: App) -> None:
 
     if not page.web:
         try:
-            await page.window.center()
-            await page.window.to_front()
             if app.settings.user_config.get("remember_window_size"):
                 window_width = app.settings.user_config.get("window_width")
                 window_height = app.settings.user_config.get("window_height")
                 if window_width and window_height:
                     page.window.width = int(window_width)
                     page.window.height = int(window_height)
-                    return
+                else:
+                    screen = get_monitors()[0]
+                    page.window.width = int(screen.width * WINDOW_SCALE)
+                    page.window.height = int(screen.height * WINDOW_SCALE)
+            else:
+                screen = get_monitors()[0]
+                page.window.width = int(screen.width * WINDOW_SCALE)
+                page.window.height = int(screen.height * WINDOW_SCALE)
 
-            screen = get_monitors()[0]
-            page.window.width = int(screen.width * WINDOW_SCALE)
-            page.window.height = int(screen.height * WINDOW_SCALE)
-
+            page.update()
+            await page.window.center()
+            await page.window.to_front()
             page.window.visible = True
             page.update()
         except IndexError:

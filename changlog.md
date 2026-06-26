@@ -46,3 +46,4 @@
 - 调整运行时数据目录：日志文件写入 `log/`，录制数据库写入 `data/database/`，并兼容迁移旧的 `config/recordings.db`。
 - 修复 GitHub Actions 构建流程：移除重复的自动构建 workflow，macOS 打包改用 `.icns` 图标，并使用 `github.token` 更新 beta 标签。
 - 继续修正 GitHub Actions macOS 构建：将 `macos-latest` 固定为 `macos-15`，避免 GitHub runner 迁移到 macOS 26 后影响 PyInstaller/Flet 桌面打包，并增加 macOS 版本、PyInstaller 版本和图标文件诊断输出。
+- 将 GitHub Actions macOS 桌面打包切换为 `flet pack`，通过 Flet 官方 PyInstaller 包装层生成 `.app`，减少手写 PyInstaller 参数与 Flet 运行时资源不匹配导致的构建失败。

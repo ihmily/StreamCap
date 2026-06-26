@@ -107,13 +107,20 @@ jobs:
         run: |
           sw_vers
           python --version
+          flet --version
           pyinstaller --version
           file assets/icons/Appicon.icns
           ls -lah assets/icons/Appicon.icns
 
       - name: Build macOS executable
         run: |
-          pyinstaller --noconfirm --onedir --windowed --log-level INFO --icon "assets/icons/Appicon.icns" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+          flet pack main.py \
+            --name "StreamCap" \
+            --icon "assets/icons/Appicon.icns" \
+            --distpath dist \
+            --add-data "assets:assets" "config:config" "locales:locales" \
+            --hidden-import "flet.matplotlib_chart" "flet.plotly_chart" "flet.video" \
+            --yes
 
       - name: Create macOS app bundle structure
         run: |

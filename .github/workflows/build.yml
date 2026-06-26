@@ -181,7 +181,10 @@ jobs:
           test -d "StreamCap.app"
           test -f "StreamCap.app/Contents/Info.plist"
           test -x "StreamCap.app/Contents/MacOS/StreamCap"
-          "StreamCap.app/Contents/MacOS/StreamCap" --help
+          test -s "StreamCap.app/Contents/Resources/Appicon.icns"
+          plutil -lint "StreamCap.app/Contents/Info.plist"
+          file "StreamCap.app/Contents/MacOS/StreamCap"
+          otool -L "StreamCap.app/Contents/MacOS/StreamCap" >/tmp/streamcap-otool.txt
 
       - name: Create DMG settings file
         run: |

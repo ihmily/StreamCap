@@ -9,7 +9,6 @@ on:
 
 env:
   PYTHON_VERSION: "3.12"
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-windows:
@@ -356,11 +355,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Create or Update Beta Tag
-        uses: richardsimko/update-tag@v1
-        with:
-          tag_name: beta
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f beta
+          git push origin refs/tags/beta --force
 
       - name: Publish Beta Release
         uses: ncipollo/release-action@v1

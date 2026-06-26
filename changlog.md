@@ -49,3 +49,4 @@
 - 将 GitHub Actions macOS 桌面打包切换为 `flet pack`，通过 Flet 官方 PyInstaller 包装层生成 `.app`，减少手写 PyInstaller 参数与 Flet 运行时资源不匹配导致的构建失败。
 - 升级 GitHub Actions 官方 action 版本，使用 Node.js 24 兼容的 `checkout@v7`、`setup-python@v6`、`upload-artifact@v7`、`download-artifact@v8` 和 `cache@v6`，消除构建日志中的 Node.js 20 弃用警告。
 - 在 GitHub Actions 构建中增加产物冒烟验证：Windows 检查入口程序可执行，macOS 校验 `.app` 结构、`Info.plist`、图标和 Mach-O 依赖，Linux Web 包改为真实启动并通过 HTTP 探测，避免构建成功但产物不可用。
+- 移除 `richardsimko/update-tag@v1` 第三方 action，改用原生 `git tag -f beta` 和 `git push --force` 更新 beta 标签，消除 prerelease 阶段剩余的 Node.js 20 弃用警告。

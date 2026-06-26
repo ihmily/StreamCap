@@ -45,3 +45,4 @@
 - 修复 SQLite 仓库连接释放问题，确保每次数据库操作结束后关闭连接，避免 Windows 下数据库文件被占用。
 - 调整运行时数据目录：日志文件写入 `log/`，录制数据库写入 `data/database/`，并兼容迁移旧的 `config/recordings.db`。
 - 修复 GitHub Actions 构建流程：移除重复的自动构建 workflow，macOS 打包改用 `.icns` 图标，并使用 `github.token` 更新 beta 标签。
+- 继续修正 GitHub Actions macOS 构建：将 `macos-latest` 固定为 `macos-15`，避免 GitHub runner 迁移到 macOS 26 后影响 PyInstaller/Flet 桌面打包，并增加 macOS 版本、PyInstaller 版本和图标文件诊断输出。

@@ -393,16 +393,18 @@ class StoragePage(BasePage):
     def update_recent_recordings(self):
         recent_items = self.get_recent_history_items(limit=5)
         if not recent_items:
-            self.recent_area.controls.append(
-                ft.Text(self._["empty_recent_files"], size=12, color=ft.Colors.GREY_600)
-            )
+            self.recent_area.controls.append(ft.Text(self._["empty_recent_files"], size=12, color=ft.Colors.GREY_600))
             return
 
         for item in recent_items:
             file_path = item.get("file_path") or ""
             title = item.get("streamer_name") or os.path.basename(file_path) or self._["unknown_extension"]
             ended_at = item.get("ended_at") or item.get("created_at") or ""
-            subtitle = self._["recent_file_item"].replace("{time}", ended_at).replace("{size}", self.format_size(self.get_file_size(file_path)))
+            subtitle = (
+                self._["recent_file_item"]
+                .replace("{time}", ended_at)
+                .replace("{size}", self.format_size(self.get_file_size(file_path)))
+            )
             self.recent_area.controls.append(
                 ft.ListTile(
                     dense=True,
@@ -421,7 +423,9 @@ class StoragePage(BasePage):
                             ft.IconButton(
                                 icon=ft.Icons.FOLDER_OPEN,
                                 tooltip=self._["open_storage_folder"],
-                                on_click=lambda _, path=file_path: self.app.page.run_task(self.open_local_folder, os.path.dirname(path)),
+                                on_click=lambda _, path=file_path: self.app.page.run_task(
+                                    self.open_local_folder, os.path.dirname(path)
+                                ),
                             ),
                         ],
                     ),
@@ -476,7 +480,9 @@ class StoragePage(BasePage):
                                 alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                                 controls=[
                                     ft.Text(row_label, size=12, color=ft.Colors.GREY_600, expand=True),
-                                    ft.Text(row_value, size=12, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.RIGHT),
+                                    ft.Text(
+                                        row_value, size=12, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.RIGHT
+                                    ),
                                 ],
                             )
                             for row_label, row_value in rows
@@ -714,9 +720,9 @@ class StoragePage(BasePage):
         )
         if deleted_count:
             await self.app.snack_bar.show_snack_bar(
-                success_template
-                .replace("{count}", str(deleted_count))
-                .replace("{size}", self.format_size(deleted_size))
+                success_template.replace("{count}", str(deleted_count)).replace(
+                    "{size}", self.format_size(deleted_size)
+                )
             )
         else:
             await self.app.snack_bar.show_snack_bar(self._["no_files_cleaned"])
@@ -746,9 +752,7 @@ class StoragePage(BasePage):
         return deleted_count, deleted_size
 
     async def cleanup_empty_dirs(self):
-        deleted_count = await asyncio.get_event_loop().run_in_executor(
-            self.executor, self.cleanup_empty_dirs_sync
-        )
+        deleted_count = await asyncio.get_event_loop().run_in_executor(self.executor, self.cleanup_empty_dirs_sync)
         if deleted_count:
             await self.app.snack_bar.show_snack_bar(
                 self._["clean_empty_dirs_success"].replace("{count}", str(deleted_count))

@@ -22,24 +22,48 @@ class LogsPage(BasePage):
     )
     TRANSLATION_PATTERNS = (
         (re.compile(r"Live Recordings: Loaded (\d+) items"), "已加载 {0} 个录制任务", "Loaded {0} recording rooms"),
-        (re.compile(r"Live Recordings: Migrated (\d+) items from recordings\.json"), "已从旧配置迁移 {0} 个录制任务", "Migrated {0} recording rooms from recordings.json"),
+        (
+            re.compile(r"Live Recordings: Migrated (\d+) items from recordings\.json"),
+            "已从旧配置迁移 {0} 个录制任务",
+            "Migrated {0} recording rooms from recordings.json",
+        ),
         (re.compile(r"Started recording for (.+)"), "开始录制：{0}", "Started recording: {0}"),
         (re.compile(r"Stopped recording for (.+)"), "录制已停止：{0}", "Stopped recording: {0}"),
-        (re.compile(r"Stop requested for recorder: (.+), rec_id: (.+)"), "请求停止录制：{0}（ID：{1}）", "Stop requested: {0} (ID: {1})"),
+        (
+            re.compile(r"Stop requested for recorder: (.+), rec_id: (.+)"),
+            "请求停止录制：{0}（ID：{1}）",
+            "Stop requested: {0} (ID: {1})",
+        ),
         (re.compile(r"Requested stop for recorder: (.+)"), "已发送停止录制请求：{0}", "Requested recording stop: {0}"),
-        (re.compile(r"No active recorder found for (.+), cannot request stop"), "未找到正在录制的任务，无法停止：{0}", "No active recorder found: {0}"),
+        (
+            re.compile(r"No active recorder found for (.+), cannot request stop"),
+            "未找到正在录制的任务，无法停止：{0}",
+            "No active recorder found: {0}",
+        ),
         (re.compile(r"Batch Start Monitor Recordings: (.+)"), "批量开始监控：{0}", "Batch started monitoring: {0}"),
         (re.compile(r"Batch Stop Monitor Recordings:?(.+)"), "批量停止监控：{0}", "Batch stopped monitoring: {0}"),
         (re.compile(r"Delete Items: (.+)"), "删除录制任务：{0}", "Deleted recording room: {0}"),
         (re.compile(r"Add items recording: (.+)"), "新增录制任务：{0}", "Added recording room: {0}"),
-        (re.compile(r"Starting periodic live check background task"), "开始后台直播检测任务", "Started background live check task"),
-        (re.compile(r"Initializing periodic live check task with interval: (.+)s"), "初始化后台直播检测，间隔 {0} 秒", "Initialized live check interval: {0}s"),
+        (
+            re.compile(r"Starting periodic live check background task"),
+            "开始后台直播检测任务",
+            "Started background live check task",
+        ),
+        (
+            re.compile(r"Initializing periodic live check task with interval: (.+)s"),
+            "初始化后台直播检测，间隔 {0} 秒",
+            "Initialized live check interval: {0}s",
+        ),
         (re.compile(r"Saved last route: (.+)"), "已保存上次打开页面：{0}", "Saved last page: {0}"),
         (re.compile(r"Restored last route: (.+)"), "已恢复上次打开页面：{0}", "Restored last page: {0}"),
         (re.compile(r"Language Code: (.+)"), "已加载语言：{0}", "Loaded language: {0}"),
         (re.compile(r"desktop device detected, enable desktop layout"), "已启用桌面端布局", "Desktop layout enabled"),
         (re.compile(r"mobile device detected, enable mobile layout"), "已启用移动端布局", "Mobile layout enabled"),
-        (re.compile(r"Logs page refreshed: runtime=(\d+), start=(\d+), stop=(\d+)"), "日志页已刷新：运行 {0} 条，开始 {1} 条，停止 {2} 条", "Logs refreshed: runtime {0}, start {1}, stop {2}"),
+        (
+            re.compile(r"Logs page refreshed: runtime=(\d+), start=(\d+), stop=(\d+)"),
+            "日志页已刷新：运行 {0} 条，开始 {1} 条，停止 {2} 条",
+            "Logs refreshed: runtime {0}, start {1}, stop {2}",
+        ),
     )
 
     def __init__(self, app):
@@ -176,10 +200,7 @@ class LogsPage(BasePage):
         self.fill_text_log_list(self.recording_log_list, recording_lines, self._["empty_recording_logs"])
         self.fill_history_list(history_events)
 
-        logger.debug(
-            "Logs page refreshed: "
-            f"runtime={len(recording_lines)}, start={start_count}, stop={stop_count}"
-        )
+        logger.debug(f"Logs page refreshed: runtime={len(recording_lines)}, start={start_count}, stop={stop_count}")
 
         self.summary_text.value = (
             self._["summary"]
@@ -277,7 +298,9 @@ class LogsPage(BasePage):
             content=ft.Row(
                 controls=[
                     ft.Container(
-                        content=ft.Text(self._.get(f"log_level_{level.lower()}", level), size=11, color=ft.Colors.WHITE),
+                        content=ft.Text(
+                            self._.get(f"log_level_{level.lower()}", level), size=11, color=ft.Colors.WHITE
+                        ),
                         bgcolor=color,
                         border_radius=5,
                         padding=ft.Padding.symmetric(horizontal=7, vertical=3),

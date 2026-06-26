@@ -69,7 +69,7 @@ jobs:
           retention-days: 30
 
   build-macos:
-    runs-on: macos-latest
+    runs-on: macos-15
 
     steps:
       - name: Checkout code
@@ -103,9 +103,17 @@ jobs:
           echo "HOST=127.0.0.1" >> .env
           echo "PORT=6006" >> .env
 
+      - name: Show macOS build diagnostics
+        run: |
+          sw_vers
+          python --version
+          pyinstaller --version
+          file assets/icons/Appicon.icns
+          ls -lah assets/icons/Appicon.icns
+
       - name: Build macOS executable
         run: |
-          pyinstaller --noconfirm --onedir --windowed --icon "assets/icons/Appicon.icns" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+          pyinstaller --noconfirm --onedir --windowed --log-level INFO --icon "assets/icons/Appicon.icns" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
 
       - name: Create macOS app bundle structure
         run: |

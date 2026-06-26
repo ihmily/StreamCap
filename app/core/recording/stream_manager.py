@@ -509,8 +509,7 @@ class LiveStreamRecorder:
                     error_message = self._decode_first_stderr_line(stderr)
                     if self._is_stopping_or_shutting_down():
                         logger.info(
-                            f"FFmpeg exited while stopping, code={return_code}, "
-                            f"message={error_message or 'None'}"
+                            f"FFmpeg exited while stopping, code={return_code}, message={error_message or 'None'}"
                         )
                         await self._handle_recording_finished(
                             record_name,

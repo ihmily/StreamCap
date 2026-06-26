@@ -1,9 +1,9 @@
 import asyncio
-from contextlib import contextmanager
 import os
 import shutil
 import sqlite3
 import threading
+from contextlib import contextmanager
 from datetime import datetime
 
 
@@ -310,13 +310,9 @@ class RecordingRepository:
             )
             """
         )
-        conn.execute(
-            "INSERT OR REPLACE INTO recording_meta (key, value) VALUES ('schema_version', '1')"
-        )
+        conn.execute("INSERT OR REPLACE INTO recording_meta (key, value) VALUES ('schema_version', '1')")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_recording_history_rec_id ON recording_history(rec_id)")
-        conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_recording_history_ended_at ON recording_history(ended_at)"
-        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_recording_history_ended_at ON recording_history(ended_at)")
 
     def _normalize_room_dict(self, data: dict) -> dict:
         now = self.now_iso()

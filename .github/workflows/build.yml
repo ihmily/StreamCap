@@ -17,10 +17,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -57,12 +57,19 @@ jobs:
           mv dist/StreamCap/_internal/assets dist/StreamCap/
           echo "Folders moved successfully."
 
+      - name: Verify Windows executable
+        run: |
+          if (!(Test-Path "dist/StreamCap/StreamCap.exe")) {
+            throw "StreamCap.exe was not generated."
+          }
+          & "dist/StreamCap/StreamCap.exe" --help
+
       - name: Package Windows build
         run: |
           Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows.zip"
 
       - name: Upload Windows artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: StreamCap-Windows
           path: StreamCap-Windows.zip
@@ -73,10 +80,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -169,6 +176,13 @@ jobs:
           cp assets/icons/Appicon.icns "StreamCap.app/Contents/Resources/Appicon.icns"
           chmod +x "StreamCap.app/Contents/MacOS/StreamCap"
 
+      - name: Verify macOS app bundle
+        run: |
+          test -d "StreamCap.app"
+          test -f "StreamCap.app/Contents/Info.plist"
+          test -x "StreamCap.app/Contents/MacOS/StreamCap"
+          "StreamCap.app/Contents/MacOS/StreamCap" --help
+
       - name: Create DMG settings file
         run: |
           cat > dmg_settings.py << 'EOF'
@@ -207,7 +221,7 @@ jobs:
           dmgbuild -s dmg_settings.py "StreamCap" "StreamCap-macOS.dmg"
 
       - name: Upload macOS artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: StreamCap-macOS
           path: StreamCap-macOS.dmg
@@ -218,10 +232,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
@@ -249,7 +263,23 @@ jobs:
 
       - name: Test web application
         run: |
-          timeout 30s python main.py --web --host 0.0.0.0 --port 6006 || true
+          python main.py --web --host 127.0.0.1 --port 6006 &
+          APP_PID=$!
+          trap 'kill $APP_PID 2>/dev/null || true' EXIT
+          for i in {1..30}; do
+            if curl -fsS http://127.0.0.1:6006/ >/tmp/streamcap-index.html; then
+              break
+            fi
+            if ! kill -0 $APP_PID 2>/dev/null; then
+              wait $APP_PID
+              exit 1
+            fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:6006/ >/dev/null
+          kill $APP_PID
+          wait $APP_PID || true
+          trap - EXIT
 
       - name: Package Linux code
         run: |
@@ -261,7 +291,7 @@ jobs:
 
       - name: Upload Linux artifact
         id: upload-linux-artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: StreamCap-Linux
           path: StreamCap-Linux.tar.gz
@@ -274,22 +304,22 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Download Windows artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: StreamCap-Windows
           path: releases/
 
       - name: Download macOS artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: StreamCap-macOS
           path: releases/
 
       - name: Download Linux artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: StreamCap-Linux
           path: releases/

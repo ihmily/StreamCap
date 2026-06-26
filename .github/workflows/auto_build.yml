@@ -1,0 +1,319 @@
+name: Build Application
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+env:
+  PYTHON_VERSION: "3.12"
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install FFmpeg
+        run: |
+          choco install ffmpeg -y
+          ffmpeg -version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Update StreamGet from Git
+        run: |
+          pip install git+https://github.com/ihmily/streamget.git --upgrade
+
+      - name: Create .env file
+        run: |
+          echo "PLATFORM=desktop" > .env
+          echo "HOST=127.0.0.1" >> .env
+          echo "PORT=6006" >> .env
+
+      - name: Build Windows executable
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --icon "assets/icon.ico" --name "StreamCap" --add-data "assets;assets/" --add-data "config;config/" --add-data "locales;locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+
+      - name: Fix Windows package structure
+        run: |
+          mv dist/StreamCap/_internal/config dist/StreamCap/
+          mv dist/StreamCap/_internal/locales dist/StreamCap/
+          mv dist/StreamCap/_internal/assets dist/StreamCap/
+          echo "Folders moved successfully."
+
+      - name: Package Windows build
+        run: |
+          Compress-Archive -Path "dist/StreamCap/*" -DestinationPath "StreamCap-Windows.zip"
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamCap-Windows
+          path: StreamCap-Windows.zip
+          retention-days: 30
+
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install FFmpeg
+        run: |
+          # Install FFmpeg
+          brew install ffmpeg
+          ffmpeg -version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller dmgbuild
+
+      - name: Update StreamGet from Git
+        run: |
+          pip install git+https://github.com/ihmily/streamget.git --upgrade
+
+      - name: Create .env file
+        run: |
+          echo "PLATFORM=desktop" > .env
+          echo "HOST=127.0.0.1" >> .env
+          echo "PORT=6006" >> .env
+
+      - name: Build macOS executable
+        run: |
+          pyinstaller --noconfirm --onedir --windowed --icon "assets/icon.ico" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+
+      - name: Create macOS app bundle structure
+        run: |
+          mkdir -p "StreamCap.app/Contents/MacOS"
+          mkdir -p "StreamCap.app/Contents/Resources"
+
+      - name: Generate Info.plist
+        run: |
+          cat > "StreamCap.app/Contents/Info.plist" << 'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleExecutable</key>
+              <string>StreamCap</string>
+              <key>CFBundleIdentifier</key>
+              <string>io.github.ihmily.streamcap</string>
+              <key>CFBundleName</key>
+              <string>StreamCap</string>
+              <key>CFBundleVersion</key>
+              <string>1.0.1</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0.1</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleIconFile</key>
+              <string>icon</string>
+              <key>LSMinimumSystemVersion</key>
+              <string>10.14</string>
+              <key>NSHighResolutionCapable</key>
+              <true/>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Copy binaries and assets
+        run: |
+          cp -r dist/StreamCap/* "StreamCap.app/Contents/MacOS/"
+          cp assets/icon.ico "StreamCap.app/Contents/Resources/icon.ico"
+          chmod +x "StreamCap.app/Contents/MacOS/StreamCap"
+
+      - name: Create DMG settings file
+        run: |
+          cat > dmg_settings.py << 'EOF'
+          import os
+
+          # DMG settings
+          format = 'UDZO'
+          size = '500M'
+          files = ['StreamCap.app']
+          symlinks = {'Applications': '/Applications'}
+          badge_icon = 'assets/icons/Appicon.icns'
+          icon_locations = {
+              'StreamCap.app': (150, 120),
+              'Applications': (350, 120)
+          }
+          background = None
+          window_rect = ((100, 100), (500, 300))
+          default_view = 'icon-view'
+          show_status_bar = False
+          show_tab_view = False
+          show_toolbar = False
+          show_pathbar = False
+          show_sidebar = False
+          sidebar_width = 180
+          arrange_by = None
+          grid_offset = (0, 0)
+          grid_spacing = 100
+          scroll_position = (0, 0)
+          label_pos = 'bottom'
+          text_size = 16
+          icon_size = 128
+          EOF
+
+      - name: Create DMG package
+        run: |
+          dmgbuild -s dmg_settings.py "StreamCap" "StreamCap-macOS.dmg"
+
+      - name: Upload macOS artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamCap-macOS
+          path: StreamCap-macOS.dmg
+          retention-days: 30
+
+  build-linux:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+
+      - name: Install FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          ffmpeg -version
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-web.txt
+
+      - name: Update StreamGet from Git
+        run: |
+          pip install git+https://github.com/ihmily/streamget.git --upgrade
+
+      - name: Create .env file for Web
+        run: |
+          echo "PLATFORM=web" > .env
+          echo "HOST=0.0.0.0" >> .env
+          echo "PORT=6006" >> .env
+
+      - name: Test web application
+        run: |
+          timeout 30s python main.py --web --host 0.0.0.0 --port 6006 || true
+
+      - name: Package Linux code
+        run: |
+          mkdir -p ../package
+          rsync -av --exclude='.git' --exclude='__pycache__' --exclude='*.pyc' --exclude='*.log' --exclude='.pytest_cache' --exclude='node_modules' --exclude='dist' --exclude='build' --exclude='*.egg-info' . ../package/StreamCap/
+          cd ../package
+          tar -czf StreamCap-Linux.tar.gz StreamCap/
+          mv StreamCap-Linux.tar.gz $GITHUB_WORKSPACE/
+
+      - name: Upload Linux artifact
+        id: upload-linux-artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: StreamCap-Linux
+          path: StreamCap-Linux.tar.gz
+          retention-days: 30
+
+  prerelease:
+    needs: [build-windows, build-macos, build-linux]
+    if: github.event_name != 'pull_request' && github.repository == 'lycorisdeve/StreamCap'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: StreamCap-Windows
+          path: releases/
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: StreamCap-macOS
+          path: releases/
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: StreamCap-Linux
+          path: releases/
+
+      - name: Check and rename artifacts for Beta
+        run: |
+          if [ -f "releases/StreamCap-Windows.zip" ]; then
+            mv releases/StreamCap-Windows.zip "StreamCap_Windows_beta.zip"
+          else
+            echo "StreamCap-Windows.zip not found!"
+          fi
+
+          if [ -f "releases/StreamCap-macOS.dmg" ]; then
+            mv releases/StreamCap-macOS.dmg "StreamCap_macOS_beta.dmg"
+          else
+            echo "StreamCap-macOS.dmg not found!"
+          fi
+
+          if [ -f "releases/StreamCap-Linux.tar.gz" ]; then
+            mv releases/StreamCap-Linux.tar.gz "StreamCap_Linux_beta.tar.gz"
+          else
+            echo "StreamCap-Linux.tar.gz not found!"
+          fi
+
+      - name: Delete Old Pre-Release (if exists)
+        run: |
+          if gh release view beta &>/dev/null; then
+            gh release delete beta -y
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create or Update Beta Tag
+        uses: richardsimko/update-tag@v1
+        with:
+          tag_name: beta
+        env:
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+
+      - name: Publish Beta Release
+        uses: ncipollo/release-action@v1
+        with:
+          name: StreamCap-beta
+          tag: "beta"
+          body: "此版本为测试版，包含最新代码变更，可能存在不稳定情况，升级前请务必备份好数据。"
+          prerelease: true
+          artifacts: ${{ github.workspace }}/*.zip,${{ github.workspace }}/*.dmg,${{ github.workspace }}/*.tar.gz

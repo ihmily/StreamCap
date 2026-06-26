@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 
 class Recording:
@@ -19,6 +19,13 @@ class Recording:
         enabled_message_push,
         only_notify_no_record,
         flv_use_direct_download,
+        created_at=None,
+        updated_at=None,
+        pinned_at=None,
+        pin_order=0,
+        last_recorded_at=None,
+        last_record_file=None,
+        last_live_title=None,
     ):
         """
         Initialize a recording object.
@@ -55,6 +62,14 @@ class Recording:
         self.enabled_message_push = enabled_message_push
         self.only_notify_no_record = only_notify_no_record
         self.flv_use_direct_download = flv_use_direct_download
+        now = datetime.now().isoformat(timespec="seconds")
+        self.created_at = created_at or now
+        self.updated_at = updated_at or self.created_at
+        self.pinned_at = pinned_at
+        self.pin_order = int(pin_order or 0)
+        self.last_recorded_at = last_recorded_at
+        self.last_record_file = last_record_file
+        self.last_live_title = last_live_title
         self.scheduled_time_range = None
         self.title = f"{streamer_name} - {self.quality}"
         self.speed = "X KB/s"
@@ -104,6 +119,13 @@ class Recording:
             "platform_key": self.platform_key,
             "only_notify_no_record": self.only_notify_no_record,
             "flv_use_direct_download": self.flv_use_direct_download,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+            "pinned_at": self.pinned_at,
+            "pin_order": self.pin_order,
+            "last_recorded_at": self.last_recorded_at,
+            "last_record_file": self.last_record_file,
+            "last_live_title": self.last_live_title,
         }
 
     @classmethod
@@ -125,6 +147,13 @@ class Recording:
             data.get("enabled_message_push"),
             data.get("only_notify_no_record"),
             data.get("flv_use_direct_download"),
+            data.get("created_at"),
+            data.get("updated_at"),
+            data.get("pinned_at"),
+            data.get("pin_order", 0),
+            data.get("last_recorded_at"),
+            data.get("last_record_file"),
+            data.get("last_live_title"),
         )
         recording.title = data.get("title", recording.title)
         recording.display_title = data.get("display_title", recording.title)

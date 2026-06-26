@@ -457,6 +457,7 @@ class RecordingsPage(PageBase):
                 for card in existing_cards:
                     self.recording_card_area.content.controls.append(card)
 
+        self.app.record_card_manager.reorder_recording_cards()
         self.loading_indicator.visible = False
         self.loading_indicator.update()
         self.recording_card_area.update()
@@ -545,6 +546,7 @@ class RecordingsPage(PageBase):
                 self.app.record_card_manager.cards_obj[recording.rec_id]["card"] = card
                 self.app.page.pubsub.send_others_on_topic("add", recording)
 
+            self.app.record_card_manager.reorder_recording_cards()
             self.recording_card_area.update()
 
             self.content_area.controls[1] = self.create_filter_area()
@@ -584,8 +586,9 @@ class RecordingsPage(PageBase):
         for card in to_remove:
             card_key = card["card"].key
             cards_obj.pop(card_key, None)
-            self.recording_card_area.controls.remove(card["card"])
+            self.recording_card_area.content.controls.remove(card["card"])
         await self.show_all_cards()
+        self.app.record_card_manager.reorder_recording_cards()
 
         self.content_area.controls[1] = self.create_filter_area()
         self.content_area.update()
@@ -676,6 +679,7 @@ class RecordingsPage(PageBase):
             self.recording_card_area.content.controls.append(card)
             self.app.record_card_manager.cards_obj[recording.rec_id]["card"] = card
 
+            self.app.record_card_manager.reorder_recording_cards()
             self.recording_card_area.update()
 
             self.content_area.controls[1] = self.create_filter_area()

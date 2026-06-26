@@ -23,10 +23,11 @@ def setup_responsive_layout(page: ft.Page, app: App) -> None:
                 ft.NavigationBarDestination(icon=ft.Icons.DASHBOARD_ROUNDED, label=_["recordings"]),
                 ft.NavigationBarDestination(icon=ft.Icons.SETTINGS, label=_["settings"]),
                 ft.NavigationBarDestination(icon=ft.Icons.DRIVE_FILE_MOVE, label=_["storage"]),
+                ft.NavigationBarDestination(icon=ft.Icons.HISTORY, label=_["logs"]),
                 ft.NavigationBarDestination(icon=ft.Icons.INFO, label=_["about"]),
             ],
             on_change=lambda e: page.go(
-                f"/{['home', 'recordings', 'settings', 'storage', 'about'][e.control.selected_index]}"
+                f"/{['home', 'recordings', 'settings', 'storage', 'logs', 'about'][e.control.selected_index]}"
             ),
         )
 

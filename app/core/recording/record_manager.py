@@ -1,4 +1,5 @@
 import asyncio
+import os
 import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
@@ -10,6 +11,7 @@ from ...utils import utils
 from ...utils.logger import logger
 from ..platforms.platform_handlers import get_platform_info
 from ..runtime.process_manager import BackgroundService
+from .recording_repository import RecordingRepository
 from .stream_manager import LiveStreamRecorder
 
 
@@ -22,6 +24,8 @@ class RecordingManager:
     def __init__(self, services):
         self.services = services
         self.settings = services.settings_config
+        self.repository = RecordingRepository(services.config_manager)
+        self.repository.initialize()
         self.periodic_task_started = False
         self.loop_time_seconds = None
         self.services.language_manager.add_observer(self)
@@ -52,10 +56,18 @@ class RecordingManager:
             self._.update(language.get(key, {}))
 
     def load_recordings(self):
-        """Load recordings from a JSON file into objects."""
-        recordings_data = self.services.config_manager.load_recordings_config()
+        """Load recording rooms from SQLite, migrating legacy JSON data if needed."""
+        recordings_data = self.repository.load_recordings()
+        if not recordings_data and self.repository.count_recordings() == 0:
+            legacy_data = self.services.config_manager.load_recordings_config()
+            if isinstance(legacy_data, list) and legacy_data:
+                self.repository.save_recordings_sync(legacy_data)
+                recordings_data = self.repository.load_recordings()
+                logger.info(f"Live Recordings: Migrated {len(recordings_data)} items from recordings.json")
+
         if not GlobalRecordingState.recordings:
             GlobalRecordingState.recordings = [Recording.from_dict(rec) for rec in recordings_data]
+            self.sort_recordings()
         logger.info(f"Live Recordings: Loaded {len(self.recordings)} items")
 
     def initialize_dynamic_state(self):
@@ -68,30 +80,127 @@ class RecordingManager:
             recording.showed_checking_status = True
 
     async def add_recording(self, recording):
+        now = self.repository.now_iso()
+        recording.created_at = recording.created_at or now
+        recording.updated_at = now
         with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.append(recording)
-            await self.persist_recordings()
+        self.sort_recordings()
+        await self.persist_recordings()
 
     async def remove_recording(self, recording: Recording):
         with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.remove(recording)
-            await self.persist_recordings()
+        await self.persist_recordings()
 
     async def clear_all_recordings(self):
         with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.clear()
-            await self.persist_recordings()
+        await self.persist_recordings()
 
     async def persist_recordings(self):
-        """Persist recordings to a JSON file."""
+        """Persist recording rooms to SQLite."""
         data_to_save = [rec.to_dict() for rec in self.recordings]
-        await self.services.config_manager.save_recordings_config(data_to_save)
+        await self.repository.save_recordings(data_to_save)
 
     async def update_recording_card(self, recording: Recording, updated_info: dict):
-        """Update an existing recording object and persist changes to a JSON file."""
+        """Update an existing recording object and persist changes to SQLite."""
         if recording:
             recording.update(updated_info)
+            recording.updated_at = self.repository.now_iso()
             self.services.run_coro(self.persist_recordings())
+
+    def sort_recordings(self):
+        with GlobalRecordingState.lock:
+            GlobalRecordingState.recordings.sort(
+                key=lambda rec: (
+                    rec.pinned_at is not None,
+                    int(rec.pin_order or 0),
+                    rec.last_recorded_at or rec.created_at or "",
+                ),
+                reverse=True,
+            )
+
+    async def toggle_pin_recording(self, recording: Recording) -> bool:
+        now = self.repository.now_iso()
+        if recording.pinned_at:
+            recording.pinned_at = None
+            recording.pin_order = 0
+            pinned = False
+        else:
+            recording.pinned_at = now
+            recording.pin_order = int(datetime.now().timestamp() * 1000)
+            pinned = True
+        recording.updated_at = now
+        self.sort_recordings()
+        await self.persist_recordings()
+        action = "Pinned" if pinned else "Unpinned"
+        logger.info(f"{action} recording: {recording.rec_id}-{recording.streamer_name}")
+        return pinned
+
+    async def record_session_history(
+        self,
+        recording: Recording,
+        file_path: str | None,
+        file_format: str | None,
+        status: str,
+        stop_reason: str = "",
+        error_message: str = "",
+        started_at: str | None = None,
+        ended_at: str | None = None,
+        duration_seconds: int | None = None,
+    ):
+        now = self.repository.now_iso()
+        if status == "started":
+            ended_at = ended_at
+        else:
+            ended_at = ended_at or now
+
+        event_time = ended_at or started_at or now
+        recording.last_recorded_at = event_time
+        if file_path:
+            recording.last_record_file = file_path
+        recording.last_live_title = recording.live_title or recording.last_live_title
+        recording.updated_at = event_time
+
+        file_size = None
+        if file_path and "%" not in file_path and os.path.exists(file_path):
+            file_size = os.path.getsize(file_path)
+
+        history = {
+            "rec_id": recording.rec_id,
+            "streamer_name": recording.streamer_name,
+            "platform": recording.platform,
+            "platform_key": recording.platform_key,
+            "live_title": recording.live_title,
+            "started_at": started_at,
+            "ended_at": ended_at,
+            "duration_seconds": duration_seconds,
+            "output_dir": os.path.dirname(file_path) if file_path else recording.recording_dir,
+            "file_path": file_path,
+            "file_format": file_format,
+            "file_size": file_size,
+            "stop_reason": stop_reason,
+            "status": status,
+            "error_message": error_message,
+        }
+        self.sort_recordings()
+        await self.persist_recordings()
+        await self.repository.add_recording_history(history)
+
+    def get_recording_history(self, recording: Recording, limit: int = 10) -> list[dict]:
+        return self.repository.list_recording_history(recording.rec_id, limit=limit)
+
+    def get_recent_recording_history(self, limit: int = 100) -> list[dict]:
+        return self.repository.list_recording_history(limit=limit)
+
+    async def clear_recording_history(self) -> int:
+        removed_count = await self.repository.clear_recording_history()
+        for recording in self.recordings:
+            recording.last_recorded_at = None
+            recording.last_record_file = None
+            recording.last_live_title = None
+        return removed_count
 
     @staticmethod
     async def _update_recording(

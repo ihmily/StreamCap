@@ -95,6 +95,93 @@ python main.py --web
 
 如果程序提示缺少 FFmpeg，请访问 FFmpeg 官方下载页面[Download FFmpeg](https://ffmpeg.org/download.html)，下载预编译的 FFmpeg 可执行文件，并配置环境变量。
 
+## 📦打包与 Web 部署
+
+### 1.Windows 打包为 exe
+
+本项目基于 Flet，桌面端推荐使用 `flet pack` 生成 Windows 可执行程序。打包前请先安装桌面端依赖，并确认 FFmpeg 已安装或已加入系统环境变量。
+
+```powershell
+# 安装桌面端依赖
+pip install -r requirements.txt
+
+# 首次打包前准备环境配置
+copy .env.example .env
+
+# 生成 onedir 形式的 Windows 程序，输出目录为 dist\StreamCap
+flet pack main.py -D -n StreamCap -i assets/icon.ico --distpath dist -y
+
+# 将运行时需要的资源目录复制到 exe 同级目录
+xcopy assets dist\StreamCap\assets /E /I /Y
+xcopy locales dist\StreamCap\locales /E /I /Y
+copy .env dist\StreamCap\.env
+
+# 复制基础配置文件，避免首次启动缺少语言和版本配置
+mkdir dist\StreamCap\config
+copy config\default_settings.json dist\StreamCap\config\default_settings.json
+copy config\version.json dist\StreamCap\config\version.json
+copy config\language.json dist\StreamCap\config\language.json
+```
+
+打包完成后运行：
+
+```powershell
+dist\StreamCap\StreamCap.exe
+```
+
+说明：
+
+- 程序运行时会在 exe 同级目录创建或使用 `config`、`logs`、`downloads` 等目录。
+- `config/recordings.db` 用于保存录制房间和录制历史；通用配置、Cookie、账号配置等仍保留 JSON 文件。
+- 如果希望发布压缩包，建议将 `dist\StreamCap` 整个目录压缩，而不是只复制单个 exe。
+- `flet pack` 生成的是桌面端 exe，不建议用该 exe 启动 Web 服务；Web 部署请使用下方 `python main.py --web` 或 Docker 方式。
+- 如需使用 Flet 官方构建流程，也可以尝试 `flet build windows --module-name main --output build\windows --product StreamCap --artifact StreamCap --yes`，但完整录制能力仍依赖本机 FFmpeg 和运行时配置目录。
+
+### 2.Web 方式运行
+
+本项目的 Web 模式是带 Python 后端的动态服务，录制、监控、SQLite 历史记录、日志写入等功能都依赖本地 Python 进程和 FFmpeg。推荐使用以下方式运行：
+
+```powershell
+# 安装 Web 端依赖
+pip install -r requirements-web.txt
+
+# 首次运行前准备环境配置
+copy .env.example .env
+
+# 启动 Web 服务
+python main.py --web --host 0.0.0.0 --port 6006
+```
+
+启动后访问：
+
+```text
+http://127.0.0.1:6006
+```
+
+也可以通过 `.env` 指定 Web 模式：
+
+```env
+PLATFORM=web
+HOST=0.0.0.0
+PORT=6006
+```
+
+然后直接运行：
+
+```powershell
+python main.py
+```
+
+### 3.Web 静态构建说明
+
+Flet 也提供静态 Web 构建命令：
+
+```powershell
+flet build web --module-name main --output build\web --web-renderer canvaskit --yes
+```
+
+但 StreamCap 的核心录制功能需要 Python 后端、FFmpeg、配置文件、日志和 SQLite 数据库支持，因此静态 Web 构建更适合前端渲染验证，不建议作为完整录制服务的发布方式。完整 Web 部署请优先使用 `python main.py --web` 或下方 Docker 方式。
+
 ## 🐋容器运行
 
 本机无需Python环境运行，在运行命令之前，请确保您的机器上安装了 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/) 

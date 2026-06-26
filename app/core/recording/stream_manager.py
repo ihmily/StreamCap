@@ -50,6 +50,7 @@ class LiveStreamRecorder:
         self.direct_downloader = None
         self.min_valid_recording_duration = 25
         self.recording_start_time = 0
+        self.history_start_recorded = False
         os.makedirs(self.output_dir, exist_ok=True)
         self.services.language_manager.add_observer(self)
         self._ = {}
@@ -164,7 +165,80 @@ class LiveStreamRecorder:
         except Exception as e:
             logger.debug(f"Failed to update UI: {e}")
 
-    async def _handle_recording_finished(self, record_name: str, stop_msg: str = "", complete_msg: str = "") -> None:
+    def _is_stopping_or_shutting_down(self) -> bool:
+        return self.should_stop or self.recording.manually_stopped or not self.services.recording_enabled
+
+    @staticmethod
+    def _decode_first_stderr_line(stderr: bytes | None) -> str:
+        if not stderr:
+            return ""
+        decoded = stderr.decode(errors="replace").strip()
+        return decoded.splitlines()[0] if decoded else ""
+
+    async def _record_session_history(
+        self,
+        file_path: str | None,
+        file_format: str | None,
+        status: str,
+        error_message: str = "",
+    ) -> None:
+        start_timestamp = getattr(self, "recording_start_time", None)
+        started_at = None
+        duration_seconds = None
+        if start_timestamp:
+            started_at = datetime.fromtimestamp(start_timestamp).isoformat(timespec="seconds")
+            duration_seconds = max(0, int(time.time() - start_timestamp))
+
+        if self.should_stop or self.recording.manually_stopped:
+            stop_reason = "manual"
+        elif not self.services.recording_enabled:
+            stop_reason = "shutdown"
+        else:
+            stop_reason = status
+        try:
+            await self.services.recording_manager.record_session_history(
+                recording=self.recording,
+                file_path=file_path,
+                file_format=file_format,
+                status=status,
+                stop_reason=stop_reason,
+                error_message=error_message,
+                started_at=started_at,
+                ended_at=datetime.now().isoformat(timespec="seconds"),
+                duration_seconds=duration_seconds,
+            )
+        except Exception as e:
+            logger.debug(f"Failed to write recording history: {e}")
+
+    async def _record_session_started(self, file_format: str | None) -> None:
+        if self.history_start_recorded:
+            return
+
+        start_timestamp = getattr(self, "recording_start_time", None) or time.time()
+        started_at = datetime.fromtimestamp(start_timestamp).isoformat(timespec="seconds")
+        try:
+            await self.services.recording_manager.record_session_history(
+                recording=self.recording,
+                file_path=None,
+                file_format=file_format,
+                status="started",
+                stop_reason="started",
+                started_at=started_at,
+                ended_at=None,
+                duration_seconds=0,
+            )
+            self.history_start_recorded = True
+        except Exception as e:
+            logger.debug(f"Failed to write recording start history: {e}")
+
+    async def _handle_recording_finished(
+        self,
+        record_name: str,
+        stop_msg: str = "",
+        complete_msg: str = "",
+        file_path: str | None = None,
+        file_format: str | None = None,
+    ) -> None:
         self.recording.is_live = False
         if self.recording.monitor_status:
             self.recording.status_info = RecordingStatus.MONITORING
@@ -174,11 +248,18 @@ class LiveStreamRecorder:
             display_title = self.recording.display_title
 
         self.recording.live_title = None
-        if self.should_stop:
+        is_stopped = self._is_stopping_or_shutting_down()
+        if is_stopped:
             logger.success(stop_msg or f"Live recording has stopped: {record_name}")
         else:
             logger.success(complete_msg or f"Live recording completed: {record_name}")
             asyncio.create_task(self.end_message_push())
+
+        await self._record_session_history(
+            file_path=file_path,
+            file_format=file_format,
+            status="stopped" if is_stopped else "completed",
+        )
 
         try:
             self.recording.update({"display_title": display_title})
@@ -379,6 +460,7 @@ class LiveStreamRecorder:
             logger.info(f"Recording in Progress: {live_url}")
             logger.log("STREAM", f"Recording Stream URL: {record_url}")
             self.recording_start_time = time.time()
+            await self._record_session_started(save_type)
 
             while True:
                 if self.should_stop or self.recording.force_stop or not self.services.recording_enabled:
@@ -422,14 +504,27 @@ class LiveStreamRecorder:
             safe_return_code = [0, 255]
             stdout, stderr = await process.communicate()
 
-            if return_code not in safe_return_code and stderr:
+            if return_code not in safe_return_code:
                 if not self.recording.is_recording:
-                    logger.error(f"FFmpeg Stderr Output: {str(stderr.decode()).splitlines()[0]}")
-                    self._handle_recording_error(record_name, self._["record_stream_error"])
+                    error_message = self._decode_first_stderr_line(stderr)
+                    if self._is_stopping_or_shutting_down():
+                        logger.info(
+                            f"FFmpeg exited while stopping, code={return_code}, "
+                            f"message={error_message or 'None'}"
+                        )
+                        await self._handle_recording_finished(
+                            record_name,
+                            file_path=save_file_path,
+                            file_format=save_type,
+                        )
+                    else:
+                        logger.error(f"FFmpeg Stderr Output: {error_message or 'Unknown error'}")
+                        await self._record_session_history(save_file_path, save_type, "error", error_message)
+                        self._handle_recording_error(record_name, self._["record_stream_error"])
 
             if return_code in safe_return_code:
                 if not self.recording.is_recording:
-                    await self._handle_recording_finished(record_name)
+                    await self._handle_recording_finished(record_name, file_path=save_file_path, file_format=save_type)
 
                 if not self.services.recording_enabled:
                     self.recording.status_info = RecordingStatus.NOT_RECORDING_SPACE
@@ -485,6 +580,7 @@ class LiveStreamRecorder:
 
         except Exception as e:
             logger.error(f"An error occurred during the subprocess execution: {e}")
+            await self._record_session_history(None, save_type, "error", str(e))
             self._handle_recording_error(record_name, self._["no_ffmpeg_tip"], duration=4000)
             return False
         finally:
@@ -688,6 +784,7 @@ class LiveStreamRecorder:
             logger.info(f"Direct Downloading: {live_url}")
             logger.log("STREAM", f"Direct Download Stream URL: {record_url}")
             self.recording_start_time = time.time()
+            await self._record_session_started(save_type)
 
             while True:
                 if self.should_stop or self.recording.force_stop or not self.services.recording_enabled:
@@ -711,6 +808,8 @@ class LiveStreamRecorder:
                     record_name,
                     stop_msg=f"Direct Downloading Stopped: {record_name}",
                     complete_msg=f"Direct Downloading Completed: {record_name}",
+                    file_path=save_file_path,
+                    file_format=save_type,
                 )
 
             if not self.services.recording_enabled:
@@ -743,6 +842,7 @@ class LiveStreamRecorder:
 
         except Exception as e:
             logger.error(f"Error occurred during direct download: {e}")
+            await self._record_session_history(save_file_path, save_type, "error", str(e))
             self._handle_recording_error(record_name, self._["record_stream_error"])
             return False
         finally:

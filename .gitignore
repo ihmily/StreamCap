@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+dist-pack-test/
 downloads/
 eggs/
 .eggs/
@@ -85,6 +86,8 @@ ipython_config.py
 /config/accounts.json
 /config/user_settings.json
 /config/recordings.json
+/config/recordings.db
+/config/recordings.db-*
 /config/cookies.json
 /config/web_auth.json
 .ruff_cache/

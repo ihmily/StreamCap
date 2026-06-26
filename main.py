@@ -1,4 +1,5 @@
 import argparse
+import logging
 import multiprocessing
 import os
 from collections.abc import Callable
@@ -23,6 +24,29 @@ DEFAULT_PORT = 6006
 WINDOW_SCALE = 0.65
 MIN_WIDTH = 950
 ASSETS_DIR = "assets"
+
+
+class ClientDisconnectLogFilter(logging.Filter):
+    """Hide noisy ASGI tracebacks produced by normal browser disconnects."""
+
+    DISCONNECT_EXCEPTIONS = {"ClientDisconnected", "InvalidState", "WebSocketDisconnect"}
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        if not record.exc_info:
+            return True
+
+        exc = record.exc_info[1]
+        while exc is not None:
+            if type(exc).__name__ in self.DISCONNECT_EXCEPTIONS:
+                return False
+            exc = exc.__context__ or exc.__cause__
+        return True
+
+
+def suppress_client_disconnect_logs() -> None:
+    uvicorn_error_logger = logging.getLogger("uvicorn.error")
+    if not any(isinstance(item, ClientDisconnectLogFilter) for item in uvicorn_error_logger.filters):
+        uvicorn_error_logger.addFilter(ClientDisconnectLogFilter())
 
 
 async def setup_window(page: ft.Page, app: App) -> None:
@@ -64,6 +88,7 @@ def get_route_handler() -> dict[str, str]:
         "/recordings": "recordings",
         "/settings": "settings",
         "/storage": "storage",
+        "/logs": "logs",
         "/about": "about",
     }
 
@@ -216,6 +241,20 @@ async def main(page: ft.Page) -> None:
     await load_app()
 
 
+def run_flet_app(**kwargs) -> None:
+    runner = getattr(ft, "run", None)
+    if runner is not None:
+        runner(**kwargs)
+        return
+
+    app_runner = getattr(ft, "app", None)
+    if app_runner is None:
+        raise RuntimeError("The installed flet package exposes neither run() nor app().")
+
+    kwargs["target"] = kwargs.pop("main")
+    app_runner(**kwargs)
+
+
 if __name__ == "__main__":
     load_dotenv()
     platform = os.getenv("PLATFORM")
@@ -234,17 +273,17 @@ if __name__ == "__main__":
 
     is_web = args.web or platform == "web"
     if is_web:
+        suppress_client_disconnect_logs()
         services.start_background_loop()
         logger.debug("Running in web mode on http://" + args.host + ":" + str(args.port))
-        ft.run(
+        run_flet_app(
             main=main,
             view=ft.AppView.WEB_BROWSER,
             host=args.host,
             port=args.port,
             assets_dir=ASSETS_DIR,
             web_renderer=ft.WebRenderer.CANVAS_KIT,
-            no_cdn=True,
         )
     else:
         setup_bundled_flet_view()
-        ft.run(main=main, view=ft.AppView.FLET_APP_HIDDEN, assets_dir=ASSETS_DIR)
+        run_flet_app(main=main, view=ft.AppView.FLET_APP_HIDDEN, assets_dir=ASSETS_DIR)

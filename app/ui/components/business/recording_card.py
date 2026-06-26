@@ -1,5 +1,6 @@
 import asyncio
 import os.path
+import time
 
 import flet as ft
 
@@ -20,6 +21,7 @@ class RecordingCardManager:
         self.cards_obj = {}
         self.update_duration_tasks = {}
         self.selected_cards = {}
+        self.last_card_click_at = {}
         self.app.language_manager.add_observer(self)
         self._ = {}
         self.load()
@@ -81,6 +83,13 @@ class RecordingCardManager:
             on_click=lambda e, rec=recording: self.app.page.run_task(self.monitor_button_on_click, e, rec),
         )
 
+        pin_button = ft.IconButton(
+            icon=self.get_icon_for_pin_state(recording),
+            icon_color=ft.Colors.PRIMARY,
+            tooltip=self.get_tip_for_pin_state(recording),
+            on_click=lambda e, rec=recording: self.app.page.run_task(self.pin_recording_button_on_click, e, rec),
+        )
+
         delete_button = ft.IconButton(
             icon=ft.Icons.DELETE,
             icon_color=ft.Colors.PRIMARY,
@@ -106,12 +115,6 @@ class RecordingCardManager:
             tooltip=self._["open_folder"],
             on_click=lambda e, rec=recording: self.app.page.run_task(self.recording_dir_button_on_click, e, rec),
         )
-        recording_info_button = ft.IconButton(
-            icon=ft.Icons.INFO,
-            icon_color=ft.Colors.PRIMARY,
-            tooltip=self._["recording_info"],
-            on_click=lambda e, rec=recording: self.app.page.run_task(self.recording_info_button_on_click, e, rec),
-        )
         speed_text_label = ft.Text(speed, size=12)
 
         status_label = self.create_status_label(recording)
@@ -132,8 +135,8 @@ class RecordingCardManager:
                     ft.Row(
                         [
                             record_button,
+                            pin_button,
                             open_folder_button,
-                            recording_info_button,
                             preview_button,
                             edit_button,
                             delete_button,
@@ -148,6 +151,7 @@ class RecordingCardManager:
                 tight=True,
             ),
             padding=8,
+            tooltip=self._["recording_card_tip"],
             on_click=lambda e, rec=recording: self.app.page.run_task(self.recording_card_on_click, e, rec),
             bgcolor=self.get_card_background_color(recording),
             border_radius=5,
@@ -161,8 +165,8 @@ class RecordingCardManager:
             "duration_label": duration_text_label,
             "speed_label": speed_text_label,
             "record_button": record_button,
+            "pin_button": pin_button,
             "open_folder_button": open_folder_button,
-            "recording_info_button": recording_info_button,
             "edit_button": edit_button,
             "monitor_button": monitor_button,
             "status_label": status_label,
@@ -236,6 +240,11 @@ class RecordingCardManager:
                 if recording_card.get("monitor_button"):
                     recording_card["monitor_button"].icon = self.get_icon_for_monitor_state(recording)
                     recording_card["monitor_button"].tooltip = self.get_tip_for_monitor_state(recording)
+
+                if recording_card.get("pin_button"):
+                    recording_card["pin_button"].icon = self.get_icon_for_pin_state(recording)
+                    recording_card["pin_button"].icon_color = ft.Colors.PRIMARY
+                    recording_card["pin_button"].tooltip = self.get_tip_for_pin_state(recording)
 
                 if recording_card["card"] and recording_card["card"].content:
                     recording_card["card"].content.bgcolor = self.get_card_background_color(recording)
@@ -314,6 +323,11 @@ class RecordingCardManager:
 
     async def on_toggle_recording(self, recording: Recording):
         """Toggle the recording state for a specific recording."""
+        guard_until = getattr(recording, "_ignore_record_button_until", 0)
+        if guard_until and time.monotonic() < guard_until:
+            logger.debug(f"Ignore recording toggle immediately after pin click: {recording.rec_id}")
+            return
+
         if recording and self.app.recording_enabled:
             if recording.is_recording:
                 self.app.record_manager.stop_recording(recording, manually_stopped=True)
@@ -397,6 +411,48 @@ class RecordingCardManager:
     def get_tip_for_monitor_state(self, recording: Recording):
         return self._["stop_monitor"] if recording.monitor_status else self._["start_monitor"]
 
+    @staticmethod
+    def get_icon_for_pin_state(recording: Recording):
+        if recording.pinned_at:
+            return getattr(ft.Icons, "PUSH_PIN", ft.Icons.STAR)
+        return getattr(ft.Icons, "PUSH_PIN_OUTLINED", getattr(ft.Icons, "STAR_BORDER", ft.Icons.STAR))
+
+    def get_tip_for_pin_state(self, recording: Recording):
+        return self._["unpin_record"] if recording.pinned_at else self._["pin_record"]
+
+    def reorder_recording_cards(self):
+        current_page = getattr(self.app, "current_page", None)
+        recording_card_area = getattr(current_page, "recording_card_area", None)
+        content = getattr(recording_card_area, "content", None)
+        controls = getattr(content, "controls", None)
+        if controls is None:
+            return
+
+        ordered_cards = []
+        ordered_ids = set()
+        for recording in self.app.record_manager.recordings:
+            card_info = self.cards_obj.get(recording.rec_id)
+            if card_info and card_info.get("card"):
+                ordered_cards.append(card_info["card"])
+                ordered_ids.add(card_info["card"].key)
+
+        remaining_cards = [control for control in controls if getattr(control, "key", None) not in ordered_ids]
+        controls[:] = ordered_cards + remaining_cards
+        try:
+            recording_card_area.update()
+        except (ft.FletPageDisconnectedException, AssertionError) as e:
+            logger.debug(f"Reorder recording cards failed: {e}")
+
+    async def pin_recording_button_on_click(self, _, recording: Recording):
+        recording._ignore_record_button_until = time.monotonic() + 1.0
+        pinned = await self.app.record_manager.toggle_pin_recording(recording)
+        await self.update_card(recording)
+        if not recording.is_recording:
+            self.reorder_recording_cards()
+        self.app.page.pubsub.send_others_on_topic("update", recording)
+        message_key = "pin_record_success_tip" if pinned else "unpin_record_success_tip"
+        await self.app.snack_bar.show_snack_bar(self._[message_key], bgcolor=ft.Colors.PRIMARY, duration=1500)
+
     async def update_duration(self, recording: Recording):
         """Update the duration text periodically."""
         while True:
@@ -428,6 +484,13 @@ class RecordingCardManager:
     async def on_card_click(self, recording: Recording):
         """Handle card click events."""
         try:
+            now = time.monotonic()
+            last_click_at = self.last_card_click_at.get(recording.rec_id, 0)
+            self.last_card_click_at[recording.rec_id] = now
+            if now - last_click_at <= 0.35:
+                await self.show_recording_info_dialog(recording)
+                return
+
             recording.selected = not recording.selected
             self.selected_cards[recording.rec_id] = recording
             self.cards_obj[recording.rec_id]["card"].content.bgcolor = await self.update_record_hover(recording)
@@ -534,6 +597,8 @@ class RecordingCardManager:
 
     async def subscribe_update_card(self, _, recording: Recording):
         await self.update_card(recording)
+        if not recording.is_recording:
+            self.reorder_recording_cards()
 
     async def subscribe_remove_cards(self, _, recordings: list[Recording]):
         await self.remove_recording_card(recordings)

@@ -105,7 +105,7 @@ jobs:
 
       - name: Build macOS executable
         run: |
-          pyinstaller --noconfirm --onedir --windowed --icon "assets/icon.ico" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
+          pyinstaller --noconfirm --onedir --windowed --icon "assets/icons/Appicon.icns" --name "StreamCap" --add-data "assets:assets/" --add-data "config:config/" --add-data "locales:locales/" --hidden-import "flet.matplotlib_chart" --hidden-import "flet.plotly_chart" --hidden-import "flet.video" --collect-all "streamget" main.py
 
       - name: Create macOS app bundle structure
         run: |
@@ -134,7 +134,7 @@ jobs:
               <key>CFBundlePackageType</key>
               <string>APPL</string>
               <key>CFBundleIconFile</key>
-              <string>icon</string>
+              <string>Appicon</string>
               <key>LSMinimumSystemVersion</key>
               <string>10.14</string>
               <key>NSHighResolutionCapable</key>
@@ -145,8 +145,13 @@ jobs:
 
       - name: Copy binaries and assets
         run: |
-          cp -r dist/StreamCap/* "StreamCap.app/Contents/MacOS/"
-          cp assets/icon.ico "StreamCap.app/Contents/Resources/icon.ico"
+          if [ -d "dist/StreamCap.app" ]; then
+            rm -rf "StreamCap.app"
+            cp -R "dist/StreamCap.app" "StreamCap.app"
+          else
+            cp -r dist/StreamCap/* "StreamCap.app/Contents/MacOS/"
+          fi
+          cp assets/icons/Appicon.icns "StreamCap.app/Contents/Resources/Appicon.icns"
           chmod +x "StreamCap.app/Contents/MacOS/StreamCap"
 
       - name: Create DMG settings file
@@ -307,7 +312,7 @@ jobs:
         with:
           tag_name: beta
         env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
 
       - name: Publish Beta Release
         uses: ncipollo/release-action@v1

@@ -91,7 +91,9 @@ ipython_config.py
 /config/cookies.json
 /config/web_auth.json
 .ruff_cache/
+log/
 logs/
+data/database/
 storage/
 ffmpeg/
 node/

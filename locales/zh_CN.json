@@ -523,7 +523,7 @@
     "clean_empty_dirs_confirm": "将删除录制目录下 {count} 个空目录，是否继续？",
     "clean_empty_dirs_success": "已清理 {count} 个空目录",
     "no_logs_to_clean": "没有可清理的日志文件",
-    "clean_logs_confirm": "将删除 logs 目录下可删除的日志文件，预计释放 {size}。正在写入的日志可能会被跳过，是否继续？",
+    "clean_logs_confirm": "将删除 log 目录下可删除的日志文件，预计释放 {size}。正在写入的日志可能会被跳过，是否继续？",
     "clean_logs_success": "已清理 {count} 个日志文件，释放 {size}",
     "no_files_to_delete": "没有可删除的录制文件",
     "delete_all_files_confirm": "将删除保存目录下 {count} 个媒体录制文件，预计释放 {size}。删除后不可恢复，是否继续？",

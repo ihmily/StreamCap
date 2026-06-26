@@ -131,8 +131,8 @@ dist\StreamCap\StreamCap.exe
 
 说明：
 
-- 程序运行时会在 exe 同级目录创建或使用 `config`、`logs`、`downloads` 等目录。
-- `config/recordings.db` 用于保存录制房间和录制历史；通用配置、Cookie、账号配置等仍保留 JSON 文件。
+- 程序运行时会在 exe 同级目录创建或使用 `config`、`log`、`data/database`、`downloads` 等目录。
+- `data/database/recordings.db` 用于保存录制房间和录制历史；通用配置、Cookie、账号配置等仍保留 JSON 文件。
 - 如果希望发布压缩包，建议将 `dist\StreamCap` 整个目录压缩，而不是只复制单个 exe。
 - `flet pack` 生成的是桌面端 exe，不建议用该 exe 启动 Web 服务；Web 部署请使用下方 `python main.py --web` 或 Docker 方式。
 - 如需使用 Flet 官方构建流程，也可以尝试 `flet build windows --module-name main --output build\windows --product StreamCap --artifact StreamCap --yes`，但完整录制能力仍依赖本机 FFmpeg 和运行时配置目录。

@@ -523,7 +523,7 @@
     "clean_empty_dirs_confirm": "Delete {count} empty folders under the recording folder?",
     "clean_empty_dirs_success": "Cleaned {count} empty folders",
     "no_logs_to_clean": "No logs to clean",
-    "clean_logs_confirm": "Delete deletable log files under the logs folder and free about {size}? Active logs may be skipped.",
+    "clean_logs_confirm": "Delete deletable log files under the log folder and free about {size}? Active logs may be skipped.",
     "clean_logs_success": "Cleaned {count} log files and freed {size}",
     "no_files_to_delete": "No recordings to delete",
     "delete_all_files_confirm": "Delete {count} recorded media files under the save folder and free about {size}. This cannot be undone. Continue?",

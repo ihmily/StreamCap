@@ -8,7 +8,7 @@
 - 修复 Web 模式界面加载时的资源噪声，允许 Flet 继续使用 CDN 字体回退，避免反复请求缺失的本地 `assets/fonts/notosanssc/...` 资源。
 - 在 Web 模式下过滤预期内的客户端断开连接堆栈，避免浏览器刷新或关闭标签页时刷屏后端日志。
 - 仅为录制房间加入 SQLite 持久化；通用应用设置、Cookie、账号配置、语言配置和 Web 登录认证仍保留 JSON 文件。
-- 新增 `config/recordings.db`，包含录制房间、录制历史和数据库元信息表。首次加载且数据库为空时，会从旧的 `config/recordings.json` 迁移房间列表。
+- 新增 `data/database/recordings.db`，包含录制房间、录制历史和数据库元信息表。首次加载且数据库为空时，会从旧的 `config/recordings.json` 迁移房间列表。
 - 为录制房间新增 `created_at`、`updated_at`、`pinned_at`、`pin_order`、`last_recorded_at`、`last_record_file`、`last_live_title` 等元数据。
 - 在 FFmpeg 或直连下载录制完成、停止、失败时写入录制历史。
 - 在录制卡片上新增置顶/取消置顶操作，并在录制信息弹窗中显示加入时间、最近录制时间和最近录制文件。
@@ -43,3 +43,4 @@
 - 修复存储页“最近录制文件”仍显示已删除文件的问题：列表只展示当前仍存在的媒体文件，并在播放入口增加文件存在性检查。
 - 对齐录制界面的播放策略：存储页“最近录制文件”在历史文件路径失效时，会回退扫描录制输出目录并选择最新媒体文件用于展示和播放。
 - 修复 SQLite 仓库连接释放问题，确保每次数据库操作结束后关闭连接，避免 Windows 下数据库文件被占用。
+- 调整运行时数据目录：日志文件写入 `log/`，录制数据库写入 `data/database/`，并兼容迁移旧的 `config/recordings.db`。

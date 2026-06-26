@@ -1,6 +1,7 @@
 import asyncio
 from contextlib import contextmanager
 import os
+import shutil
 import sqlite3
 import threading
 from datetime import datetime
@@ -65,8 +66,24 @@ class RecordingRepository:
     ]
 
     def __init__(self, config_manager):
-        self.db_path = os.path.join(config_manager.config_path, "recordings.db")
+        database_path = getattr(config_manager, "database_path", None)
+        if not database_path:
+            database_path = os.path.join(os.path.dirname(config_manager.config_path), "data", "database")
+        self.db_path = os.path.join(database_path, "recordings.db")
+        self.legacy_db_path = os.path.join(config_manager.config_path, "recordings.db")
         self._lock = threading.Lock()
+        self._migrate_legacy_database()
+
+    def _migrate_legacy_database(self):
+        if not os.path.exists(self.legacy_db_path) or os.path.exists(self.db_path):
+            return
+
+        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        for suffix in ("", "-wal", "-shm"):
+            legacy_path = self.legacy_db_path + suffix
+            target_path = self.db_path + suffix
+            if os.path.exists(legacy_path) and not os.path.exists(target_path):
+                shutil.move(legacy_path, target_path)
 
     @staticmethod
     def now_iso() -> str:

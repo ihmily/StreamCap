@@ -229,8 +229,8 @@ class StoragePage(BasePage):
             "original_size": 0,
             "original_files": 0,
             "empty_dirs": 0,
-            "logs_size": self.get_directory_size(os.path.join(self.app.run_path, "logs")),
-            "database_size": self.get_file_size(os.path.join(self.app.run_path, "config", "recordings.db")),
+            "logs_size": self.get_directory_size(os.path.join(self.app.run_path, "log")),
+            "database_size": self.get_directory_size(os.path.join(self.app.run_path, "data", "database")),
         }
 
         root_path = self.root_path or ""
@@ -791,7 +791,7 @@ class StoragePage(BasePage):
         await self.refresh_storage()
 
     def cleanup_logs_sync(self):
-        logs_dir = os.path.realpath(os.path.join(self.app.run_path, "logs"))
+        logs_dir = os.path.realpath(os.path.join(self.app.run_path, "log"))
         if not os.path.exists(logs_dir):
             return 0, 0
 

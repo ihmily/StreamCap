@@ -4,9 +4,11 @@ import sys
 from loguru import logger
 
 script_path = os.path.split(os.path.realpath(sys.argv[0]))[0]
+log_path = os.path.join(script_path, "log")
+os.makedirs(log_path, exist_ok=True)
 
 logger.add(
-    f"{script_path}/logs/streamget.log",
+    os.path.join(log_path, "streamget.log"),
     level="DEBUG",
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {name}:{function}:{line} - {message}",
     filter=lambda i: i["level"].name != "STREAM",
@@ -19,7 +21,7 @@ logger.add(
 
 logger.level("STREAM", no=22, color="<blue>")
 logger.add(
-    f"{script_path}/logs/play_url.log",
+    os.path.join(log_path, "play_url.log"),
     level="STREAM",
     format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {message}",
     filter=lambda i: i["level"].name == "STREAM",

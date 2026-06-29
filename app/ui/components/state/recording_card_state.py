@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import flet as ft
 
 from ....models.recording.recording_model import Recording
@@ -82,9 +84,12 @@ class RecordingCardState:
     @staticmethod
     def get_display_title(recording: Recording, language_dict: dict) -> str:
         status_prefix = ""
+        pin_prefix = ""
+        if recording.pinned_at:
+            pin_prefix = f"[{language_dict.get('pinned')}] "
         if not recording.monitor_status:
             status_prefix = f"[{language_dict.get('monitor_stopped')}] "
-        return f"{status_prefix}{recording.title}"
+        return f"{pin_prefix}{status_prefix}{recording.title}"
 
     @staticmethod
     def get_title_weight(recording: Recording) -> ft.FontWeight:

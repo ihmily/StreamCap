@@ -13,7 +13,9 @@ T = TypeVar("T")
 
 class ConfigManager:
     def __init__(self, run_path):
+        self.run_path = run_path
         self.config_path = os.path.join(run_path, "config")
+        self.database_path = os.path.join(run_path, "data", "database")
         self.language_config_path = os.path.join(self.config_path, "language.json")
         self.default_config_path = os.path.join(self.config_path, "default_settings.json")
         self.user_config_path = os.path.join(self.config_path, "user_settings.json")
@@ -24,6 +26,7 @@ class ConfigManager:
         self.web_auth_config_path = os.path.join(self.config_path, "web_auth.json")
 
         os.makedirs(os.path.dirname(self.default_config_path), exist_ok=True)
+        os.makedirs(self.database_path, exist_ok=True)
         self.init()
 
     def init(self):

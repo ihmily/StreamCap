@@ -13,6 +13,7 @@ from .ui.components.common.show_snackbar import ShowSnackBar
 from .ui.navigation.sidebar import LeftNavigationMenu, NavigationSidebar
 from .ui.views.about_view import AboutPage
 from .ui.views.home_view import HomePage
+from .ui.views.logs_view import LogsPage
 from .ui.views.recordings_view import RecordingsPage
 from .ui.views.settings_view import SettingsPage
 from .ui.views.storage_view import StoragePage
@@ -58,6 +59,7 @@ class App:
         self.recordings = RecordingsPage(self)
         self.home = HomePage(self)
         self.storage = StoragePage(self)
+        self.logs = LogsPage(self)
         self.pages = self.initialize_pages()
         self.sidebar = NavigationSidebar(self)
         self.left_navigation_menu = LeftNavigationMenu(self)
@@ -157,6 +159,7 @@ class App:
             "home": self.home,
             "recordings": self.recordings,
             "storage": self.storage,
+            "logs": self.logs,
             "about": self.about,
         }
 

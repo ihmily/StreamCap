@@ -14,7 +14,7 @@ dependencies = [
     "httpx[http2]>=0.28.1",
     "screeninfo>=0.8.1",
     "aiofiles>=25.1.0",
-    "streamget>=4.0.10",
+    "streamget @ git+https://github.com/ihmily/streamget.git",
     "python-dotenv>=1.2.2",
     "cachetools>=7.1.4",
     "pystray>=0.19.5",
@@ -55,7 +55,7 @@ flet-video = "^0.85.3"
 httpx = "^0.28.1"
 screeninfo = "~0.8.1"
 aiofiles = "~25.1.0"
-streamget = ">=4.0.10"
+streamget = { git = "https://github.com/ihmily/streamget.git", branch = "main" }
 python-dotenv = "~1.2.2"
 cachetools = ">=7.1.4"
 pystray = "~0.19.5"

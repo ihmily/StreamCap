@@ -46,6 +46,9 @@ class CardDialog(ft.AlertDialog):
         if not should_push_message and recording.enabled_message_push:
             message_push = self._["disabled"] + f" ({self._['not_config_tip']})"
         only_notify_no_record = self._["enabled"] if recording.only_notify_no_record else self._["disabled"]
+        joined_at = recording.created_at or self._["none"]
+        last_recorded_at = recording.last_recorded_at or self._["never_recorded"]
+        last_record_file = recording.last_record_file or self._["none"]
 
         dialog_content = ft.Column(
             [
@@ -63,6 +66,9 @@ class CardDialog(ft.AlertDialog):
                 ft.Text(f"{self._['scheduled_time_range']}: {scheduled_time_range}", size=14),
                 ft.Text(f"{self._['message_push']}: {message_push}", size=14),
                 ft.Text(f"{self._['only_notify_no_record']}: {only_notify_no_record}", size=14),
+                ft.Text(f"{self._['joined_at']}: {joined_at}", size=14),
+                ft.Text(f"{self._['last_recorded_at']}: {last_recorded_at}", size=14),
+                ft.Text(f"{self._['last_record_file']}: {last_record_file}", size=14, selectable=True),
                 ft.Text(f"{self._['save_path']}: {save_path}", size=14, selectable=True),
                 ft.Text(f"{self._['recording_status']}: {recording_status_info}", size=14),
             ],

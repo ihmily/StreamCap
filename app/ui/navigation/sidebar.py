@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import Callable
 from typing import cast
 
@@ -213,6 +215,13 @@ class NavigationSidebar:
                 name="storage",
                 selected_icon=ft.Icons.DRIVE_FILE_MOVE_OUTLINE,
             ),
-            ControlGroup(icon=ft.Icons.INFO, label=self._["about"], index=4, name="about", selected_icon=ft.Icons.INFO),
+            ControlGroup(
+                icon=ft.Icons.HISTORY,
+                label=self._["logs"],
+                index=4,
+                name="logs",
+                selected_icon=ft.Icons.HISTORY,
+            ),
+            ControlGroup(icon=ft.Icons.INFO, label=self._["about"], index=5, name="about", selected_icon=ft.Icons.INFO),
         ]
         self.selected_control_group = self.control_groups[0]

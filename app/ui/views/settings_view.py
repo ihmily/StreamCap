@@ -1,8 +1,11 @@
 import asyncio
+import sys
+from datetime import datetime, timedelta
 
 import flet as ft
 
 from ...core.runtime.paths import default_recordings_dir
+from ...core.runtime.scheduled_shutdown import MAX_QUICK_SHUTDOWN_HOURS
 from ...models.media.audio_format_model import AudioFormat
 from ...models.media.video_format_model import VideoFormat
 from ...models.media.video_quality_model import VideoQuality
@@ -136,9 +139,11 @@ class SettingsPage(PageBase):
             ui_language = self.user_config["language"]
             self.user_config = self.default_config.copy()
             self.user_config["language"] = ui_language
+            self.app.services.settings_config.adopt_user_config(self.user_config)
             self.app.language_manager.notify_observers()
             self.page.run_task(self.load)
             await self.config_manager.save_user_config(self.user_config)
+            await self.app.shutdown_manager.reschedule()
             logger.success("Default configuration restored.")
             await self.app.snack_bar.show_snack_bar(self._["success_restore_tip"], bgcolor=ft.Colors.PRIMARY)
             await close_dialog(None)
@@ -185,6 +190,8 @@ class SettingsPage(PageBase):
 
         if key == "loop_time_seconds":
             self.app.record_manager.initialize_dynamic_state()
+        if key in {"scheduled_shutdown_enabled", "scheduled_shutdown_time"}:
+            await self.app.shutdown_manager.reschedule()
         self.page.run_task(self.delay_handler.start_task_timer, self.save_user_config_after_delay, None)
         self.has_unsaved_changes["user_config"] = True
 
@@ -335,6 +342,11 @@ class SettingsPage(PageBase):
                                 on_change=self.on_change,
                                 data="remember_window_size",
                             ),
+                        ),
+                        *(
+                            [self.create_scheduled_shutdown_setting_row()]
+                            if sys.platform == "win32" and not self.app.page.web
+                            else []
                         ),
                     ],
                     is_mobile,
@@ -1155,6 +1167,246 @@ class SettingsPage(PageBase):
                 alignment=ft.MainAxisAlignment.START,
                 vertical_alignment=ft.CrossAxisAlignment.CENTER,
             )
+
+    def create_scheduled_shutdown_setting_row(self):
+        enabled = bool(self.get_config_value("scheduled_shutdown_enabled", False))
+        shutdown_time = str(self.get_config_value("scheduled_shutdown_time", "23:00"))
+        selected_hours = str(self.get_config_value("quick_shutdown_hours", "3"))
+        active_target = self.app.shutdown_manager.quick_shutdown_at
+
+        time_field = ft.TextField(
+            value=shutdown_time,
+            width=110,
+            read_only=True,
+            disabled=not enabled,
+            text_align=ft.TextAlign.CENTER,
+            tooltip=self._["scheduled_shutdown_time"],
+        )
+
+        async def pick_shutdown_time(_event):
+            async def handle_change(event):
+                picked = event.control.value
+                if picked is None:
+                    return
+                value = picked.strftime("%H:%M")
+                time_field.value = value
+                time_field.update()
+
+                class _TimeChangeEvent:
+                    def __init__(self):
+                        self.control = time_field
+                        self.control.data = "scheduled_shutdown_time"
+                        self.data = value
+
+                await self.on_change(_TimeChangeEvent())
+
+            time_picker = ft.TimePicker(
+                confirm_text=self._["confirm"],
+                cancel_text=self._["cancel"],
+                help_text=self._["scheduled_shutdown_pick_time"],
+                on_change=handle_change,
+            )
+            self.page.show_dialog(time_picker)
+
+        time_button = ft.IconButton(
+            icon=ft.Icons.SCHEDULE,
+            tooltip=self._["scheduled_shutdown_pick_time"],
+            disabled=not enabled,
+            on_click=pick_shutdown_time,
+        )
+
+        async def toggle_shutdown(event):
+            is_enabled = bool(event.control.value)
+            time_field.disabled = not is_enabled
+            time_button.disabled = not is_enabled
+            time_field.update()
+            time_button.update()
+            await self.on_change(event)
+
+        shutdown_switch = ft.Switch(
+            value=enabled,
+            data="scheduled_shutdown_enabled",
+            tooltip=self._["scheduled_shutdown_tip"],
+            on_change=toggle_shutdown,
+        )
+
+        status_text = ft.Text(
+            (
+                self._["quick_shutdown_active"].format(time=active_target.strftime("%m-%d %H:%M"))
+                if active_target is not None
+                else self._["quick_shutdown_ready"].format(max_hours=MAX_QUICK_SHUTDOWN_HOURS)
+            ),
+            size=12,
+            color=ft.Colors.PRIMARY if active_target is not None else ft.Colors.GREY_600,
+        )
+
+        hours_field = ft.TextField(
+            value=selected_hours,
+            width=80,
+            hint_text=f"1-{MAX_QUICK_SHUTDOWN_HOURS}",
+            keyboard_type=ft.KeyboardType.NUMBER,
+            input_filter=ft.InputFilter(allow=True, regex_string=r"[0-9]*"),
+            data="quick_shutdown_hours",
+            on_change=self.on_change,
+            disabled=active_target is not None,
+        )
+
+        async def update_active_state(target):
+            is_active = target is not None
+            hours_field.disabled = is_active
+            hours_field.error_text = None
+            start_button.disabled = is_active
+            cancel_button.disabled = not is_active
+            status_text.value = (
+                self._["quick_shutdown_active"].format(time=target.strftime("%m-%d %H:%M"))
+                if is_active
+                else self._["quick_shutdown_ready"].format(max_hours=MAX_QUICK_SHUTDOWN_HOURS)
+            )
+            status_text.color = ft.Colors.PRIMARY if is_active else ft.Colors.GREY_600
+            hours_field.update()
+            start_button.update()
+            cancel_button.update()
+            status_text.update()
+
+        async def start_quick_shutdown(_event):
+            try:
+                hours = int((hours_field.value or "").strip())
+            except ValueError:
+                hours = 0
+            if not 1 <= hours <= MAX_QUICK_SHUTDOWN_HOURS:
+                hours_field.error_text = self._["quick_shutdown_invalid_hours"].format(
+                    max_hours=MAX_QUICK_SHUTDOWN_HOURS
+                )
+                hours_field.update()
+                return
+
+            hours_field.error_text = None
+            hours_field.update()
+            expected_time = datetime.now() + timedelta(hours=hours)
+
+            async def close_dialog(_):
+                confirm_dialog.open = False
+                self.app.dialog_area.update()
+
+            async def confirm_start(_):
+                await close_dialog(None)
+                try:
+                    target = await self.app.shutdown_manager.start_quick_shutdown(hours)
+                except RuntimeError as exc:
+                    await self.app.snack_bar.show_snack_bar(
+                        self._["quick_shutdown_failed"].format(error=exc),
+                        bgcolor=ft.Colors.RED,
+                        duration=5000,
+                    )
+                    return
+
+                await update_active_state(target)
+                await self.app.snack_bar.show_snack_bar(
+                    self._["quick_shutdown_started"].format(time=target.strftime("%m-%d %H:%M")),
+                    bgcolor=ft.Colors.PRIMARY,
+                )
+
+            confirm_dialog = ft.AlertDialog(
+                modal=True,
+                title=ft.Text(self._["quick_shutdown_confirm_title"], weight=ft.FontWeight.BOLD),
+                content=ft.Text(
+                    self._["quick_shutdown_confirm_content"].format(
+                        hours=hours,
+                        time=expected_time.strftime("%m-%d %H:%M"),
+                    )
+                ),
+                actions=[
+                    ft.TextButton(content=self._["cancel"], on_click=close_dialog),
+                    ft.Button(
+                        content=self._["quick_shutdown_start"],
+                        icon=ft.Icons.POWER_SETTINGS_NEW,
+                        on_click=confirm_start,
+                    ),
+                ],
+                actions_alignment=ft.MainAxisAlignment.END,
+            )
+            confirm_dialog.open = True
+            self.app.dialog_area.content = confirm_dialog
+            self.app.dialog_area.update()
+
+        async def cancel_quick_shutdown(_event):
+            try:
+                await self.app.shutdown_manager.cancel_quick_shutdown()
+            except RuntimeError as exc:
+                await self.app.snack_bar.show_snack_bar(
+                    self._["quick_shutdown_cancel_failed"].format(error=exc),
+                    bgcolor=ft.Colors.RED,
+                    duration=5000,
+                )
+                return
+
+            await update_active_state(None)
+            await self.app.snack_bar.show_snack_bar(
+                self._["quick_shutdown_cancelled"],
+                bgcolor=ft.Colors.PRIMARY,
+            )
+
+        start_button = ft.Button(
+            content=self._["quick_shutdown_start"],
+            icon=ft.Icons.POWER_SETTINGS_NEW,
+            tooltip=self._["quick_shutdown_start_tip"],
+            disabled=active_target is not None,
+            on_click=start_quick_shutdown,
+        )
+        cancel_button = ft.IconButton(
+            icon=ft.Icons.CANCEL_SCHEDULE_SEND,
+            tooltip=self._["quick_shutdown_cancel"],
+            disabled=active_target is None,
+            on_click=cancel_quick_shutdown,
+        )
+
+        quick_shutdown_controls = ft.Column(
+            [
+                ft.Text(self._["quick_shutdown"], weight=ft.FontWeight.BOLD),
+                ft.Row(
+                    [
+                        hours_field,
+                        ft.Text(self._["quick_shutdown_hours_suffix"]),
+                        start_button,
+                        cancel_button,
+                    ],
+                    spacing=8,
+                    vertical_alignment=ft.CrossAxisAlignment.CENTER,
+                ),
+                status_text,
+            ],
+            spacing=6,
+            tight=True,
+        )
+
+        async def close_shutdown_settings(_event):
+            shutdown_settings_dialog.open = False
+            self.app.dialog_area.update()
+
+        shutdown_settings_dialog = ft.AlertDialog(
+            modal=True,
+            title=ft.Text(self._["scheduled_shutdown"], weight=ft.FontWeight.BOLD),
+            content=ft.Container(content=quick_shutdown_controls, width=420),
+            actions=[ft.TextButton(content=self._["close"], on_click=close_shutdown_settings)],
+            actions_alignment=ft.MainAxisAlignment.END,
+        )
+
+        async def open_shutdown_settings(_event):
+            shutdown_settings_dialog.open = True
+            self.app.dialog_area.content = shutdown_settings_dialog
+            self.app.dialog_area.update()
+
+        details_button = ft.IconButton(
+            icon=ft.Icons.CHEVRON_RIGHT,
+            tooltip=self._["scheduled_shutdown_more"],
+            on_click=open_shutdown_settings,
+        )
+        controls = ft.Row(
+            [shutdown_switch, time_field, time_button, details_button],
+            spacing=8,
+            vertical_alignment=ft.CrossAxisAlignment.CENTER,
+        )
+        return self.create_setting_row(self._["scheduled_shutdown"], controls)
 
     def create_channel_switch_container(self, channel_name, icon, key):
         """Helper method to create a container with a switch and an icon for each channel."""

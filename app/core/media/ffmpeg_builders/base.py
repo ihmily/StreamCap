@@ -41,6 +41,7 @@ class FFmpegCommandBuilder(abc.ABC):
         headers: str | None = None,
         proxy: str | None = None,
         platform_key: str | None = None,
+        video_bitrate: int | None = None,
     ):
         """
         Initializes the FFmpegCommandBuilder.
@@ -53,6 +54,7 @@ class FFmpegCommandBuilder(abc.ABC):
         :param headers: Additional headers to include in the request.
         :param proxy: Proxy server URL to use for the connection.
         :param platform_key: Platform identifier used for platform-specific FFmpeg compatibility options.
+        :param video_bitrate: Custom output video bitrate in kbps. Enables H.264 transcoding when set.
         """
         self.record_url = record_url
         self.is_overseas = is_overseas
@@ -62,6 +64,7 @@ class FFmpegCommandBuilder(abc.ABC):
         self.proxy = proxy or ""
         self.headers = headers or ""
         self.platform_key = platform_key
+        self.video_bitrate = video_bitrate
 
     @abc.abstractmethod
     def build_command(self) -> list[str]:
@@ -118,3 +121,8 @@ class FFmpegCommandBuilder(abc.ABC):
             command.insert(2, self.proxy)
 
         return command
+
+    def _get_video_codec_options(self) -> list[str]:
+        if self.video_bitrate:
+            return ["-c:v", "libx264", "-preset", "veryfast", "-b:v", f"{self.video_bitrate}k"]
+        return ["-c:v", "copy"]

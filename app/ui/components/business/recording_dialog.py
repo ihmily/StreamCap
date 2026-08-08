@@ -31,6 +31,7 @@ class RecordingDialog:
         default_record_format = config.get_value("record_format", "video_format", VideoFormat.TS).upper()
         default_record_type = "video" if default_record_format in VideoFormat.get_formats() else "audio"
         default_record_quality = config.get_value("quality", "record_quality", VideoQuality.OD)
+        default_video_bitrate = initial_values.get("video_bitrate")
         segment_record = config.get_value("segment_record", "segmented_recording_enabled", False)
         segment_time = config.get_value("segment_time", "video_segment_time", 1800)
         only_notify_no_record = config.get_value("only_notify_no_record", default=False)
@@ -50,7 +51,9 @@ class RecordingDialog:
             else:
                 record_format_field.options = [ft.dropdown.DropdownOption(i) for i in AudioFormat.get_formats()]
             record_format_field.value = record_format_field.options[0].key
+            video_bitrate_field.visible = e.control.value == "video"
             record_format_field.update()
+            video_bitrate_field.update()
 
         url_field = ft.TextField(
             label=self._["input_live_link"],
@@ -102,6 +105,17 @@ class RecordingDialog:
             filled=False,
             value=default_record_quality,
             width=245,
+        )
+
+        video_bitrate_field = ft.TextField(
+            label=self._["custom_video_bitrate"],
+            hint_text=self._["custom_video_bitrate_hint"],
+            border_radius=5,
+            filled=False,
+            keyboard_type=ft.KeyboardType.NUMBER,
+            value=str(default_video_bitrate) if default_video_bitrate else "",
+            width=500,
+            visible=default_record_type == "video",
         )
 
         flv_use_direct_download_dropdown = ft.Dropdown(
@@ -334,6 +348,7 @@ class RecordingDialog:
                                         streamer_name_field,
                                         format_row,
                                         quality_row,
+                                        video_bitrate_field,
                                         recording_dir_field,
                                         segment_setting_dropdown,
                                         segment_input,
@@ -371,6 +386,20 @@ class RecordingDialog:
             existing_recordings = get_existing_recordings()
 
             if tabs.selected_index == 0:
+                video_bitrate = None
+                bitrate_value = (
+                    (video_bitrate_field.value or "").strip() if media_type_dropdown.value == "video" else ""
+                )
+                if bitrate_value:
+                    try:
+                        video_bitrate = int(bitrate_value)
+                        if video_bitrate <= 0:
+                            raise ValueError
+                    except ValueError:
+                        video_bitrate_field.error_text = self._["custom_video_bitrate_invalid"]
+                        video_bitrate_field.update()
+                        return
+
                 quality_info = self._[quality_dropdown.value]
 
                 if not streamer_name_field.value:
@@ -396,6 +425,7 @@ class RecordingDialog:
                         "streamer_name": anchor_name,
                         "record_format": record_format_field.value,
                         "quality": quality_dropdown.value,
+                        "video_bitrate": video_bitrate,
                         "quality_info": quality_info,
                         "title": title,
                         "speed": "X KB/s",

@@ -45,6 +45,7 @@ class LiveStreamRecorder:
         self.segment_record = self._get_info("segment_record", default=False)
         self.segment_time = self._get_info("segment_time", default=self.DEFAULT_SEGMENT_TIME)
         self.quality = self._get_info("quality", default=self.DEFAULT_QUALITY)
+        self.video_bitrate = self._get_info("video_bitrate")
         self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
         self.proxy = self.is_use_proxy()
         self.direct_downloader = None
@@ -316,6 +317,7 @@ class LiveStreamRecorder:
                 full_path=save_path,
                 headers=self.get_headers_params(record_url, self.platform_key),
                 platform_key=self.platform_key,
+                video_bitrate=self.video_bitrate,
             )
             ffmpeg_command = ffmpeg_builder.build_command()
             self.services.run_coro(

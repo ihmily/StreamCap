@@ -7,7 +7,7 @@ class TSCommandBuilder(FFmpegCommandBuilder):
         # fmt: off
         if self.segment_record:
             additional_commands = [
-                "-c:v", "copy",
+                *self._get_video_codec_options(),
                 "-c:a", "copy",
                 "-map", "0",
                 "-f", "segment",
@@ -21,7 +21,7 @@ class TSCommandBuilder(FFmpegCommandBuilder):
             ]
         else:
             additional_commands = [
-                "-c:v", "copy",
+                *self._get_video_codec_options(),
                 "-c:a", "copy",
                 "-map", "0",
                 "-f", "mpegts",

@@ -32,6 +32,7 @@ class CardDialog(ft.AlertDialog):
         live_title = recording.live_title or self._["none"]
         record_format = recording.record_format
         quality_info = self._[recording.quality]
+        video_bitrate = recording.video_bitrate or self._["none"]
         use_proxy = self._["yes"] if recording.use_proxy else self._["no"]
         segment_record_status = self._["enabled"] if recording.segment_record else self._["disabled"]
         segment_time = f"{recording.segment_time}{self._['seconds']}"
@@ -55,6 +56,7 @@ class CardDialog(ft.AlertDialog):
                 ft.Text(f"{self._['live_title']}: {live_title}", size=14, selectable=True),
                 ft.Text(f"{self._['record_format']}: {record_format}", size=14),
                 ft.Text(f"{self._['record_quality']}: {quality_info}", size=14),
+                ft.Text(f"{self._['custom_video_bitrate']}: {video_bitrate}", size=14),
                 ft.Text(f"{self._['use_proxy']}: {use_proxy}", size=14),
                 ft.Text(f"{self._['segment_record']}: {segment_record_status}", size=14),
                 ft.Text(f"{self._['segment_time']}: {segment_time}", size=14),

@@ -8,7 +8,7 @@ class FLVCommandBuilder(FFmpegCommandBuilder):
         if self.segment_record:
             additional_commands = [
                 "-map", "0",
-                "-c:v", "copy",
+                *self._get_video_codec_options(),
                 "-c:a", "copy",
                 "-bsf:a", "aac_adtstoasc",
                 "-f", "segment",
@@ -20,7 +20,7 @@ class FLVCommandBuilder(FFmpegCommandBuilder):
         else:
             additional_commands = [
                 "-map", "0",
-                "-c:v", "copy",
+                *self._get_video_codec_options(),
                 "-c:a", "copy",
                 "-bsf:a", "aac_adtstoasc",
                 "-f", "flv",

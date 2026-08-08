@@ -327,6 +327,7 @@ class RecordingManager:
             "segment_time": recording.segment_time,
             "save_format": recording.record_format,
             "quality": recording.quality,
+            "video_bitrate": recording.video_bitrate,
         }
 
         semaphore = self.platform_semaphores[platform_key]

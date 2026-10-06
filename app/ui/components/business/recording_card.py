@@ -320,17 +320,24 @@ class RecordingCardManager:
                 await self.app.snack_bar.show_snack_bar(self._["stop_record_tip"])
             else:
                 if recording.monitor_status:
+                    # 修复：手动开始录制时，临时关闭"仅通知不录制"，确保真正启动录制
+                    original_only_notify = recording.only_notify_no_record
+                    recording.only_notify_no_record = False
                     await self.app.record_manager.check_if_live(recording)
-                    if recording.is_live:
-                        self.app.record_manager.start_update(recording)
+                    # 恢复原始设置
+                    recording.only_notify_no_record = original_only_notify
+                    if recording.is_live and recording.is_recording:
                         await self.app.snack_bar.show_snack_bar(self._["pre_record_tip"], bgcolor=ft.Colors.PRIMARY)
+                    elif recording.is_live:
+                        # 检测到直播但录制未启动成功
+                        await self.app.snack_bar.show_snack_bar(self._["is_not_live_tip"])
                     else:
                         await self.app.snack_bar.show_snack_bar(self._["is_not_live_tip"])
                 else:
                     await self.app.snack_bar.show_snack_bar(self._["please_start_monitor_tip"])
-
             await self.update_card(recording)
             self.app.page.pubsub.send_others_on_topic("update", recording)
+
 
     async def on_delete_recording(self, recording: Recording):
         """Delete a recording from the list and update UI."""

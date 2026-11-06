@@ -67,10 +67,7 @@ class StreamLinkFallbackHandler(PlatformHandler):
     async def get_stream_info(self, live_url: str) -> StreamData | None:
         session = self._get_session()
         if session is None:
-            logger.info(
-                "streamlink is not installed, skip fallback extraction "
-                "(optional: pip install streamlink)"
-            )
+            logger.info("streamlink is not installed, skip fallback extraction (optional: pip install streamlink)")
             return None
 
         try:

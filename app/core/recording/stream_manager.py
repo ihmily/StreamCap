@@ -51,12 +51,8 @@ class LiveStreamRecorder:
         self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
         self.proxy = self.is_use_proxy()
         self.direct_downloader = None
-        self.min_valid_recording_duration = int(
-            self.user_config.get("min_valid_recording_duration", 25) or 25
-        )
-        self.delayed_recheck_interval = int(
-            self.user_config.get("delayed_recheck_interval", 30) or 30
-        )
+        self.min_valid_recording_duration = int(self.user_config.get("min_valid_recording_duration", 25) or 25)
+        self.delayed_recheck_interval = int(self.user_config.get("delayed_recheck_interval", 30) or 30)
         self.recording_start_time = 0
         os.makedirs(self.output_dir, exist_ok=True)
         self.services.language_manager.add_observer(self)
@@ -683,11 +679,7 @@ class LiveStreamRecorder:
         quotes are stripped afterwards so quoted arguments work on both
         platforms (a bare str.split() breaks paths containing spaces)."""
         tokens = shlex.split(command.strip(), posix=False)
-        return [
-            t[1:-1] if len(t) > 1 and t[0] == t[-1] and t[0] in "\"'" else t
-            for t in tokens
-            if t
-        ]
+        return [t[1:-1] if len(t) > 1 and t[0] == t[-1] and t[0] in "\"'" else t for t in tokens if t]
 
     async def run_script_async(self, command: str) -> None:
         try:

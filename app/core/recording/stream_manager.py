@@ -1,5 +1,6 @@
 import asyncio
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,7 @@ from ..media import ffmpeg_builders
 from ..media.direct_downloader import DirectStreamDownloader
 from ..platforms import platform_handlers
 from ..platforms.platform_handlers import StreamData
+from ..platforms.platform_handlers.streamlink_fallback import StreamLinkFallbackHandler
 from ..runtime.process_manager import BackgroundService
 
 T = TypeVar("T")
@@ -49,7 +51,12 @@ class LiveStreamRecorder:
         self.save_format = self._get_info("save_format", default=self.DEFAULT_SAVE_FORMAT).lower()
         self.proxy = self.is_use_proxy()
         self.direct_downloader = None
-        self.min_valid_recording_duration = 25
+        self.min_valid_recording_duration = int(
+            self.user_config.get("min_valid_recording_duration", 25) or 25
+        )
+        self.delayed_recheck_interval = int(
+            self.user_config.get("delayed_recheck_interval", 30) or 30
+        )
         self.recording_start_time = 0
         os.makedirs(self.output_dir, exist_ok=True)
         self.services.language_manager.add_observer(self)
@@ -249,8 +256,13 @@ class LiveStreamRecorder:
             account_type=self.account_config.get(self.platform_key, {}).get("account_type"),
         )
         if not handler:
-            logger.error(f"No handler found for platform: {self.recording.url}")
-            return
+            logger.info(f"No built-in handler matched: {self.recording.url}, trying streamlink fallback")
+            fallback = StreamLinkFallbackHandler(proxy=self.proxy, cookies=self.cookies, record_quality=self.quality)
+            stream_info = await fallback.get_stream_info(self.live_url)
+            if stream_info is None:
+                logger.error(f"No handler found for platform: {self.recording.url}")
+            self.recording.is_checking = False
+            return stream_info
         stream_info = await handler.get_stream_info(self.live_url)
         self.recording.is_checking = False
         return stream_info
@@ -339,15 +351,28 @@ class LiveStreamRecorder:
         except Exception as e:
             logger.error(f"Failed to remove recorder instance: {e}")
 
-    async def recheck_live_status(self):
-        if not self.should_stop:
-            # not manually stopped
-            recording_duration = time.time() - self.recording_start_time
-            if recording_duration > self.min_valid_recording_duration:
-                if self.services.recording_enabled and not self.is_flv_preferred_platform:
-                    self.services.run_coro(self.services.recording_manager.check_if_live(self.recording))
-            else:
-                self.recording.status_info = RecordingStatus.RECORDING_ERROR
+    async def recheck_live_status(self, delay: float = 0):
+        """Recording ended: re-check live status promptly to avoid missing a
+        subsequent broadcast (previously douyin/tiktok were excluded entirely,
+        leaving the next check up to one full polling cycle away)."""
+        if delay:
+            await asyncio.sleep(delay)
+        if self.should_stop:
+            return
+        recording_duration = time.time() - self.recording_start_time
+        if recording_duration < self.min_valid_recording_duration:
+            self.recording.status_info = RecordingStatus.RECORDING_ERROR
+            return
+        if not self.services.recording_enabled:
+            return
+        if self.is_flv_preferred_platform:
+            # douyin/tiktok streams may still briefly report is_live=True right
+            # after the recording exits; wait before re-checking to avoid an
+            # immediate re-record loop instead of skipping the re-check.
+            await asyncio.sleep(self.delayed_recheck_interval)
+            if self.should_stop or self.recording.is_recording:
+                return
+        self.services.run_coro(self.services.recording_manager.check_if_live(self.recording))
 
     @staticmethod
     async def _capture_stream_tail(
@@ -650,10 +675,24 @@ class LiveStreamRecorder:
         finally:
             loop.close()
 
+    @staticmethod
+    def _split_command(command: str) -> list:
+        """Split a custom script command respecting quotes.
+
+        posix=False keeps Windows-style backslash paths intact; surrounding
+        quotes are stripped afterwards so quoted arguments work on both
+        platforms (a bare str.split() breaks paths containing spaces)."""
+        tokens = shlex.split(command.strip(), posix=False)
+        return [
+            t[1:-1] if len(t) > 1 and t[0] == t[-1] and t[0] in "\"'" else t
+            for t in tokens
+            if t
+        ]
+
     async def run_script_async(self, command: str) -> None:
         try:
             process = await asyncio.create_subprocess_exec(
-                *command.split(),
+                *self._split_command(command),
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 startupinfo=self.subprocess_start_info,

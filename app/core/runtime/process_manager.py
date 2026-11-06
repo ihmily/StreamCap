@@ -70,7 +70,7 @@ class AsyncProcessManager:
 
                     try:
                         await asyncio.wait_for(process.wait(), timeout=5.0)
-                    except asyncio.TimeoutError:
+                    except TimeoutError:
                         logger.warning(f"Process {process.pid} did not terminate, killing it")
                         process.kill()
                         await process.wait()

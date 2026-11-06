@@ -98,7 +98,7 @@ class NotificationService:
         try:
             overall_timeout = max(timeout * 4, timeout + 5)
             return await asyncio.wait_for(asyncio.to_thread(send_sync), timeout=overall_timeout)
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error(f"Email push timed out, SMTP server: {email_host}")
         except (smtplib.SMTPException, OSError, ValueError) as e:
             logger.error(f"Email push failed, SMTP server: {email_host}, Error message: {e}")

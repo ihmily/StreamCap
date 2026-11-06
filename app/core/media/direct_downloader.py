@@ -44,7 +44,7 @@ class DirectStreamDownloader:
             if self.download_task:
                 try:
                     await asyncio.wait_for(self.download_task, timeout=10.0)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.warning(f"Download Timeout: {self.record_url}")
                 except Exception as e:
                     logger.error(f"Download Error: {e}")

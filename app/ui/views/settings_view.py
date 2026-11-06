@@ -458,6 +458,15 @@ class SettingsPage(PageBase):
                             ),
                         ),
                         self.create_setting_row(
+                            self._["auto_clean_old_recordings"],
+                            ft.Switch(
+                                value=self.get_config_value("auto_clean_old_recordings"),
+                                data="auto_clean_old_recordings",
+                                on_change=self.on_change,
+                                tooltip=self._["auto_clean_old_recordings_tip"],
+                            ),
+                        ),
+                        self.create_setting_row(
                             self._["segment_time"],
                             ft.TextField(
                                 value=self.get_config_value("video_segment_time"),

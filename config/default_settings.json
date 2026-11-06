@@ -20,6 +20,7 @@
     "default_live_source": "FLV",
     "flv_use_direct_download": false,
     "recording_space_threshold": "2.0",
+    "auto_clean_old_recordings": false,
     "video_segment_time": "1800",
     "convert_to_mp4": true,
     "delete_original": false,

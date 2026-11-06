@@ -496,6 +496,14 @@ class RecordingManager:
     async def check_free_space(self, output_dir: str | None = None):
         disk_space_limit = float(self.settings.user_config.get("recording_space_threshold") or 0)
         output_dir = output_dir or self.settings.get_video_save_path()
+
+        if utils.check_disk_capacity(output_dir) < disk_space_limit and self.settings.user_config.get(
+            "auto_clean_old_recordings"
+        ):
+            deleted = utils.clean_old_recordings(output_dir, disk_space_limit)
+            if deleted:
+                logger.info(f"Auto-cleaned {len(deleted)} old recording file(s) to free disk space")
+
         if utils.check_disk_capacity(output_dir) < disk_space_limit:
             self.services.recording_enabled = False
             logger.error(f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled")

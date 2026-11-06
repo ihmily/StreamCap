@@ -149,6 +149,46 @@ def check_disk_capacity(file_path: str | Path, show: bool = False) -> float:
     return free_space_gb
 
 
+VIDEO_FILE_EXTENSIONS = {".mp4", ".flv", ".ts", ".mkv", ".aac", ".mp3", ".webm"}
+
+
+def clean_old_recordings(directory: str | Path, target_free_gb: float, protect_minutes: int = 10) -> list[str]:
+    """Delete the oldest recording files until at least ``target_free_gb`` remains.
+
+    Only video/audio files recorded under ``directory`` are considered. Files
+    modified within ``protect_minutes`` are never touched, so recordings that
+    are still in progress (or just finished) stay safe. Returns the list of
+    deleted file paths, oldest first.
+    """
+    directory = os.path.abspath(directory)
+    now = datetime.now().timestamp()
+    candidates: list[tuple[float, str]] = []
+    for root, _dirs, files in os.walk(directory):
+        for name in files:
+            if os.path.splitext(name)[1].lower() not in VIDEO_FILE_EXTENSIONS:
+                continue
+            path = os.path.join(root, name)
+            try:
+                mtime = os.path.getmtime(path)
+            except OSError:
+                continue
+            if now - mtime < protect_minutes * 60:
+                continue
+            candidates.append((mtime, path))
+
+    deleted: list[str] = []
+    for _mtime, path in sorted(candidates):
+        if shutil.disk_usage(directory).free / (1024**3) >= target_free_gb:
+            break
+        try:
+            os.remove(path)
+            deleted.append(path)
+            logger.info(f"Auto-cleaned old recording file: {path}")
+        except OSError as e:
+            logger.warning(f"Failed to delete old recording file {path}: {e}")
+    return deleted
+
+
 def handle_proxy_addr(proxy_addr):
     if proxy_addr:
         if not proxy_addr.startswith("http"):

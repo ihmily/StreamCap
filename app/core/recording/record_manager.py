@@ -9,6 +9,7 @@ from ...models.recording.recording_status_model import RecordingStatus
 from ...utils import utils
 from ...utils.logger import logger
 from ..platforms.platform_handlers import get_platform_info
+from ..runtime.paths import default_recordings_dir
 from ..runtime.process_manager import BackgroundService
 from .stream_manager import LiveStreamRecorder
 
@@ -236,15 +237,21 @@ class RecordingManager:
         async def periodic_check():
             logger.info("Starting periodic live check background task")
             while True:
-                immediate_check_on_startup = self.services.settings_config.user_config.get(
-                    "check_live_on_browser_refresh", True
-                )
-                if immediate_check_on_startup:
-                    await asyncio.sleep(interval)
-                await self.check_free_space()
-                if self.services.recording_enabled:
-                    await self.check_all_live_status()
-                if not immediate_check_on_startup:
+                try:
+                    immediate_check_on_startup = self.services.settings_config.user_config.get(
+                        "check_live_on_browser_refresh", True
+                    )
+                    if immediate_check_on_startup:
+                        await asyncio.sleep(interval)
+                    await self.check_free_space()
+                    if self.services.recording_enabled:
+                        await self.check_all_live_status()
+                    if not immediate_check_on_startup:
+                        await asyncio.sleep(interval)
+                except Exception:
+                    # One failing iteration (bad save path, platform error, ...)
+                    # must never silently kill the whole monitoring loop.
+                    logger.exception("Periodic live check failed; retrying on the next interval")
                     await asyncio.sleep(interval)
 
         if not RecordingManager.is_periodic_task_running():
@@ -496,7 +503,23 @@ class RecordingManager:
     async def check_free_space(self, output_dir: str | None = None):
         disk_space_limit = float(self.settings.user_config.get("recording_space_threshold") or 0)
         output_dir = output_dir or self.settings.get_video_save_path()
-        if utils.check_disk_capacity(output_dir) < disk_space_limit:
+        try:
+            free_space_gb = utils.check_disk_capacity(output_dir)
+        except OSError as e:
+            # A missing/unmounted save path (network drive offline, typo) must not
+            # kill the periodic check loop; retry against the default directory.
+            fallback_dir = str(default_recordings_dir)
+            logger.error(f"Cannot inspect disk space at {output_dir}: {e}")
+            try:
+                free_space_gb = utils.check_disk_capacity(fallback_dir)
+            except OSError as fallback_error:
+                logger.error(
+                    f"Cannot inspect disk space at fallback {fallback_dir} either "
+                    f"({fallback_error}); skipping this disk check"
+                )
+                return
+
+        if free_space_gb < disk_space_limit:
             self.services.recording_enabled = False
             logger.error(f"Disk space remaining is below {disk_space_limit} GB. Recording function disabled")
             self.services.broadcast_snack(

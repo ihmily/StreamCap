@@ -32,6 +32,9 @@ class DirectStreamDownloader:
         self.download_task = None
         self.total_bytes = 0
         self.start_time = None
+        # Set when the pull itself failed (non-2xx response or I/O error), so the
+        # caller can report a recording error instead of a completed download.
+        self.failed = False
 
     async def start_download(self) -> bool:
         self.start_time = time.time()
@@ -60,6 +63,7 @@ class DirectStreamDownloader:
                     # Accept 2xx status codes (200, 201, 206, etc.)
                     if not (200 <= response.status_code < 300):
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
+                        self.failed = True
                         return
 
                     # Log if redirect occurred
@@ -88,4 +92,5 @@ class DirectStreamDownloader:
         except asyncio.CancelledError:
             logger.info(f"Download Task Canceled: {self.record_url}")
         except Exception as e:
+            self.failed = True
             logger.error(f"Download Error: {e}")

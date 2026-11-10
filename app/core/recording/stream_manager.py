@@ -739,6 +739,12 @@ class LiveStreamRecorder:
             await self.remove_active_recorder()
             self.recording.is_recording = False
 
+            if self.direct_downloader.failed and not self.should_stop:
+                # A failed pull (non-2xx response or I/O error) must surface as a
+                # recording error, not as a completed download.
+                self._handle_recording_error(record_name, self._["record_stream_error"])
+                return False
+
             if not self.recording.is_recording:
                 await self._handle_recording_finished(
                     record_name,

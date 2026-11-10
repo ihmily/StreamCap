@@ -1,5 +1,4 @@
 import asyncio
-import threading
 from collections import defaultdict
 from datetime import datetime, timedelta
 
@@ -15,7 +14,11 @@ from .stream_manager import LiveStreamRecorder
 
 class GlobalRecordingState:
     recordings = []
-    lock = threading.Lock()
+    # Async lock: the guard methods are coroutines that await disk writes while
+    # holding it. A threading.Lock would block the event-loop thread whenever
+    # another operation tried to acquire it during that await window,
+    # deadlocking the whole app (UI freeze, monitoring stops).
+    lock = asyncio.Lock()
 
 
 class RecordingManager:
@@ -68,17 +71,17 @@ class RecordingManager:
             recording.showed_checking_status = True
 
     async def add_recording(self, recording):
-        with GlobalRecordingState.lock:
+        async with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.append(recording)
             await self.persist_recordings()
 
     async def remove_recording(self, recording: Recording):
-        with GlobalRecordingState.lock:
+        async with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.remove(recording)
             await self.persist_recordings()
 
     async def clear_all_recordings(self):
-        with GlobalRecordingState.lock:
+        async with GlobalRecordingState.lock:
             GlobalRecordingState.recordings.clear()
             await self.persist_recordings()
 

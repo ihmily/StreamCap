@@ -1,8 +1,8 @@
 import asyncio
 import os
+import shlex
 import shutil
 import subprocess
-import sys
 import time
 from datetime import datetime
 from typing import TypeVar
@@ -144,8 +144,10 @@ class LiveStreamRecorder:
     def _get_save_path(self, filename: str, use_direct_download: bool = False) -> str:
         suffix = self.save_format
         suffix = "_%03d." + suffix if self.segment_record and not use_direct_download else "." + suffix
-        full_output_dir = self.output_dir if sys.platform != "linux" else self.output_dir.replace(" ", "_")
-        save_file_path = os.path.join(full_output_dir, (filename + suffix).replace(" ", "_"))
+        # Spaces in the save path are valid everywhere (ffmpeg receives argv
+        # as a list); rewriting them silently redirected recordings into a
+        # different, underscore-named directory on Linux/Docker (issue #447).
+        save_file_path = os.path.join(self.output_dir, (filename + suffix).replace(" ", "_"))
         return save_file_path.replace("\\", "/")
 
     @staticmethod
@@ -615,33 +617,43 @@ class LiveStreamRecorder:
     ):
         from ..runtime.process_manager import BackgroundService
 
+        # Build a real argv list: the runner uses create_subprocess_exec (no
+        # shell), so quoting-in-a-string never worked and any path containing
+        # a space (now allowed, issue #447) would split into broken arguments.
+        command_parts = script_command.split()
         if "python" in script_command:
             params = [
-                f'--record_name "{record_name}"',
-                f'--save_file_path "{save_file_path}"',
-                f"--save_type {save_type}",
-                f"--split_video_by_time {split_video_by_time}",
-                f"--converts_to_mp4 {converts_to_mp4}",
+                "--record_name",
+                record_name,
+                "--save_file_path",
+                save_file_path,
+                "--save_type",
+                save_type,
+                "--split_video_by_time",
+                str(split_video_by_time),
+                "--converts_to_mp4",
+                str(converts_to_mp4),
             ]
         else:
             params = [
-                f'"{record_name.split(" ", maxsplit=1)[-1]}"',
-                f'"{save_file_path}"',
+                record_name.split(" ", maxsplit=1)[-1],
+                save_file_path,
                 save_type,
                 f"split_video_by_time: {split_video_by_time}",
                 f"converts_to_mp4: {converts_to_mp4}",
             ]
-        script_command = script_command.strip() + " " + " ".join(params)
+        argv = command_parts + params
+        logger.info(f"Script command: {' '.join(argv)}")
 
         if not self.services.recording_enabled:
             logger.info("Application is closing, adding script execution task to background service")
-            BackgroundService.get_instance().add_task(self.run_script_sync, script_command)
+            BackgroundService.get_instance().add_task(self.run_script_sync, argv)
         else:
-            self.services.run_coro(self.run_script_async(script_command))
+            self.services.run_coro(self.run_script_async(argv))
 
         logger.success("Script command execution initiated!")
 
-    def run_script_sync(self, command: str) -> None:
+    def run_script_sync(self, command) -> None:
         """Synchronous version of the script execution method, used for background service"""
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
@@ -650,10 +662,14 @@ class LiveStreamRecorder:
         finally:
             loop.close()
 
-    async def run_script_async(self, command: str) -> None:
+    async def run_script_async(self, command) -> None:
         try:
+            # command is an argv list (no shell involved), so paths containing
+            # spaces are passed through as single arguments (issue #447).
+            if isinstance(command, str):
+                command = shlex.split(command)
             process = await asyncio.create_subprocess_exec(
-                *command.split(),
+                *command,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 startupinfo=self.subprocess_start_info,

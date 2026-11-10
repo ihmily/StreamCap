@@ -45,7 +45,19 @@ class DirectStreamDownloader:
                 try:
                     await asyncio.wait_for(self.download_task, timeout=10.0)
                 except asyncio.TimeoutError:
-                    logger.warning(f"Download Timeout: {self.record_url}")
+                    # A hung HTTP read (stalled stream) never yields another
+                    # chunk, so the stop_event above is never observed. Cancel
+                    # the task to release the file handle and connection.
+                    logger.warning(f"Download Timeout, cancelling task: {self.record_url}")
+                    self.download_task.cancel()
+                    try:
+                        await asyncio.wait_for(self.download_task, timeout=5.0)
+                    except asyncio.CancelledError:
+                        pass
+                    except asyncio.TimeoutError:
+                        logger.error(f"Download task ignored cancellation: {self.record_url}")
+                    except Exception as e:
+                        logger.error(f"Download Cancel Error: {e}")
                 except Exception as e:
                     logger.error(f"Download Error: {e}")
 

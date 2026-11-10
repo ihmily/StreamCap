@@ -260,13 +260,25 @@ class LiveStreamRecorder:
         Construct ffmpeg recording parameters and start recording
         """
 
-        self.save_format, use_direct_download = self._get_record_format(stream_info)
-        filename = self._get_filename(stream_info)
-        self.output_dir = self._get_output_dir(stream_info)
-        save_path = self._get_save_path(filename, use_direct_download)
-        logger.info(f"Save Path: {save_path}")
-        self.recording.recording_dir = os.path.dirname(save_path)
-        os.makedirs(self.recording.recording_dir, exist_ok=True)
+        try:
+            self.save_format, use_direct_download = self._get_record_format(stream_info)
+            filename = self._get_filename(stream_info)
+            self.output_dir = self._get_output_dir(stream_info)
+            save_path = self._get_save_path(filename, use_direct_download)
+            logger.info(f"Save Path: {save_path}")
+            self.recording.recording_dir = os.path.dirname(save_path)
+            os.makedirs(self.recording.recording_dir, exist_ok=True)
+        except Exception as e:
+            # The flag was already flipped by start_update() before this
+            # coroutine was scheduled (fire-and-forget, errors never surface).
+            # Without resetting it here the room stays "recording" forever with
+            # no file written, and monitoring skips it permanently.
+            logger.error(f"Failed to prepare recording for {stream_info.anchor_name}: {e}")
+            self.recording.is_recording = False
+            self.recording.status_info = RecordingStatus.RECORDING_ERROR
+            await self.remove_active_recorder()
+            self.services.broadcast_card_update(self.recording)
+            return
         record_url = self._get_record_url(stream_info)
         self.set_preview_url(stream_info)
 
@@ -333,9 +345,13 @@ class LiveStreamRecorder:
 
     async def remove_active_recorder(self):
         try:
-            if self.recording.rec_id in self.services.recording_manager.active_recorders:
-                del self.services.recording_manager.active_recorders[self.recording.rec_id]
-                logger.info(f"Removed recorder from active_recorders: {self.recording.rec_id}")
+            rec_id = self.recording.rec_id
+            active = self.services.recording_manager.active_recorders
+            # Only unregister ourselves: a stale recorder exiting late must not
+            # drop the registration of a newer recorder that replaced it.
+            if active.get(rec_id) is self:
+                del active[rec_id]
+                logger.info(f"Removed recorder from active_recorders: {rec_id}")
         except Exception as e:
             logger.error(f"Failed to remove recorder instance: {e}")
 
@@ -511,6 +527,11 @@ class LiveStreamRecorder:
         except Exception as e:
             logger.error(f"An error occurred during the subprocess execution: {e}")
             self._handle_recording_error(record_name, self._["no_ffmpeg_tip"], duration=4000)
+            # Clean up the recorder registration and flag: leaving the rec_id in
+            # active_recorders permanently blocks check_if_live for this room
+            # (the guard skips it forever and only a restart recovers).
+            await self.remove_active_recorder()
+            self.recording.is_recording = False
             return False
         finally:
             if process is not None and process.returncode is None:
@@ -777,6 +798,10 @@ class LiveStreamRecorder:
         except Exception as e:
             logger.error(f"Error occurred during direct download: {e}")
             self._handle_recording_error(record_name, self._["record_stream_error"])
+            # Same as start_ffmpeg: release the registration so the room keeps
+            # being monitored instead of being skipped forever.
+            await self.remove_active_recorder()
+            self.recording.is_recording = False
             return False
         finally:
             self.recording.record_url = None

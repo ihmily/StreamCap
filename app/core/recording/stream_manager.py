@@ -33,6 +33,9 @@ class LiveStreamRecorder:
         self.recording_info = recording_info
         self.subprocess_start_info = services.subprocess_start_up_info
         self.should_stop = False  # manually stopped
+        # Set when the output stopped growing because the stream went dead
+        # while ffmpeg/the downloader task stayed alive (issue #325).
+        self.stalled = False
 
         self.user_config = self.settings.user_config
         self.account_config = self.settings.accounts_config
@@ -84,10 +87,14 @@ class LiveStreamRecorder:
             stream_info.title = self._clean_and_truncate_title(stream_info.title) or stream_info.title
             live_title = stream_info.title
 
+        original_anchor_name = stream_info.anchor_name
         if self.recording.streamer_name and self.recording.streamer_name != self._["live_room"]:
             stream_info.anchor_name = utils.clean_name(self.recording.streamer_name)
-        else:
-            stream_info.anchor_name = utils.clean_name(stream_info.anchor_name, self._["live_room"])
+        if not stream_info.anchor_name:
+            # A custom name made only of emoji/symbols is cleaned to None
+            # (issue #435); fall back to the streamer name from the platform,
+            # then to the localized default, so the save path always stays valid.
+            stream_info.anchor_name = utils.clean_name(original_anchor_name, self._["live_room"])
 
         now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
 
@@ -339,9 +346,74 @@ class LiveStreamRecorder:
         except Exception as e:
             logger.error(f"Failed to remove recorder instance: {e}")
 
+    @staticmethod
+    def _get_output_dir_size(directory: str) -> int:
+        """Total size of the files currently written into ``directory``.
+
+        Returns -1 when the directory cannot be read, so callers treat the
+        sample as "unknown" instead of "no data".
+        """
+        total = 0
+        try:
+            with os.scandir(directory) as entries:
+                for entry in entries:
+                    if entry.is_file():
+                        try:
+                            total += entry.stat().st_size
+                        except OSError:
+                            continue
+            return total
+        except OSError:
+            return -1
+
+    def _check_stream_stall(self, save_file_path: str, state: dict) -> bool:
+        """Detect a dead stream whose process is still alive (issue #325).
+
+        After an anchor reconnects, the old stream URL stops delivering data
+        while ffmpeg (or the direct download task) keeps waiting on it: the
+        card stays "recording" but nothing is written. Sampling the output
+        directory size every few seconds catches that — when it stops growing
+        for ``stalled_stream_timeout`` seconds (0 disables the check), the
+        recorder is stopped and ``check_if_live`` restarts it with the fresh
+        stream URL.
+        """
+        timeout = self.user_config.get("stalled_stream_timeout", 90)
+        try:
+            timeout = float(timeout or 0)
+        except (TypeError, ValueError):
+            timeout = 90.0
+        if timeout <= 0:
+            return False
+
+        now = time.time()
+        if now < state.get("next_check_time", 0):
+            return False
+        state["next_check_time"] = now + 15
+
+        size = self._get_output_dir_size(os.path.dirname(save_file_path))
+        if size < 0:
+            return False
+
+        if size > 0 and size != state.get("last_size"):
+            state["last_size"] = size
+            state["last_growth_time"] = now
+            return False
+
+        stalled_since = now - state.get("last_growth_time", self.recording_start_time or now)
+        never_wrote = size == 0 and self.recording_start_time and now - self.recording_start_time >= timeout
+        if stalled_since >= timeout or never_wrote:
+            logger.warning(
+                f"Stream stalled for {int(stalled_since)}s with no new data written: {self.live_url}"
+            )
+            self.stalled = True
+            self.should_stop = True  # go through the graceful stop path; recheck restarts us
+            return True
+        return False
+
     async def recheck_live_status(self):
-        if not self.should_stop:
-            # not manually stopped
+        if not self.should_stop or self.stalled:
+            # not manually stopped (a stall-triggered stop must recheck, so the
+            # room is restarted with the fresh stream URL — issue #325)
             recording_duration = time.time() - self.recording_start_time
             if recording_duration > self.min_valid_recording_duration:
                 if self.services.recording_enabled and not self.is_flv_preferred_platform:
@@ -380,6 +452,7 @@ class LiveStreamRecorder:
 
         logger.info(f"Starting ffmpeg recording - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.stalled = False
         process = None
         stderr_task = None
 
@@ -402,6 +475,7 @@ class LiveStreamRecorder:
             logger.log("STREAM", f"Recording Stream URL: {record_url}")
             self.recording_start_time = time.time()
 
+            stall_state: dict = {}
             while True:
                 if self.should_stop or self.recording.force_stop or not self.services.recording_enabled:
                     logger.info(f"Preparing to End Recording: {live_url}")
@@ -437,6 +511,10 @@ class LiveStreamRecorder:
                     await self.remove_active_recorder()
                     self.recording.is_recording = False
                     break
+
+                # Dead-stream detection (issue #325): ffmpeg can stay alive on a
+                # stale URL after the anchor reconnects, writing nothing.
+                self._check_stream_stall(save_file_path, stall_state)
 
                 await asyncio.sleep(1)
 
@@ -712,6 +790,7 @@ class LiveStreamRecorder:
 
         logger.info(f"Starting direct download - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.stalled = False
 
         try:
             await self.direct_downloader.start_download()
@@ -722,6 +801,7 @@ class LiveStreamRecorder:
             logger.log("STREAM", f"Direct Download Stream URL: {record_url}")
             self.recording_start_time = time.time()
 
+            stall_state: dict = {}
             while True:
                 if self.should_stop or self.recording.force_stop or not self.services.recording_enabled:
                     logger.info(f"Prepare to end direct download: {live_url}")
@@ -732,6 +812,13 @@ class LiveStreamRecorder:
                     break
 
                 await asyncio.sleep(1)
+
+                # Dead-stream detection (issue #325): a hung HTTP read keeps the
+                # download task alive while nothing is written to disk.
+                self._check_stream_stall(save_file_path, stall_state)
+
+                if self.direct_downloader.download_task and self.direct_downloader.download_task.done():
+                    break
 
                 if self.direct_downloader.download_task and self.direct_downloader.download_task.done():
                     break

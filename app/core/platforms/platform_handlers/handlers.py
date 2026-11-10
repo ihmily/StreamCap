@@ -1,8 +1,101 @@
+import re
+
+import httpx
 import streamget
 from deprecated import deprecated
 
+from ....utils.logger import logger
 from ....utils.utils import trace_error_decorator
 from .base import PlatformHandler, StreamData
+
+# Cookie used by upstream streamget when fetching the Douyin share/profile page
+# (see streamget/platforms/douyin/utils.py). Kept in sync so the fallback below
+# behaves exactly like the original request.
+_DOUYIN_TTWID_COOKIE = (
+    "ttwid=1%7C4ejCkU2bKY76IySQENJwvGhg1IQZrgGEupSyTKKfuyk%7C1740470403%7Cbc9d"
+    "2ee341f1a162f9e27f4641778030d1ae91e31f9df6553a8f2efa3bdb7b4; __ac_nonce=06"
+    "83e59f3009cc48fbab0; __ac_signature=_02B4Z6wo00f01mG6waQAAIDB9JUCzFb6.TZhmsU"
+    "AAPBf34; __ac_referer=__ac_blank"
+)
+
+
+async def _fetch_douyin_short_id(
+    url: str, proxy_addr: str | None = None, headers: dict | None = None
+) -> str | None:
+    """Resolve a Douyin profile link and extract ``short_id`` from the response.
+
+    Upstream streamget only looks for ``unique_id``; some profiles leave it
+    empty and only expose ``short_id`` (both work in ``live.douyin.com/<id>``
+    URLs), which broke short-link resolution (StreamCap issue #315).
+    """
+    from streamget.platforms.douyin.utils import DouyinUtils
+
+    if not headers or all(k.lower() not in ("user-agent", "cookie") for k in headers):
+        headers = DouyinUtils.HEADERS
+    headers = dict(headers)
+    headers["cookie"] = _DOUYIN_TTWID_COOKIE
+
+    try:
+        async with httpx.AsyncClient(proxy=proxy_addr, timeout=15, follow_redirects=True) as client:
+            response = await client.get(url, headers=headers)
+            sec_user_id = str(response.url).split("?")[0].rsplit("/", maxsplit=1)[1]
+            profile_response = await client.get(
+                f"https://www.iesdouyin.com/share/user/{sec_user_id}", headers=headers
+            )
+            # The id may appear in plain JSON or escaped inside a JS string.
+            for pattern in (r'short_id":"(\w+)"', r'short_id\\":\\"(\w+)'):
+                matches = re.findall(pattern, profile_response.text)
+                if matches and matches[-1]:
+                    return matches[-1]
+    except Exception as e:
+        logger.debug(f"Douyin short_id fallback request failed: {e}")
+    return None
+
+
+def _patch_douyin_unique_id_fallback() -> None:
+    """Patch streamget's ``DouyinUtils.get_unique_id`` to fall back to ``short_id``.
+
+    Fixes mobile-shared profile links whose response has an empty ``unique_id``
+    (StreamCap issue #315). No-op when streamget is missing or already patched,
+    so the app keeps working with future streamget layouts.
+    """
+    try:
+        from streamget.platforms.douyin.utils import DouyinUtils
+    except ImportError:
+        logger.warning("streamget DouyinUtils not found; skip unique_id fallback patch")
+        return
+
+    if getattr(DouyinUtils, "_streamcap_short_id_fallback", False):
+        return
+
+    original_get_unique_id = DouyinUtils.get_unique_id
+
+    async def get_unique_id_with_fallback(url, proxy_addr=None, headers=None):
+        error: Exception | None = None
+        unique_id = None
+        try:
+            unique_id = await original_get_unique_id(url, proxy_addr, headers)
+        except RuntimeError as e:
+            # Upstream wraps "unique_id not found" (and network errors) in
+            # RuntimeError. UnsupportedUrlError must keep propagating as-is,
+            # callers rely on it to distinguish room links from profile links.
+            error = e
+        if unique_id:
+            return unique_id
+        short_id = await _fetch_douyin_short_id(url, proxy_addr, headers)
+        if short_id:
+            logger.info(f"Douyin unique_id missing, using short_id fallback: {short_id}")
+            return short_id
+        if error is not None:
+            raise error
+        raise RuntimeError("Could not find unique_id or short_id in the response.")
+
+    DouyinUtils.get_unique_id = staticmethod(get_unique_id_with_fallback)
+    DouyinUtils._streamcap_short_id_fallback = True
+    logger.info("Applied Douyin unique_id -> short_id fallback patch (issue #315)")
+
+
+_patch_douyin_unique_id_fallback()
 
 
 class CustomHandler(PlatformHandler):

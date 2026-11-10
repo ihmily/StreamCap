@@ -36,8 +36,21 @@ EMOJI_PATTERN = re.compile(
     "\U0001fa00-\U0001fa6f"  # Chess Symbols
     "\U0001fa70-\U0001faff"  # Symbols and Pictographs Extended-A
     "\U00002702-\U000027b0"  # Dingbats
+    "\u2600-\u27bf"  # Misc symbols, Dingbats (☀ ♠ ✂ …)
+    "\u2b00-\u2bff"  # Misc symbols and arrows (⭐ U+2B50 …)
+    "\ufe00-\ufe0f"  # variation selectors (emoji presentation, issue #435)
+    "\U0001f3fb-\U0001f3ff"  # skin tone modifiers
+    "\u20e3"  # combining enclosing keycap
+    "\u200d"  # zero width joiner (ZWJ sequences: 👨‍👩‍👧‍👦, issue #435)
     "]+",
     flags=re.UNICODE,
+)
+
+# Zero-width / formatting / control characters that survive EMOJI_PATTERN and
+# are invisible in filenames (or illegal on Windows), producing unusable save
+# paths when an anchor name consists only of emoji (issue #435).
+INVISIBLE_CHAR_PATTERN = re.compile(
+    "[\x00-\x1f\u200b\u200c\u200e\u200f\u2028\u2029\u202a-\u202e\u2060-\u2064\ufffe\uffff\ufeff\ufff9-\ufffb]"
 )
 
 URL_PATTERN = re.compile(r"^(https?://)" r"([a-zA-Z0-9-]+\.)+[a-zA-Z0-9]{1,6}" r"(:\d+)?" r"(/\S*)?$")
@@ -246,10 +259,15 @@ def is_time_interval_exceeded(last_check_time, interval_seconds=60):
 
 def clean_name(input_text, default=None):
     if input_text and input_text.strip():
-        rstr = r"[\/\\\:：\*\？?\"\<\>\|&#.。,， ~！· ]"
+        rstr = r"[\/\\\:：\*\？?\"\<\>\|&#.。,， ~！· ]"
         cleaned_name = input_text.strip().replace("（", "(").replace("）", ")")
         cleaned_name = re.sub(rstr, "_", cleaned_name)
-        cleaned_name = remove_emojis(cleaned_name, "_").replace("__", "_").strip("_")
+        cleaned_name = remove_emojis(cleaned_name, "_")
+        # Strip invisible/control characters so a name made only of emoji (plus
+        # variation selectors / ZWJ) degrades to `default` instead of leaving
+        # an unusable invisible filename (issue #435).
+        cleaned_name = INVISIBLE_CHAR_PATTERN.sub("", cleaned_name)
+        cleaned_name = cleaned_name.replace("__", "_").strip("_").strip()
         return cleaned_name or default
     return default
 

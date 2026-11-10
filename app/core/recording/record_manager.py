@@ -230,6 +230,20 @@ class RecordingManager:
     def set_periodic_task_running(cls, value=True):
         cls._periodic_task_running = value
 
+    def _get_loop_interval(self) -> int:
+        """Current periodic-check interval, re-read from settings every cycle.
+
+        The loop-time setting is editable at runtime; capturing it once in the
+        periodic task's closure made the new value take effect only after an
+        app restart (issues #469, #309).
+        """
+        loop_time = self.settings.user_config.get("loop_time_seconds")
+        try:
+            value = int(loop_time) if loop_time is not None else 300
+        except (TypeError, ValueError):
+            return 300
+        return max(1, value)
+
     async def setup_periodic_live_check(self, interval: int = 180):
         """Set up a periodic task to check live status."""
 
@@ -240,12 +254,12 @@ class RecordingManager:
                     "check_live_on_browser_refresh", True
                 )
                 if immediate_check_on_startup:
-                    await asyncio.sleep(interval)
+                    await asyncio.sleep(self._get_loop_interval())
                 await self.check_free_space()
                 if self.services.recording_enabled:
                     await self.check_all_live_status()
                 if not immediate_check_on_startup:
-                    await asyncio.sleep(interval)
+                    await asyncio.sleep(self._get_loop_interval())
 
         if not RecordingManager.is_periodic_task_running():
             RecordingManager.set_periodic_task_running(True)

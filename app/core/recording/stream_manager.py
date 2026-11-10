@@ -33,6 +33,10 @@ class LiveStreamRecorder:
         self.recording_info = recording_info
         self.subprocess_start_info = services.subprocess_start_up_info
         self.should_stop = False  # manually stopped
+        # Set when the recording was stopped because the stream source itself
+        # degraded (persistent corruption / connection rotation, issue #450):
+        # unlike a manual stop, the room must be re-checked and restarted.
+        self.degraded = False
 
         self.user_config = self.settings.user_config
         self.account_config = self.settings.accounts_config
@@ -340,8 +344,9 @@ class LiveStreamRecorder:
             logger.error(f"Failed to remove recorder instance: {e}")
 
     async def recheck_live_status(self):
-        if not self.should_stop:
-            # not manually stopped
+        if not self.should_stop or self.degraded:
+            # not manually stopped (degraded/rotated connections must recheck,
+            # so the room restarts with a fresh stream URL — issue #450)
             recording_duration = time.time() - self.recording_start_time
             if recording_duration > self.min_valid_recording_duration:
                 if self.services.recording_enabled and not self.is_flv_preferred_platform:
@@ -365,6 +370,66 @@ class LiveStreamRecorder:
                 del tail[:-max_bytes]
         return bytes(tail)
 
+    async def _monitor_stderr(
+        self,
+        stream: asyncio.StreamReader | None,
+        state: dict,
+        max_bytes: int = 64 * 1024,
+    ) -> bytes:
+        """Drain ffmpeg stderr like _capture_stream_tail, and timestamp every
+        corruption-related line so the recording loop can detect a degraded
+        stream (persistent CDN/session rot) and restart the connection.
+
+        Copy-mode recording cannot repair corrupted packets — it either drops
+        them (content gaps, frozen/smeared GOPs, issue #450) or passes them
+        through — so the only effective fix is noticing the rot early and
+        reconnecting for a fresh stream URL.
+        """
+        if stream is None or max_bytes <= 0:
+            return b""
+        timestamps: list[float] = state.setdefault("corruption_events", [])
+        tail = bytearray()
+        while chunk := await stream.read(4096):
+            tail.extend(chunk)
+            if len(tail) > max_bytes:
+                del tail[:-max_bytes]
+            lowered = chunk.lower()
+            if b"corrupt" in lowered or b"invalid data found" in lowered:
+                timestamps.append(time.time())
+                if len(timestamps) > 200:
+                    del timestamps[:-200]
+        return bytes(tail)
+
+    def _check_degraded_stream(self, stderr_state: dict) -> bool:
+        """True when corruption messages keep arriving — the stream source
+        itself has gone bad and the recorder should reconnect."""
+        try:
+            threshold = int(self.user_config.get("stream_error_threshold", 30) or 30)
+        except (TypeError, ValueError):
+            threshold = 30
+        if threshold <= 0:
+            return False
+        events = stderr_state.get("corruption_events") or []
+        if not events:
+            return False
+        window_start = time.time() - 60
+        recent = [t for t in events if t >= window_start]
+        return len(recent) >= threshold
+
+    def _check_connection_rotation(self) -> bool:
+        """Enforce an optional maximum age for a single pull connection.
+
+        Long-lived CDN sessions tend to rot after a while (frozen picture,
+        corrupt packets — issue #450). Rotating the connection proactively
+        fetches a fresh stream URL before quality degrades. 0 disables."""
+        try:
+            max_age = float(self.user_config.get("max_stream_connection_duration", 0) or 0)
+        except (TypeError, ValueError):
+            max_age = 0.0
+        if max_age <= 0 or not self.recording_start_time:
+            return False
+        return (time.time() - self.recording_start_time) >= max_age
+
     async def start_ffmpeg(
         self,
         record_name: str,
@@ -380,8 +445,10 @@ class LiveStreamRecorder:
 
         logger.info(f"Starting ffmpeg recording - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.degraded = False
         process = None
         stderr_task = None
+        stderr_state: dict = {}
 
         try:
             save_file_path = ffmpeg_command[-1]
@@ -393,7 +460,7 @@ class LiveStreamRecorder:
                 stderr=asyncio.subprocess.PIPE,
                 startupinfo=self.subprocess_start_info,
             )
-            stderr_task = asyncio.create_task(self._capture_stream_tail(process.stderr))
+            stderr_task = asyncio.create_task(self._monitor_stderr(process.stderr, stderr_state))
 
             self.services.process_manager.add_process(process)
             self.recording.status_info = RecordingStatus.RECORDING
@@ -403,6 +470,25 @@ class LiveStreamRecorder:
             self.recording_start_time = time.time()
 
             while True:
+                # Degraded-stream rotation (issue #450): copy mode cannot repair
+                # corrupt packets, so reconnect for a fresh stream URL when the
+                # source keeps producing them, or when the connection hit the
+                # optional maximum age. The stop path below finishes gracefully
+                # and recheck_live_status() restarts the room.
+                if not self.should_stop:
+                    if self._check_degraded_stream(stderr_state):
+                        logger.warning(
+                            f"Stream source degraded (persistent corruption): {live_url}, restarting connection"
+                        )
+                        self.degraded = True
+                        self.should_stop = True
+                    elif self._check_connection_rotation():
+                        logger.info(
+                            f"Rotating stream connection after max_stream_connection_duration: {live_url}"
+                        )
+                        self.degraded = True
+                        self.should_stop = True
+
                 if self.should_stop or self.recording.force_stop or not self.services.recording_enabled:
                     logger.info(f"Preparing to End Recording: {live_url}")
                     await self.remove_active_recorder()
@@ -712,6 +798,7 @@ class LiveStreamRecorder:
 
         logger.info(f"Starting direct download - recorder id: {id(self)}, rec_id: {self.recording.rec_id}")
         self.should_stop = False
+        self.degraded = False
 
         try:
             await self.direct_downloader.start_download()

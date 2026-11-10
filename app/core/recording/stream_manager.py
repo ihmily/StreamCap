@@ -760,7 +760,18 @@ class LiveStreamRecorder:
             await self.remove_active_recorder()
             self.recording.is_recording = False
 
-            if not self.recording.is_recording:
+            download_error = self.direct_downloader.error if self.direct_downloader else None
+            if download_error and not self.recording.manually_stopped:
+                # The download failed (expired URL, DNS/proxy failure...): report
+                # an error instead of pushing a "recording completed" message for
+                # a missing/empty file; recheck_live_status retries the room.
+                logger.error(f"Direct download failed for {record_name}: {download_error}")
+                self.recording.status_info = RecordingStatus.RECORDING_ERROR
+                self.recording.is_live = False
+                self.recording.live_title = None
+                self.services.broadcast_card_update(self.recording)
+                self.services.broadcast_pubsub("update", self.recording)
+            elif not self.recording.is_recording:
                 await self._handle_recording_finished(
                     record_name,
                     stop_msg=f"Direct Downloading Stopped: {record_name}",

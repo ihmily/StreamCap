@@ -32,6 +32,10 @@ class DirectStreamDownloader:
         self.download_task = None
         self.total_bytes = 0
         self.start_time = None
+        # Set when the download ended in failure (HTTP error status, network
+        # exception...). Callers use it to tell a real completion from a
+        # failed download instead of reporting "recording completed".
+        self.error: str | None = None
 
     async def start_download(self) -> bool:
         self.start_time = time.time()
@@ -59,6 +63,7 @@ class DirectStreamDownloader:
                 async with client.stream("GET", self.record_url) as response:
                     # Accept 2xx status codes (200, 201, 206, etc.)
                     if not (200 <= response.status_code < 300):
+                        self.error = f"HTTP {response.status_code}"
                         logger.error(f"Request Stream Failed, Status Code: {response.status_code}")
                         return
 
@@ -88,4 +93,5 @@ class DirectStreamDownloader:
         except asyncio.CancelledError:
             logger.info(f"Download Task Canceled: {self.record_url}")
         except Exception as e:
+            self.error = str(e)
             logger.error(f"Download Error: {e}")

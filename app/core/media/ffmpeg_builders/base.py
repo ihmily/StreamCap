@@ -82,6 +82,14 @@ class FFmpegCommandBuilder(abc.ABC):
             # FFmpeg 8 rejects container/extension mismatches in strict mode.
             hls_input_options = ["-extension_picky", "0"]
 
+        # -reconnect* are HTTP-protocol *input* options: they only take effect
+        # before -i. Placing them after -i (output options area) made ffmpeg
+        # silently drop them, so automatic reconnection never worked. They are
+        # only valid for http(s) inputs.
+        reconnect_options = []
+        if self.record_url.startswith(("http://", "https://")):
+            reconnect_options = ["-reconnect_delay_max", "60", "-reconnect_streamed", "-reconnect_at_eof"]
+
         # fmt: off
         command = [
             "ffmpeg",
@@ -98,13 +106,11 @@ class FFmpegCommandBuilder(abc.ABC):
             "-fflags", "+discardcorrupt+igndts",
             "-re",
             *hls_input_options,
+            *reconnect_options,
             "-i", self.record_url,
             "-bufsize", config["bufsize"],
             "-sn",
             "-dn",
-            "-reconnect_delay_max", "60",
-            "-reconnect_streamed",
-            "-reconnect_at_eof",
             "-max_muxing_queue_size", config["max_muxing_queue_size"],
             "-correct_ts_overflow", "1",
             "-avoid_negative_ts", "1",

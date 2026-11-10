@@ -320,9 +320,12 @@ class RecordingCardManager:
                 await self.app.snack_bar.show_snack_bar(self._["stop_record_tip"])
             else:
                 if recording.monitor_status:
-                    await self.app.record_manager.check_if_live(recording)
+                    # manual_start bypasses the "only notify, don't record"
+                    # room setting so the click really launches ffmpeg; the
+                    # previous extra start_update() call only flipped the
+                    # is_recording flag and produced a fake recording (#504).
+                    await self.app.record_manager.check_if_live(recording, manual_start=True)
                     if recording.is_live:
-                        self.app.record_manager.start_update(recording)
                         await self.app.snack_bar.show_snack_bar(self._["pre_record_tip"], bgcolor=ft.Colors.PRIMARY)
                     else:
                         await self.app.snack_bar.show_snack_bar(self._["is_not_live_tip"])

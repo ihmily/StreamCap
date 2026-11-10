@@ -4,8 +4,37 @@ import time
 
 import flet as ft
 
+from ..core.runtime.process_manager import BackgroundService
 from ..utils.logger import logger
 from .tray_manager import TrayManager
+
+BACKGROUND_DRAIN_TIMEOUT_SECONDS = 120
+
+
+def _wait_background_service(max_wait_seconds: int = BACKGROUND_DRAIN_TIMEOUT_SECONDS) -> None:
+    """Wait for queued background tasks (transcodes, scripts, pushes) to finish.
+
+    ``os._exit()`` terminates the process without running any thread, including
+    the non-daemon ``BackgroundService`` worker, so tasks moved to it during
+    shutdown would otherwise be killed mid-write and leave truncated files
+    behind. Wait up to ``max_wait_seconds``; past the deadline, abandon the
+    remaining tasks explicitly instead of pretending they ran.
+    """
+    service = BackgroundService.get_instance()
+    waited = 0
+    while (service.is_running or service.tasks) and waited < max_wait_seconds:
+        time.sleep(1)
+        waited += 1
+        if waited % 10 == 0:
+            logger.info(
+                f"Waiting for background tasks to finish before exit: "
+                f"{len(service.tasks)} queued, running={service.is_running} ({waited}s/{max_wait_seconds}s)"
+            )
+    if service.is_running or service.tasks:
+        logger.error(
+            f"Background service still busy after {max_wait_seconds}s; abandoning "
+            f"{len(service.tasks)} task(s) and forcing exit"
+        )
 
 
 async def _safe_destroy_window(page):
@@ -14,6 +43,7 @@ async def _safe_destroy_window(page):
     except Exception as ex:
         logger.error(f"close window error: {ex}")
     finally:
+        _wait_background_service()
         os._exit(0)
 
 
@@ -69,6 +99,10 @@ async def handle_app_close(page: ft.Page, app, save_progress_overlay) -> None:
                 except Exception as ex:
                     logger.error(f"close window error: {ex}")
                 finally:
+                    # Drain background transcodes/scripts before the hard exit,
+                    # otherwise tasks moved to BackgroundService during shutdown
+                    # are killed mid-write (truncated mp4 files).
+                    _wait_background_service()
                     if not getattr(app, "is_web_mode", False) and hasattr(app, "tray_manager"):
                         app.tray_manager.stop()
                     page.run_task(page.window.destroy)

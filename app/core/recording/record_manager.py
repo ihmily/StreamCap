@@ -255,8 +255,13 @@ class RecordingManager:
         else:
             logger.info("Periodic live check task already running globally, skipping initialization")
 
-    async def check_if_live(self, recording: Recording):
-        """Check if the live stream is available, fetch stream data and update is_live status."""
+    async def check_if_live(self, recording: Recording, manual_start: bool = False):
+        """Check if the live stream is available, fetch stream data and update is_live status.
+
+        ``manual_start`` is set when the user explicitly starts a recording from
+        the card button: it bypasses the per-room "only notify, don't record"
+        setting so a manual click really starts ffmpeg (issue #504).
+        """
 
         recording.manually_stopped = False
         if recording.is_recording or recording.stopping_in_progress:
@@ -389,7 +394,7 @@ class RecordingManager:
                 BackgroundService.get_instance().add_task(msg_manager.push_messages_sync, msg_title, push_content)
                 recording.notified_live_start = True
 
-            if not recording.only_notify_no_record:
+            if not recording.only_notify_no_record or manual_start:
                 recording.status_info = RecordingStatus.PREPARING_RECORDING
                 recording.loop_time_seconds = self.loop_time_seconds
                 self.start_update(recording)
@@ -412,15 +417,20 @@ class RecordingManager:
                 asyncio.create_task(recorder.end_message_push())
 
             recording.status_info = RecordingStatus.MONITORING
-            title = f"{stream_info.anchor_name or recording.streamer_name} - {self._[recording.quality]}"
-            if recording.streamer_name == self._["live_room"] or f"[{self._['is_live']}]" in recording.display_title:
-                recording.update(
-                    {
-                        "streamer_name": stream_info.anchor_name,
-                        "title": title,
-                        "display_title": title,
-                    }
-                )
+            # Only auto-fill the streamer name while it still holds the default
+            # placeholder; a user-provided custom name must never be overwritten
+            # by the platform anchor name (issue #500).
+            is_default_name = recording.streamer_name == self._["live_room"]
+            if is_default_name and stream_info.anchor_name:
+                name_for_title = stream_info.anchor_name
+            else:
+                name_for_title = recording.streamer_name
+            title = f"{name_for_title} - {self._[recording.quality]}"
+            if is_default_name or f"[{self._['is_live']}]" in recording.display_title:
+                updates = {"title": title, "display_title": title}
+                if is_default_name and stream_info.anchor_name:
+                    updates["streamer_name"] = stream_info.anchor_name
+                recording.update(updates)
                 self.services.run_coro(self.persist_recordings())
 
         recording.is_checking = False

@@ -85,10 +85,13 @@ class FFmpegCommandBuilder(abc.ABC):
         # -reconnect* are HTTP-protocol *input* options: they only take effect
         # before -i. Placing them after -i (output options area) made ffmpeg
         # silently drop them, so automatic reconnection never worked. They are
-        # only valid for http(s) inputs.
+        # only valid for http(s) inputs. The boolean flags need explicit
+        # values — two adjacent bare flags make ffmpeg try to parse the next
+        # option name as the value ("Unable to parse ... as boolean") and the
+        # whole command fails to start.
         reconnect_options = []
         if self.record_url.startswith(("http://", "https://")):
-            reconnect_options = ["-reconnect_delay_max", "60", "-reconnect_streamed", "-reconnect_at_eof"]
+            reconnect_options = ["-reconnect_delay_max", "60", "-reconnect_streamed", "1", "-reconnect_at_eof", "1"]
 
         # fmt: off
         command = [

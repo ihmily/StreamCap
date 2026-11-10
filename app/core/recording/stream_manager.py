@@ -84,10 +84,14 @@ class LiveStreamRecorder:
             stream_info.title = self._clean_and_truncate_title(stream_info.title) or stream_info.title
             live_title = stream_info.title
 
+        original_anchor_name = stream_info.anchor_name
         if self.recording.streamer_name and self.recording.streamer_name != self._["live_room"]:
             stream_info.anchor_name = utils.clean_name(self.recording.streamer_name)
-        else:
-            stream_info.anchor_name = utils.clean_name(stream_info.anchor_name, self._["live_room"])
+        if not stream_info.anchor_name:
+            # A custom name made only of emoji/symbols is cleaned to None
+            # (issue #435); fall back to the streamer name from the platform,
+            # then to the localized default, so the save path always stays valid.
+            stream_info.anchor_name = utils.clean_name(original_anchor_name, self._["live_room"])
 
         now = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
 

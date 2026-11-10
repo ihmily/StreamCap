@@ -52,8 +52,21 @@ class ConfigManager:
         self._init_config(self.default_config_path, default_config)
 
     def init_user_config(self):
-        if os.path.exists(self.user_config_path) and self.load_user_config():
-            return
+        if os.path.exists(self.user_config_path):
+            if self.load_user_config():
+                return
+            # The file exists but is empty or has invalid JSON. Back it up
+            # before rebuilding from defaults — silently overwriting it would
+            # destroy all user settings with no way to recover them.
+            backup_path = f"{self.user_config_path}.bak"
+            try:
+                shutil.copy(self.user_config_path, backup_path)
+                logger.warning(
+                    f"User config is empty or corrupted, backed up to: {backup_path}, "
+                    f"rebuilding from defaults: {self.user_config_path}"
+                )
+            except OSError as e:
+                logger.error(f"Failed to back up corrupted user config: {e}")
         shutil.copy(self.default_config_path, self.user_config_path)
 
     def init_cookies_config(self):

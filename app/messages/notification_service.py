@@ -111,8 +111,15 @@ class NotificationService:
         try:
             json_data = {"chat_id": chat_id, "text": content}
             url = "https://api.telegram.org/bot" + token + "/sendMessage"
-            _resp = await self._async_post(url, json_data, proxy or None)
-            return {"success": [1], "error": []}
+            resp = await self._async_post(url, json_data, proxy or None)
+            # _async_post swallows every exception and returns {"error": ...},
+            # and the Telegram API reports failures as HTTP 200 + {"ok": false}
+            # — both must be treated as failures, not as a successful push.
+            if isinstance(resp, dict) and resp.get("ok") is True:
+                return {"success": [1], "error": []}
+            error_detail = resp.get("description") or resp.get("error") if isinstance(resp, dict) else resp
+            logger.info(f"Telegram push failed, chat ID: {chat_id}, Error message: {error_detail}")
+            return {"success": [], "error": [1]}
         except Exception as e:
             logger.info(f"Telegram push failed, chat ID: {chat_id},  Error message: {e}")
             return {"success": [], "error": [1]}
